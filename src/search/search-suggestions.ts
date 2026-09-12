@@ -4,6 +4,7 @@ import { TodoTrackerSettings } from '../settings/settings-types';
 import { TaskListViewMode } from '../view/task-list/task-list-view';
 import { TAG_PATTERN } from '../utils/patterns';
 import { KeywordManager } from '../utils/keyword-manager';
+import { DateUtils } from '../utils/date-utils';
 
 /**
  * Utility class for collecting and filtering search suggestions
@@ -303,18 +304,6 @@ export class SearchSuggestions {
   }
 
   /**
-   * Format a Date as a local `YYYY-MM-DD` literal. Uses local date parts so a
-   * task date is not shifted to the previous day for timezones ahead of UTC
-   * (which is what `toISOString()` would do for a local-midnight date).
-   */
-  private static formatDateLiteral(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  /**
    * Extract all unique scheduled dates from tasks
    * @param tasks Array of tasks to analyze
    * @param mode Current view mode (optional)
@@ -333,7 +322,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.scheduledDate) {
-        datesSet.add(this.formatDateLiteral(task.scheduledDate));
+        datesSet.add(DateUtils.formatIsoDate(task.scheduledDate));
       }
     });
 
@@ -362,7 +351,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.deadlineDate) {
-        datesSet.add(this.formatDateLiteral(task.deadlineDate));
+        datesSet.add(DateUtils.formatIsoDate(task.deadlineDate));
       }
     });
 
@@ -391,7 +380,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.closedDate) {
-        datesSet.add(this.formatDateLiteral(task.closedDate));
+        datesSet.add(DateUtils.formatIsoDate(task.closedDate));
       }
     });
 
@@ -420,7 +409,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.startedDate) {
-        datesSet.add(this.formatDateLiteral(task.startedDate));
+        datesSet.add(DateUtils.formatIsoDate(task.startedDate));
       }
     });
 

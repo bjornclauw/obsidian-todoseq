@@ -362,6 +362,23 @@ export function hasRepeater(task: {
 }
 
 /**
+ * Check if a task has a repeater *and* the date it repeats from — i.e. the
+ * task will actually roll forward on completion. Repeaters without a date are
+ * inert, so this is the predicate used across the recurrence code paths.
+ */
+export function hasRepeatingDates(task: {
+  scheduledDateRepeat: DateRepeatInfo | null;
+  scheduledDate: Date | null;
+  deadlineDateRepeat: DateRepeatInfo | null;
+  deadlineDate: Date | null;
+}): boolean {
+  return (
+    (task.scheduledDateRepeat != null && task.scheduledDate != null) ||
+    (task.deadlineDateRepeat != null && task.deadlineDate != null)
+  );
+}
+
+/**
  * Get the effective display date for a scheduled or deadline date.
  * If there's a repeater, calculate the next occurrence from now.
  *

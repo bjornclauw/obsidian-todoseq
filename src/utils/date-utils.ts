@@ -868,6 +868,18 @@ export class DateUtils {
    * @returns Formatted date string
    */
   /**
+   * Format a Date as a local `YYYY-MM-DD` literal. Uses local date parts (not
+   * `toISOString`) so a local-midnight date is not shifted to the previous day
+   * in timezones ahead of UTC.
+   */
+  static formatIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
    * Format the date content portion as YYYY-MM-DD DOW.
    * Single source of truth for weekday arrays and date-part formatting
    * used across task-writer, date-repeater, and CLOSED timestamps.

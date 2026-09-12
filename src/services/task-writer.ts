@@ -73,6 +73,29 @@ export class TaskWriter {
     return this.plugin.settings;
   }
 
+  /**
+   * Whether a CLOSED date should be written. `recordCompletion` forces one for
+   * a recurring completion even though the persisted state is the reset state.
+   */
+  private shouldWriteClosed(state: string, recordCompletion: boolean): boolean {
+    return (
+      !!this.settings?.trackClosedDate &&
+      (this.keywordManager.isCompleted(state) || recordCompletion)
+    );
+  }
+
+  /** Whether an existing CLOSED date must be kept (archived or recurring task). */
+  private preservesClosed(task: Task, newState: string): boolean {
+    return this.keywordManager.isArchived(newState) || hasRepeater(task);
+  }
+
+  /** Whether a STARTED date should be written for a first active entry. */
+  private shouldWriteStarted(state: string): boolean {
+    return (
+      !!this.settings?.trackStartedDate && this.keywordManager.isActive(state)
+    );
+  }
+
   private static buildDateLineContent(
     date: Date,
     repeat?: DateRepeatInfo | null,
@@ -257,15 +280,17 @@ export class TaskWriter {
     // A recordCompletion write persists the inactive state (recurring
     // roll-forward) but still stamps a CLOSED date for the completion that
     // just happened. On such a write CLOSED is added/kept, never removed.
-    const shouldWriteClosed =
-      !!settings?.trackClosedDate && (completed || recordCompletion);
+    const shouldWriteClosed = this.shouldWriteClosed(
+      newState,
+      recordCompletion,
+    );
     // CLOSED is only removed when a task genuinely leaves the completed state.
     // Archived tasks keep their completion record, and recurring tasks keep the
     // last-completion record across reactivations.
-    const preservesClosed =
-      this.keywordManager.isArchived(newState) || hasRepeater(task);
     const shouldRemoveClosed =
-      !shouldWriteClosed && !!task.closedDate && !preservesClosed;
+      !shouldWriteClosed &&
+      !!task.closedDate &&
+      !this.preservesClosed(task, newState);
 
     // STARTED tracking: trigger on first entry into an active state.
     // Idempotent and one-way — never removed on reactivation (first-ever-start).
@@ -522,12 +547,13 @@ export class TaskWriter {
       this.keywordManager,
     );
 
-    const shouldWriteClosed =
-      !!this.settings?.trackClosedDate && (completed || recordCompletion);
+    const shouldWriteClosed = this.shouldWriteClosed(
+      newState,
+      recordCompletion,
+    );
     // Archived tasks and recurring tasks keep their completion record.
-    const preservesClosed =
-      this.keywordManager.isArchived(newState) || hasRepeater(task);
-    const shouldRemoveClosed = !shouldWriteClosed && !preservesClosed;
+    const shouldRemoveClosed =
+      !shouldWriteClosed && !this.preservesClosed(task, newState);
 
     // Extract just the keyword + text part (strip indent + listMarker)
     let cellContent = newLine;
@@ -1346,10 +1372,7 @@ export class TaskWriter {
     }
     // STARTED is written first among the date lines (before
     // SCHEDULED/DEADLINE/CLOSED) when the task is created already active.
-    const shouldWriteStarted =
-      !!this.settings?.trackStartedDate &&
-      this.keywordManager.isActive(fields.state);
-    if (shouldWriteStarted) {
+    if (this.shouldWriteStarted(fields.state)) {
       lines.push(
         `${indent}STARTED: ${DateUtils.formatStartedDate(new Date())}`,
       );
@@ -1372,10 +1395,7 @@ export class TaskWriter {
         )}`,
       );
     }
-    const shouldWriteClosed =
-      !!this.settings?.trackClosedDate &&
-      (this.keywordManager.isCompleted(fields.state) || recordCompletion);
-    if (shouldWriteClosed) {
+    if (this.shouldWriteClosed(fields.state, recordCompletion)) {
       lines.push(`${indent}CLOSED: ${DateUtils.formatClosedDate(new Date())}`);
     }
     return lines;
@@ -1391,12 +1411,11 @@ export class TaskWriter {
     rawText: string,
     recordCompletion = false,
   ): Task {
-    const shouldWriteClosed =
-      !!this.settings?.trackClosedDate &&
-      (this.keywordManager.isCompleted(fields.state) || recordCompletion);
-    const shouldWriteStarted =
-      !!this.settings?.trackStartedDate &&
-      this.keywordManager.isActive(fields.state);
+    const shouldWriteClosed = this.shouldWriteClosed(
+      fields.state,
+      recordCompletion,
+    );
+    const shouldWriteStarted = this.shouldWriteStarted(fields.state);
     return {
       path,
       line,

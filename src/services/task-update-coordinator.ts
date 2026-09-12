@@ -16,6 +16,7 @@
 import { Task, DateRepeatInfo, WarningPeriodInfo } from '../types/task';
 import { KeywordManager } from '../utils/keyword-manager';
 import { getTaskKey } from '../utils/task-utils';
+import { hasRepeatingDates } from '../utils/date-repeater';
 import TodoTracker from '../main';
 import { TaskStateManager } from './task-state-manager';
 import { TaskWriter } from './task-writer';
@@ -355,10 +356,7 @@ export class TaskUpdateCoordinator {
    * applicable, a CLOSED date.
    */
   scheduleRecurrenceIfRecurring(task: Task): void {
-    const hasRepeatingDates =
-      (task.scheduledDateRepeat != null && task.scheduledDate != null) ||
-      (task.deadlineDateRepeat != null && task.deadlineDate != null);
-    if (!hasRepeatingDates) {
+    if (!hasRepeatingDates(task)) {
       return;
     }
     this.recurrenceCoordinator.scheduleRecurrence(task);
@@ -462,17 +460,13 @@ export class TaskUpdateCoordinator {
       const isOriginalStateCompleted = this.keywordManager.isCompleted(
         context.newState,
       );
-      const hasRepeatingDates =
-        (context.task.scheduledDateRepeat != null &&
-          context.task.scheduledDate != null) ||
-        (context.task.deadlineDateRepeat != null &&
-          context.task.deadlineDate != null);
+      const repeats = hasRepeatingDates(context.task);
 
       // For recurring tasks being marked complete, the state is reset to the
       // next inactive state immediately (instant reopen) while still stamping
       // a CLOSED date so the completion is recorded. The delayed recurrence
       // update then advances the dates and preserves the CLOSED line.
-      if (isOriginalStateCompleted && hasRepeatingDates) {
+      if (isOriginalStateCompleted && repeats) {
         // Use cached state transition manager instead of creating new instance
         newState = this.stateTransitionManager.getNextState(context.newState);
         recordCompletion = true;
@@ -917,13 +911,7 @@ export class TaskUpdateCoordinator {
       context.originalNewState,
     );
 
-    const taskHasRepeatingDates =
-      (updatedTask.scheduledDateRepeat != null &&
-        updatedTask.scheduledDate != null) ||
-      (updatedTask.deadlineDateRepeat != null &&
-        updatedTask.deadlineDate != null);
-
-    if (isOriginalCompleted && taskHasRepeatingDates) {
+    if (isOriginalCompleted && hasRepeatingDates(updatedTask)) {
       this.recurrenceCoordinator.scheduleRecurrence(
         updatedTask,
         RECURRENCE_DELAY_MS,
@@ -941,13 +929,7 @@ export class TaskUpdateCoordinator {
       return;
     }
 
-    const taskHasRepeatingDates =
-      (updatedTask.scheduledDateRepeat != null &&
-        updatedTask.scheduledDate != null) ||
-      (updatedTask.deadlineDateRepeat != null &&
-        updatedTask.deadlineDate != null);
-
-    if (taskHasRepeatingDates) {
+    if (hasRepeatingDates(updatedTask)) {
       this.recurrenceCoordinator.scheduleRecurrence(
         updatedTask,
         RECURRENCE_DELAY_MS,
