@@ -649,6 +649,14 @@ export class TaskUpdateCoordinator {
         if (context.source === 'editor') {
           this.performDirectEditorCheckboxUpdate(updatedTask, context.newState);
         }
+      } else if (
+        context.type === 'scheduled-date' ||
+        context.type === 'deadline-date'
+      ) {
+        // Adding or changing a schedule/repeat on a task that is already
+        // completed now rolls the occurrence forward (previously this was
+        // silently inert). Archived tasks are intentionally excluded.
+        this.handleRecurrenceForCompletedTask(updatedTask);
       }
     };
 
@@ -912,6 +920,27 @@ export class TaskUpdateCoordinator {
         updatedTask.deadlineDate != null);
 
     if (isOriginalCompleted && taskHasRepeatingDates) {
+      this.recurrenceCoordinator.scheduleRecurrence(updatedTask, 50);
+    }
+  }
+
+  /**
+   * Roll an already-completed recurring task forward after its schedule or
+   * repeat was added/changed (e.g. the date picker applied a repeat to a DONE
+   * task). Archived tasks are skipped: archiving is terminal.
+   */
+  private handleRecurrenceForCompletedTask(updatedTask: Task): void {
+    if (!this.keywordManager.isCompleted(updatedTask.state)) {
+      return;
+    }
+
+    const taskHasRepeatingDates =
+      (updatedTask.scheduledDateRepeat != null &&
+        updatedTask.scheduledDate != null) ||
+      (updatedTask.deadlineDateRepeat != null &&
+        updatedTask.deadlineDate != null);
+
+    if (taskHasRepeatingDates) {
       this.recurrenceCoordinator.scheduleRecurrence(updatedTask, 50);
     }
   }

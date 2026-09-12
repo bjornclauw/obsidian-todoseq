@@ -542,6 +542,85 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
     });
   });
 
+  describe('recurrence when schedule is added to a completed task', () => {
+    function recurrenceSpy(): jest.SpyInstance {
+      return jest.spyOn(
+        (
+          taskUpdateCoordinator as unknown as {
+            recurrenceCoordinator: { scheduleRecurrence: () => void };
+          }
+        ).recurrenceCoordinator,
+        'scheduleRecurrence',
+      );
+    }
+
+    it('schedules recurrence when a repeat is added to a DONE task', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'DONE',
+        completed: true,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+
+      await taskUpdateCoordinator.updateTaskScheduledDate(
+        task,
+        new Date('2026-03-10'),
+        { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      );
+
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('does not schedule recurrence for an ARCHIVED task', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'ARCHIVED',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+
+      await taskUpdateCoordinator.updateTaskScheduledDate(
+        task,
+        new Date('2026-03-10'),
+        { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      );
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('does not schedule recurrence for a non-completed task', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+
+      await taskUpdateCoordinator.updateTaskScheduledDate(
+        task,
+        new Date('2026-03-10'),
+        { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      );
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
   afterEach(() => {
     jest.useRealTimers();
     taskUpdateCoordinator.destroy();

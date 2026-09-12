@@ -1,4 +1,5 @@
 import { WarningPeriodInfo } from '../types/task';
+import { LocaleUtils } from './locale-utils';
 
 /**
  * Date utility class
@@ -26,7 +27,7 @@ export class DateUtils {
     const formatTime = (d: Date) => {
       // Format time showing hours and minutes (no leading zero for hour).
       // Keep locale behavior (12/24h) but normalize AM/PM to lowercase when present.
-      const time = d.toLocaleTimeString(undefined, {
+      const time = LocaleUtils.formatTime(d, {
         hour: 'numeric',
         minute: '2-digit',
       });
@@ -35,7 +36,7 @@ export class DateUtils {
 
     const formatFullDate = (d: Date) => {
       // Use locale-aware formatting so month/day/year order and separators follow the user's locale
-      return d.toLocaleDateString(undefined, {
+      return LocaleUtils.formatDate(d, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -44,18 +45,18 @@ export class DateUtils {
 
     if (diffDays === 0) {
       return includeTime && (date.getHours() !== 0 || date.getMinutes() !== 0)
-        ? `Today ${formatTime(date)}`
-        : 'Today';
+        ? `${LocaleUtils.formatRelativeDays(0)} ${formatTime(date)}`
+        : LocaleUtils.formatRelativeDays(0);
     } else if (diffDays === 1) {
       return includeTime && (date.getHours() !== 0 || date.getMinutes() !== 0)
-        ? `Tomorrow ${formatTime(date)}`
-        : 'Tomorrow';
+        ? `${LocaleUtils.formatRelativeDays(1)} ${formatTime(date)}`
+        : LocaleUtils.formatRelativeDays(1);
     } else if (diffDays === -1) {
-      return 'Yesterday';
+      return LocaleUtils.formatRelativeDays(-1);
     } else if (diffDays > 0 && diffDays <= 7) {
-      return `${diffDays} days from now`;
+      return LocaleUtils.formatRelativeDays(diffDays);
     } else if (diffDays < 0) {
-      return `${Math.abs(diffDays)} days ago`;
+      return LocaleUtils.formatRelativeDays(diffDays);
     } else {
       // For dates beyond a week, use absolute formatting
       if (includeTime && (date.getHours() !== 0 || date.getMinutes() !== 0)) {
@@ -77,7 +78,7 @@ export class DateUtils {
     const normalizedDate = this.normalizeDateForTimezone(date);
 
     const formatTime = (d: Date) => {
-      const time = d.toLocaleTimeString(undefined, {
+      const time = LocaleUtils.formatTime(d, {
         hour: 'numeric',
         minute: '2-digit',
       });
@@ -87,7 +88,7 @@ export class DateUtils {
     const hasTime =
       includeTime &&
       (normalizedDate.getHours() !== 0 || normalizedDate.getMinutes() !== 0);
-    const absoluteDate = normalizedDate.toLocaleDateString(undefined, {
+    const absoluteDate = LocaleUtils.formatDate(normalizedDate, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -104,20 +105,20 @@ export class DateUtils {
 
     if (diffDays === 0) {
       return hasTime
-        ? `Today ${formatTime(normalizedDate)} (${absoluteDate})`
-        : `Today (${absoluteDate})`;
+        ? `${LocaleUtils.formatRelativeDays(0)} ${formatTime(normalizedDate)} (${absoluteDate})`
+        : `${LocaleUtils.formatRelativeDays(0)} (${absoluteDate})`;
     } else if (diffDays === 1) {
       return hasTime
-        ? `Tomorrow ${formatTime(normalizedDate)} (${absoluteDate})`
-        : `Tomorrow (${absoluteDate})`;
+        ? `${LocaleUtils.formatRelativeDays(1)} ${formatTime(normalizedDate)} (${absoluteDate})`
+        : `${LocaleUtils.formatRelativeDays(1)} (${absoluteDate})`;
     } else if (diffDays === -1) {
-      return `Yesterday (${absoluteDate})`;
+      return `${LocaleUtils.formatRelativeDays(-1)} (${absoluteDate})`;
     } else if (diffDays > 0 && diffDays <= 7) {
       return hasTime
-        ? `${diffDays} days from now ${formatTime(normalizedDate)} (${absoluteDate})`
-        : `${diffDays} days from now (${absoluteDate})`;
+        ? `${LocaleUtils.formatRelativeDays(diffDays)} ${formatTime(normalizedDate)} (${absoluteDate})`
+        : `${LocaleUtils.formatRelativeDays(diffDays)} (${absoluteDate})`;
     } else if (diffDays < 0) {
-      return `${Math.abs(diffDays)} days ago (${absoluteDate})`;
+      return `${LocaleUtils.formatRelativeDays(diffDays)} (${absoluteDate})`;
     } else {
       return absoluteWithTime;
     }

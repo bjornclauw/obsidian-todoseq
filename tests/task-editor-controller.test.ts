@@ -270,6 +270,123 @@ describe('TaskEditorController', () => {
       );
     });
 
+    it('does not reopen a completed recurring task when nothing changed', async () => {
+      const { controller, plugin } = createHarness(['DONE Task text']);
+      const repeat = {
+        type: '+' as const,
+        unit: 'd' as const,
+        value: 1,
+        raw: '+1d',
+      };
+      const task = createBaseTask({
+        line: 0,
+        state: 'DONE',
+        scheduledDate: new Date('2026-06-15'),
+        scheduledDateRepeat: repeat,
+      });
+      plugin.taskEditor.updateTaskFields.mockResolvedValue({
+        task,
+        lineDelta: 0,
+      });
+
+      await save(
+        controller,
+        { path: 'test.md', line: 0, task },
+        makeFields({
+          state: 'DONE',
+          scheduledDate: new Date('2026-06-15'),
+          scheduledRepeat: repeat,
+        }),
+      );
+
+      expect(plugin.taskEditor.updateTaskFields).toHaveBeenCalledWith(
+        task,
+        expect.objectContaining({ state: 'DONE' }),
+        { recordCompletion: false },
+      );
+      expect(
+        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rolls a completed task forward when a repeat is added', async () => {
+      const { controller, plugin } = createHarness(['DONE Task text']);
+      const task = createBaseTask({
+        line: 0,
+        state: 'DONE',
+        scheduledDate: new Date('2026-06-15'),
+      });
+      const updated = { ...task, state: 'TODO' };
+      plugin.taskEditor.updateTaskFields.mockResolvedValue({
+        task: updated,
+        lineDelta: 0,
+      });
+      const repeat = {
+        type: '+' as const,
+        unit: 'd' as const,
+        value: 1,
+        raw: '+1d',
+      };
+
+      await save(
+        controller,
+        { path: 'test.md', line: 0, task },
+        makeFields({
+          state: 'DONE',
+          scheduledDate: new Date('2026-06-15'),
+          scheduledRepeat: repeat,
+        }),
+      );
+
+      expect(plugin.taskEditor.updateTaskFields).toHaveBeenCalledWith(
+        task,
+        expect.objectContaining({ state: 'TODO' }),
+        { recordCompletion: true },
+      );
+      expect(
+        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+      ).toHaveBeenCalledWith(updated);
+    });
+
+    it('rolls a completed recurring task forward when its date changes', async () => {
+      const { controller, plugin } = createHarness(['DONE Task text']);
+      const repeat = {
+        type: '+' as const,
+        unit: 'd' as const,
+        value: 1,
+        raw: '+1d',
+      };
+      const task = createBaseTask({
+        line: 0,
+        state: 'DONE',
+        scheduledDate: new Date('2026-06-15'),
+        scheduledDateRepeat: repeat,
+      });
+      plugin.taskEditor.updateTaskFields.mockResolvedValue({
+        task: { ...task, state: 'TODO' },
+        lineDelta: 0,
+      });
+
+      await save(
+        controller,
+        { path: 'test.md', line: 0, task },
+        makeFields({
+          state: 'DONE',
+          scheduledDate: new Date('2026-06-20'),
+          scheduledRepeat: repeat,
+        }),
+      );
+
+      expect(plugin.taskEditor.updateTaskFields).toHaveBeenCalledWith(
+        task,
+        expect.objectContaining({ state: 'TODO' }),
+        { recordCompletion: true },
+      );
+      expect(
+        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+      ).toHaveBeenCalled();
+    });
+
     it('does not throw when the coordinator is unavailable', async () => {
       const { controller, plugin } = createHarness(['TODO Task text']);
       plugin.taskUpdateCoordinator = null as never;

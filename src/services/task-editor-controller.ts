@@ -1,6 +1,6 @@
 import { MarkdownView, Notice, TFile } from 'obsidian';
 import TodoTracker from '../main';
-import { Task } from '../types/task';
+import { Task, DateRepeatInfo } from '../types/task';
 import { TaskComposeFields, TaskWriter } from './task-writer';
 import {
   TaskEditorInitialValues,
@@ -160,6 +160,27 @@ export class TaskEditorController {
     );
   }
 
+  /** Whether the modal changed the task's scheduled/deadline dates or repeats. */
+  private hasScheduleChanged(task: Task, fields: TaskComposeFields): boolean {
+    return (
+      this.repeatChanged(task.scheduledDateRepeat, fields.scheduledRepeat) ||
+      this.repeatChanged(task.deadlineDateRepeat, fields.deadlineRepeat) ||
+      this.dateChanged(task.scheduledDate, fields.scheduledDate) ||
+      this.dateChanged(task.deadlineDate, fields.deadlineDate)
+    );
+  }
+
+  private repeatChanged(
+    before: DateRepeatInfo | null,
+    after: DateRepeatInfo | null,
+  ): boolean {
+    return (before?.raw ?? null) !== (after?.raw ?? null);
+  }
+
+  private dateChanged(before: Date | null, after: Date | null): boolean {
+    return (before?.getTime() ?? null) !== (after?.getTime() ?? null);
+  }
+
   /** Persist the composed fields and refresh task views. */
   private async save(
     target: TaskEditorTarget,
@@ -175,10 +196,18 @@ export class TaskEditorController {
     const hasRepeatingDates =
       (fields.scheduledRepeat != null && fields.scheduledDate != null) ||
       (fields.deadlineRepeat != null && fields.deadlineDate != null);
-    // Completing a recurring task resets it to the default inactive state and
-    // records a CLOSED date, then schedules the delayed roll-forward — exactly
-    // like every other completion surface.
-    const recordCompletion = willBeCompleted && hasRepeatingDates;
+    // Roll a recurring occurrence forward when the task is completed now, or
+    // when its schedule/repeat is added or changed on an already-completed
+    // task. Unrelated edits (e.g. text) to a completed recurring task do not
+    // reopen it — matching the other surfaces.
+    const wasCompleted = target.task
+      ? keywordManager.isCompleted(target.task.state)
+      : false;
+    const scheduleChanged = target.task
+      ? this.hasScheduleChanged(target.task, fields)
+      : false;
+    const completingNow = willBeCompleted && (!wasCompleted || scheduleChanged);
+    const recordCompletion = completingNow && hasRepeatingDates;
     const writeFields: TaskComposeFields = recordCompletion
       ? { ...fields, state: keywordManager.getDefaultInactive() }
       : fields;

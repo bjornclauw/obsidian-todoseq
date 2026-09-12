@@ -1,5 +1,6 @@
 import { setIcon } from 'obsidian';
 import { DateUtils } from '../../utils/date-utils';
+import { LocaleUtils } from '../../utils/locale-utils';
 import { formatRepeatDescription } from '../../utils/date-repeater';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
 import { isPhoneDevice } from '../../utils/mobile-utils';
@@ -368,7 +369,7 @@ export class DatePicker extends BaseDialog {
       const dayCell = daysGrid.createDiv({
         cls: 'todoseq-date-picker-calendar-day',
         attr: {
-          'aria-label': date.toLocaleDateString(),
+          'aria-label': LocaleUtils.formatDate(date, {}),
           role: 'menuitem',
           tabindex: '-1',
         },
@@ -595,9 +596,9 @@ export class DatePicker extends BaseDialog {
       cls: 'todoseq-date-picker-quick-select-date',
     });
     const date = option.getDate();
-    // Format date using locale-aware short date format with day of week
+    // Format date using the active locale's short date format with day of week
     dateEl.setText(
-      date.toLocaleDateString(undefined, {
+      LocaleUtils.formatDate(date, {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -683,10 +684,7 @@ export class DatePicker extends BaseDialog {
   }
 
   private formatMonthYear(date: Date): string {
-    // Use a fixed English locale to match the hardcoded English weekday
-    // labels and keep the calendar consistent (and tests deterministic)
-    // regardless of the host locale.
-    return date.toLocaleDateString('en-US', {
+    return LocaleUtils.formatDate(date, {
       month: 'short',
       year: 'numeric',
     });
@@ -709,19 +707,7 @@ export class DatePicker extends BaseDialog {
   }
 
   private getWeekdayLabels(): string[] {
-    const labels: string[] = [];
-    const startDay = this.config.weekStartsOn === 'Monday' ? 1 : 0;
-
-    // Use fixed weekday names directly to avoid any reference date issues
-    // JavaScript's getDay() returns: 0=Sunday, 1=Monday, ..., 6=Saturday
-    const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    for (let i = 0; i < 7; i++) {
-      const dayIndex = (startDay + i) % 7;
-      labels.push(weekdayNames[dayIndex]);
-    }
-
-    return labels;
+    return LocaleUtils.getWeekdayLabels(this.config.weekStartsOn);
   }
 
   // ─── Time Selection ─────────────────────────────────────────────

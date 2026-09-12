@@ -498,6 +498,8 @@ The STARTED date uses square brackets `[]` (the same inactive-timestamp conventi
 3. **Format**: Must use angle brackets `<>` for SCHEDULED/DEADLINE or square brackets `[]` for CLOSED and STARTED
 4. **Limit**: Only first occurrence of each type (SCHEDULED/DEADLINE/CLOSED/STARTED) is recognized
 
+> **Localized display:** Dates shown in the app (task list, tooltips, date picker, task editor) follow Obsidian's language setting. The dates written into your notes always use the canonical format above (`<YYYY-MM-DD Ddd>`, `[YYYY-MM-DD Ddd HH:mm]`), so notes stay portable between devices and languages.
+
 **Correct Date Usage:**
 
 ```markdown
@@ -598,7 +600,11 @@ When you mark a task with a repeating date as completed (default completed state
 
 The task is reopened immediately, so it never stays in the completed state.
 
+If you add or change a repeating date on a task that is already completed (for example via the date picker on a DONE task), the occurrence advances the same way. Archived tasks do not recur: archiving is terminal, so a repeater on an archived task is left untouched.
+
 Tasks with repeating dates display a repeat icon in the task list to indicate they will advance when completed.
+
+> **Limitation:** Repeating dates are not supported on tasks defined in Markdown table cells; a repeater there is preserved but does not auto-advance.
 
 ### Warning Periods (Advance Notice / Delayed Notice)
 

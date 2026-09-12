@@ -90,8 +90,8 @@ testTimezones.forEach((timezone) => {
         const result1 = DateUtils.formatDateForDisplay(twoDaysFromNow);
         const result2 = DateUtils.formatDateForDisplay(fiveDaysFromNow);
 
-        expect(result1).toBe('2 days from now');
-        expect(result2).toBe('5 days from now');
+        expect(result1).toBe('In 2 days');
+        expect(result2).toBe('In 5 days');
       });
 
       test('should return "X days ago" for dates within past week', () => {
@@ -120,7 +120,7 @@ testTimezones.forEach((timezone) => {
       test('should handle dates with different time zones correctly', () => {
         const dateWithTimeZone = DateUtils.createDate(2025, 9, 18, 22, 30, 0);
         const result = DateUtils.formatDateForDisplay(dateWithTimeZone, true);
-        expect(result).toBe('3 days from now');
+        expect(result).toBe('In 3 days');
       });
 
       test('should handle month boundaries correctly', () => {
