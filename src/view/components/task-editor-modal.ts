@@ -1,7 +1,8 @@
-import { setIcon, setTooltip } from 'obsidian';
+import { Platform, setIcon, setTooltip } from 'obsidian';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { DateUtils } from '../../utils/date-utils';
+import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
 
@@ -94,6 +95,7 @@ export class TaskEditorModal {
   }> = [];
   private isClosed = false;
   private dateFieldRefresh: (() => void) | null = null;
+  private stopKeyboardWatch: (() => void) | null = null;
 
   constructor(private options: TaskEditorModalOptions) {
     this.scheduledDate = options.initial.scheduledDate;
@@ -280,6 +282,37 @@ export class TaskEditorModal {
         textInput.value.length,
       );
     }, 50);
+
+    // On mobile, lift the sheet above the soft keyboard as it opens.
+    if (Platform.isMobile && this.modalEl) {
+      const win = this.modalEl.ownerDocument.defaultView ?? window;
+      this.stopKeyboardWatch = new KeyboardInsetWatcher().start(win, (inset) =>
+        this.applyKeyboardInset(inset),
+      );
+      for (const field of [textInput, descInput]) {
+        field.addEventListener('focus', () => this.scrollFieldIntoView(field));
+      }
+    }
+  }
+
+  /** Offset the sheet above the soft keyboard while it is open. */
+  private applyKeyboardInset(inset: number): void {
+    if (!this.modalEl) return;
+    this.modalEl.setCssProps({
+      '--todoseq-keyboard-height': `${inset}px`,
+    });
+    this.modalEl.toggleClass('is-keyboard-open', inset > 0);
+  }
+
+  /**
+   * Bring a focused field into view after the keyboard animation has settled.
+   */
+  private scrollFieldIntoView(field: HTMLElement): void {
+    window.setTimeout(() => {
+      if (typeof field.scrollIntoView === 'function') {
+        field.scrollIntoView({ block: 'nearest' });
+      }
+    }, 320);
   }
 
   private async submit(
@@ -491,6 +524,10 @@ export class TaskEditorModal {
     if (this.isClosed) return;
     this.isClosed = true;
 
+    if (this.stopKeyboardWatch) {
+      this.stopKeyboardWatch();
+      this.stopKeyboardWatch = null;
+    }
     if (this.datePicker) {
       this.datePicker.cleanup();
       this.datePicker = null;

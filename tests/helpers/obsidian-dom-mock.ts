@@ -16,6 +16,7 @@ declare global {
     setText: (text: string) => void;
     appendText: (text: string) => void;
     setAttr: (key: string, value: string) => void;
+    setCssProps: (props: Record<string, string>) => void;
     createEl: <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       options?: {
@@ -95,6 +96,14 @@ export function installObsidianDomMocks(): void {
 
   HTMLElement.prototype.setAttr = function (key: string, value: string): void {
     this.setAttribute(key, value);
+  };
+
+  HTMLElement.prototype.setCssProps = function (
+    props: Record<string, string>,
+  ): void {
+    for (const [key, value] of Object.entries(props)) {
+      this.style.setProperty(key, value);
+    }
   };
 
   HTMLElement.prototype.createEl = function <

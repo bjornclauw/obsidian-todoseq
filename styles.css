@@ -2787,14 +2787,28 @@
 .is-mobile .todoseq-task-editor-modal,
 .is-phone .todoseq-task-editor-modal {
   top: auto;
-  bottom: 0;
+  bottom: var(--todoseq-keyboard-height, 0);
   left: 0;
   transform: none;
   width: 100vw;
   max-width: 100vw;
-  max-height: 92vh;
+  max-height: calc(92vh - var(--todoseq-keyboard-height, 0px));
   border-radius: var(--radius-l) var(--radius-l) 0 0;
   border-bottom: none;
+  transition:
+    bottom 200ms ease,
+    max-height 200ms ease;
+}
+
+/* While the keyboard is open, drop the safe-area padding so the footer
+   stays flush above the keyboard. */
+.is-mobile
+  .todoseq-task-editor-modal.is-keyboard-open
+  .todoseq-task-editor-buttons,
+.is-phone
+  .todoseq-task-editor-modal.is-keyboard-open
+  .todoseq-task-editor-buttons {
+  padding-bottom: var(--size-4-3);
 }
 
 .is-mobile .todoseq-task-editor-btn-save,
