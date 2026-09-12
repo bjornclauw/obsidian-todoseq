@@ -2580,23 +2580,6 @@
   gap: var(--size-4-2);
 }
 
-/* Hide Obsidian's native close button in favour of our own, so the title row
-   looks consistent across versions. */
-.todoseq-task-editor-modal .modal-close-button {
-  display: none;
-}
-
-.todoseq-task-editor-close {
-  margin-left: auto;
-  cursor: pointer;
-  color: var(--text-muted);
-}
-
-.todoseq-task-editor-close:hover {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
-}
-
 .todoseq-task-editor-form {
   display: flex;
   flex-direction: column;
@@ -2771,21 +2754,17 @@
 /* Mobile keyboard allowance.
    On mobile Obsidian's WebView does not resize when the soft keyboard opens,
    which can leave the focused field and the sticky action bar behind it.
-   Adding scroll room to the modal's scroll container while a field that
-   summons the keyboard is focused lets the WebView scroll them clear.
-   We deliberately match only textarea / text input: dropdowns, date pickers
-   and the priority buttons take focus without opening a keyboard. */
+   Adding scroll room to the modal's scroll container lets the WebView scroll
+   them clear. The `is-keyboard-open` class is toggled by KeyboardInsetWatcher
+   (not `:has(:focus)`) so the allowance is removed as soon as the keyboard
+   closes — even when the field keeps focus. */
 .is-mobile .todoseq-task-editor-modal,
 .is-phone .todoseq-task-editor-modal {
   --todoseq-keyboard-space-allowance: clamp(220px, 35vh, 360px);
 }
 
-.is-mobile
-  .todoseq-task-editor-modal:has(textarea:focus, input[type='text']:focus)
-  .modal-content,
-.is-phone
-  .todoseq-task-editor-modal:has(textarea:focus, input[type='text']:focus)
-  .modal-content {
+.is-mobile .todoseq-task-editor-modal.is-keyboard-open .modal-content,
+.is-phone .todoseq-task-editor-modal.is-keyboard-open .modal-content {
   padding-bottom: var(--todoseq-keyboard-space-allowance);
 }
 

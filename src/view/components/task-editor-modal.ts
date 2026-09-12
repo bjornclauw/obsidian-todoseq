@@ -2,6 +2,7 @@ import { App, Modal, Platform, setIcon, setTooltip } from 'obsidian';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { DateUtils } from '../../utils/date-utils';
+import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
 
@@ -97,6 +98,7 @@ export class TaskEditorModal extends Modal {
   private dateFieldRefresh: (() => void) | null = null;
   /** True once the user saved, so onClose doesn't report a cancel. */
   private submitted = false;
+  private stopKeyboardWatch: (() => void) | null = null;
 
   constructor(
     app: App,
@@ -116,14 +118,6 @@ export class TaskEditorModal extends Modal {
     const isEdit = this.options.mode === 'edit';
     this.setTitle(isEdit ? 'Edit task' : 'New task');
     this.modalEl.addClass('todoseq-task-editor-modal');
-
-    // Our own close button, in case a native one isn't rendered.
-    const closeBtn = this.titleEl.createDiv({
-      cls: 'todoseq-task-editor-close clickable-icon',
-    });
-    setIcon(closeBtn, 'x');
-    closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', () => this.close());
 
     // While the date picker is open, clicking the modal background should only
     // dismiss the picker, not the whole editor. Capture phase so this runs
@@ -273,10 +267,39 @@ export class TaskEditorModal extends Modal {
       for (const field of [textInput, descInput]) {
         field.addEventListener('focus', () => this.scrollFieldIntoView(field));
       }
+      // Drive the keyboard allowance from an explicit class rather than
+      // :has(:focus). Dismissing the soft keyboard (system back/gesture) often
+      // leaves the field focused, which would otherwise keep the allowance and
+      // the shifted layout until a background tap blurs it.
+      const win = this.modalEl?.ownerDocument.defaultView ?? window;
+      this.stopKeyboardWatch = new KeyboardInsetWatcher().start(win, (inset) =>
+        this.applyKeyboardInset(inset),
+      );
+    }
+  }
+
+  /** Toggle the mobile keyboard allowance on the modal. */
+  private applyKeyboardInset(inset: number): void {
+    const modalEl = this.modalEl;
+    if (!modalEl) return;
+    const wasOpen = modalEl.hasClass('is-keyboard-open');
+    modalEl.toggleClass('is-keyboard-open', inset > 0);
+    if (wasOpen && inset === 0) {
+      // Force the scroll container to re-clamp now the padding is gone so the
+      // sheet snaps back without waiting for a background tap.
+      const max = this.contentEl.scrollHeight - this.contentEl.clientHeight;
+      this.contentEl.scrollTop = Math.max(
+        0,
+        Math.min(this.contentEl.scrollTop, max),
+      );
     }
   }
 
   onClose(): void {
+    if (this.stopKeyboardWatch) {
+      this.stopKeyboardWatch();
+      this.stopKeyboardWatch = null;
+    }
     if (this.datePicker) {
       this.datePicker.cleanup();
       this.datePicker = null;
