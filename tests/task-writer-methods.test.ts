@@ -515,6 +515,32 @@ describe('TaskWriter Instance Methods', () => {
       expect(result.closedDate).not.toBeNull();
     });
 
+    it('stamps CLOSED when a task is cancelled', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'TODO',
+        completed: false,
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn('TODO Task text');
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'CANCELED', {});
+
+      expect(processed).toContain('CANCELED Task text');
+      expect(processed).toContain('CLOSED:');
+      expect(result.state).toBe('CANCELED');
+      expect(result.completed).toBe(true);
+    });
+
     it('preserves CLOSED when reactivating a recurring task', async () => {
       mockPlugin.settings.trackClosedDate = true;
       const task: Task = createBaseTask({

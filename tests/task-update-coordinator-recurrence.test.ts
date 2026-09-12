@@ -679,6 +679,106 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
       expect(stored?.scheduledDateRepeat).not.toBeNull();
       expect(stored?.scheduledDate).not.toBeNull();
     });
+
+    it('does not roll a recurring task when it is CANCELLED', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        deadlineDate: new Date('2026-03-10'),
+        deadlineDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+      (mockPlugin.taskEditor.updateTaskState as jest.Mock).mockClear();
+
+      await taskUpdateCoordinator.updateTaskState(task, 'CANCELLED');
+
+      expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
+        task,
+        'CANCELLED',
+        { recordCompletion: false },
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('does not roll when a repeat is added to a canceled task', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'CANCELED',
+        completed: true,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+
+      await taskUpdateCoordinator.updateTaskScheduledDate(
+        task,
+        new Date('2026-03-10'),
+        { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      );
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('rolls when a deadline repeat is added to a DONE task', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'DONE',
+        completed: true,
+        deadlineDate: new Date('2026-03-10'),
+        deadlineDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+
+      await taskUpdateCoordinator.updateTaskDeadlineDate(
+        task,
+        new Date('2026-03-10'),
+        { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      );
+
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('a re-added task with a repeat rolls forward on completion', async () => {
+      const fullTask: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      const vaultScanner = (
+        mockPlugin as unknown as {
+          vaultScanner: { getParser: () => { parseFile: () => Task[] } };
+        }
+      ).vaultScanner;
+      vaultScanner.getParser = () => ({ parseFile: () => [fullTask] });
+
+      await taskUpdateCoordinator.updateTaskByPath(
+        'test.md',
+        0,
+        'TODO',
+        'task-list',
+      );
+      const stored = taskStateManager.findTaskByPathAndLine('test.md', 0);
+      expect(stored).toBeDefined();
+
+      const spy = recurrenceSpy();
+      await taskUpdateCoordinator.updateTaskState(stored as Task, 'DONE');
+
+      expect(spy).toHaveBeenCalled();
+    });
   });
 
   afterEach(() => {

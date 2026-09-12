@@ -323,6 +323,9 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
       line: 0,
       state: 'TODO',
       rawText: 'TODO Reactivated task',
+      scheduledDate: new Date('2026-03-10'),
+      scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      closedDate: new Date('2026-03-01'),
     });
     const mockParser = {
       // Re-adding parses the whole file so date/repeat metadata is preserved.
@@ -347,6 +350,10 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
     );
     expect(reactivatedTask).not.toBeNull();
     expect(reactivatedTask?.state).toBe('TODO');
+    // Full-file parse preserves date/repeat/CLOSED metadata for the re-added task.
+    expect(reactivatedTask?.scheduledDateRepeat).not.toBeNull();
+    expect(reactivatedTask?.scheduledDate).not.toBeNull();
+    expect(reactivatedTask?.closedDate).not.toBeNull();
   });
 
   it('should NOT re-add task when transitioning to archived state', async () => {
