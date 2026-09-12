@@ -979,6 +979,31 @@
   font-family: var(--font-monospace);
   font-size: 0.9rem;
   white-space: nowrap; /* Prevent keyword wrapping */
+  border-radius: var(--radius-s);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Brief highlight when a task's state changes in place (no full re-render). */
+@keyframes todoseq-state-changed {
+  from {
+    background-color: var(--background-modifier-hover);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.todoseq-embedded-task-state.todoseq-state-changed {
+  animation: todoseq-state-changed 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todoseq-embedded-task-state {
+    transition: none;
+  }
+  .todoseq-embedded-task-state.todoseq-state-changed {
+    animation: none;
+  }
 }
 
 /* Task text */

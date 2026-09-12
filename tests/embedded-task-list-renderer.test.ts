@@ -677,6 +677,88 @@ describe('EmbeddedTaskListRenderer', () => {
         container.querySelector('.todoseq-embedded-task-list-empty'),
       ).toBeTruthy();
     });
+
+    it('preserves the scroll position of the nearest scrollable ancestor', () => {
+      const scroller = document.createElement('div');
+      Object.defineProperty(scroller, 'scrollHeight', {
+        value: 1000,
+        configurable: true,
+      });
+      Object.defineProperty(scroller, 'clientHeight', {
+        value: 300,
+        configurable: true,
+      });
+      let scrollTop = 200;
+      const setScrollTop = jest.fn((value: number) => {
+        scrollTop = value;
+      });
+      Object.defineProperty(scroller, 'scrollTop', {
+        get: () => scrollTop,
+        set: setScrollTop,
+        configurable: true,
+      });
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const getComputedStyleSpy = jest
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el: Element) =>
+          el === scroller
+            ? ({ overflowY: 'auto' } as unknown as CSSStyleDeclaration)
+            : originalGetComputedStyle(el),
+        );
+
+      const container = scroller.createDiv();
+      renderer.renderTaskList(container, [], {});
+
+      expect(setScrollTop).toHaveBeenCalledWith(200);
+      getComputedStyleSpy.mockRestore();
+    });
+
+    it('updates changed rows in place when the task order is unchanged', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {};
+      const before = createBaseTask({
+        path: 'a.md',
+        line: 0,
+        state: 'TODO',
+        text: 'Task A',
+      });
+
+      renderer.renderTaskList(container, [before], params);
+      const firstList = container.querySelector('.todoseq-embedded-task-list');
+
+      const after = createBaseTask({
+        path: 'a.md',
+        line: 0,
+        state: 'DOING',
+        text: 'Task A',
+      });
+      renderer.renderTaskList(container, [after], params);
+
+      // The list element is reused (not rebuilt) and the keyword updated.
+      expect(container.querySelector('.todoseq-embedded-task-list')).toBe(
+        firstList,
+      );
+      expect(
+        container.querySelector('.todoseq-embedded-task-state')?.textContent,
+      ).toBe('DOING');
+    });
+
+    it('rebuilds the list when the task set changes', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {};
+      const before = createBaseTask({ path: 'a.md', line: 0, text: 'Task A' });
+
+      renderer.renderTaskList(container, [before], params);
+      const firstList = container.querySelector('.todoseq-embedded-task-list');
+
+      const other = createBaseTask({ path: 'b.md', line: 5, text: 'Task B' });
+      renderer.renderTaskList(container, [other], params);
+
+      expect(container.querySelector('.todoseq-embedded-task-list')).not.toBe(
+        firstList,
+      );
+    });
   });
 
   describe('updateSettings', () => {

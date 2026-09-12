@@ -16,6 +16,16 @@ import {
 import { EmbeddedTaskItemRenderer } from './embedded-task-item-renderer';
 
 /**
+ * Snapshot of the last rendered (non-collapsible) list for a container, used
+ * to update rows in place when the same tasks are shown in the same order.
+ */
+interface RenderedListSnapshot {
+  paramsSignature: string;
+  keys: string[];
+  tasks: Task[];
+}
+
+/**
  * Renders interactive task lists within code blocks.
  * Handles task state changes and navigation.
  */
@@ -24,6 +34,7 @@ export class EmbeddedTaskListRenderer {
   private menuBuilder: StateMenuBuilder;
   private taskContextMenu: TaskContextMenu;
   private itemRenderer: EmbeddedTaskItemRenderer;
+  private renderedLists = new WeakMap<HTMLElement, RenderedListSnapshot>();
 
   constructor(plugin: TodoTracker) {
     this.plugin = plugin;
@@ -285,6 +296,17 @@ export class EmbeddedTaskListRenderer {
     toggleCollapse?: (containerId: string) => void,
     containerId?: string,
   ): void {
+    // Re-rendering rebuilds the list DOM, which can make the containing view
+    // jump (e.g. after changing a task's state). Remember the scroll position
+    // of the nearest scrollable ancestor and restore it after the rebuild.
+    const scrollParent = this.getScrollParent(container);
+    const previousScrollTop = scrollParent ? scrollParent.scrollTop : null;
+    const restoreScroll = () => {
+      if (scrollParent && previousScrollTop !== null) {
+        scrollParent.scrollTop = previousScrollTop;
+      }
+    };
+
     // Handle collapsible mode with incremental updates to prevent flicker
     if (params.collapse) {
       const hasTitle = !!params.title;
@@ -305,6 +327,7 @@ export class EmbeddedTaskListRenderer {
           toggleCollapse,
           containerId,
         );
+        restoreScroll();
         return;
       }
 
@@ -378,6 +401,26 @@ export class EmbeddedTaskListRenderer {
         }
       }
     } else {
+      // Fast path: when the same tasks are shown in the same order, update the
+      // changed rows in place instead of rebuilding the list. This avoids the
+      // flicker / viewport jump and lets the state keyword animate.
+      const paramsSignature = this.listParamsSignature(params, totalTasksCount);
+      const previous = this.renderedLists.get(container);
+      if (
+        previous &&
+        previous.paramsSignature === paramsSignature &&
+        this.sameTaskOrder(previous.keys, tasks)
+      ) {
+        this.updateVisibleRows(previous.tasks, tasks, container);
+        this.renderedLists.set(container, {
+          paramsSignature,
+          keys: this.taskKeys(tasks),
+          tasks,
+        });
+        restoreScroll();
+        return;
+      }
+
       // Standard non-collapsible rendering - always full render
       container.empty();
 
@@ -392,7 +435,98 @@ export class EmbeddedTaskListRenderer {
         params,
         totalTasksCount,
       );
+
+      this.renderedLists.set(container, {
+        paramsSignature,
+        keys: this.taskKeys(tasks),
+        tasks,
+      });
     }
+
+    restoreScroll();
+  }
+
+  /** Stable identity for a task row within an embedded list. */
+  private taskKeys(tasks: Task[]): string[] {
+    return tasks.map(
+      (task) =>
+        `${task.path}\u0000${task.line}\u0000${task.tableCell?.cellIndex ?? ''}`,
+    );
+  }
+
+  /** True when the previously rendered keys match the new tasks in order. */
+  private sameTaskOrder(previousKeys: string[], tasks: Task[]): boolean {
+    const keys = this.taskKeys(tasks);
+    if (previousKeys.length !== keys.length) return false;
+    for (let i = 0; i < keys.length; i++) {
+      if (previousKeys[i] !== keys[i]) return false;
+    }
+    return true;
+  }
+
+  private listParamsSignature(
+    params: TodoseqParameters,
+    totalTasksCount?: number,
+  ): string {
+    return `${JSON.stringify(params)}|${totalTasksCount ?? ''}`;
+  }
+
+  /** Content signature used to decide whether a row actually changed. */
+  private taskSignature(task: Task): string {
+    return [
+      task.state,
+      task.completed ? '1' : '0',
+      task.priority ?? '',
+      task.rawText,
+      task.description ?? '',
+      task.scheduledDate ? task.scheduledDate.getTime() : '',
+      task.deadlineDate ? task.deadlineDate.getTime() : '',
+      task.closedDate ? task.closedDate.getTime() : '',
+      task.startedDate ? task.startedDate.getTime() : '',
+      task.subtaskCount,
+      task.subtaskCompletedCount,
+      task.repeatCount ?? '',
+    ].join('\u0001');
+  }
+
+  private updateVisibleRows(
+    previous: Task[],
+    next: Task[],
+    container: HTMLElement,
+  ): void {
+    const list = container.querySelector('.todoseq-embedded-task-list');
+    if (!list) return;
+    const rows = Array.from(list.children).filter((el): el is HTMLLIElement =>
+      el.instanceOf(HTMLLIElement),
+    );
+    next.forEach((task, index) => {
+      const row = rows[index];
+      if (!row) return;
+      if (this.taskSignature(previous[index]) === this.taskSignature(task)) {
+        return;
+      }
+      this.itemRenderer.updateTaskRow(row, task);
+    });
+  }
+
+  /**
+   * Find the nearest ancestor that actually scrolls, so its scroll position
+   * can be preserved across a re-render.
+   */
+  private getScrollParent(el: HTMLElement): HTMLElement | null {
+    const view = el.ownerDocument?.defaultView;
+    let node = el.parentElement;
+    while (node) {
+      const overflowY = view?.getComputedStyle(node).overflowY;
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
   }
 
   /**

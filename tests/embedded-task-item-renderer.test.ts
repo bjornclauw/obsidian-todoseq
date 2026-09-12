@@ -1128,4 +1128,36 @@ describe('EmbeddedTaskItemRenderer', () => {
       navigateSpy.mockRestore();
     });
   });
+
+  describe('updateTaskRow', () => {
+    it('updates the keyword, checkbox and completed styling in place', () => {
+      renderer.plugin.keywordManager.isCompleted.mockImplementation(
+        (state: string) => state === 'DONE',
+      );
+
+      const li = renderer.createTaskListItem(
+        createBaseTask({ state: 'TODO', text: 'Test task' }),
+        0,
+        {},
+      );
+      renderer.updateTaskRow(
+        li,
+        createBaseTask({ state: 'DONE', text: 'Test task', completed: true }),
+      );
+
+      expect(
+        li.querySelector('.todoseq-embedded-task-state')?.textContent,
+      ).toBe('DONE');
+      expect(li.getAttribute('data-task')).toBe('x');
+      expect(li.classList.contains('todoseq-embedded-task-completed')).toBe(
+        true,
+      );
+
+      const checkbox = li.querySelector(
+        '.todoseq-embedded-task-checkbox',
+      ) as HTMLInputElement;
+      expect(checkbox.getAttribute('data-task')).toBe('x');
+      expect(checkbox.checked).toBe(true);
+    });
+  });
 });

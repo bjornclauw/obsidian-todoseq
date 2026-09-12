@@ -21,6 +21,8 @@
 - Fixed Copy/Move/Migrate to today's daily note not carrying the whole task block: `DESCRIPTION`/`STARTED`/`CLOSED`/`[!repeats]` were only included for indented tasks, so keyword-only tasks left metadata behind (and Move/Migrate could leave `SCHEDULED`/`DEADLINE` behind when a `DESCRIPTION`/`STARTED` line preceded them). The full metadata block is now recognised at the task's own indent.
 - Fixed task state, priority and urgency failing to render in a note that contains a completed (or archived) table-cell task with a priority token. The priority range in a table cell included its surrounding spaces and started at the same offset as the completed-task text, which CodeMirror rejects as out-of-order; the thrown error discarded the whole decoration set. Priority ranges in cells now exclude the surrounding whitespace, matching the normal task path.
 - Clicking the state keyword in an embedded task list now advances the task to the next state, matching the dedicated Task List. Right-click (or long-press on mobile) still opens the state menu, the checkbox still toggles completion, and clicking anywhere else on the row still opens the source file.
+- Fixed the note containing an embedded task list jumping (scroll position moving) when a task's state is changed. Rebuilding the list now preserves the scroll position of the containing view.
+- Embedded task lists now update changed rows in place instead of rebuilding the whole list when the same tasks are shown in the same order, so changing a task's state no longer flickers or moves the view. The state keyword briefly highlights to make the change visible, and respects reduced-motion. (Incremental handling of tasks appearing or disappearing is a later step.)
 
 ## 0.20.0
 

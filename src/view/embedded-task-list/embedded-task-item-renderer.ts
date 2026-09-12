@@ -357,6 +357,67 @@ export class EmbeddedTaskItemRenderer {
     return li;
   }
 
+  /**
+   * Update an existing row in place after a task changed, so the list does not
+   * need to be rebuilt (which makes the view jump and flicker). Only the
+   * state-related parts are touched, and the keyword pulses so the change is
+   * visible.
+   */
+  updateTaskRow(li: HTMLLIElement, task: Task): void {
+    const settings = this.plugin.keywordManager.getSettings();
+
+    let dataTaskChar: string;
+    if (settings.useExtendedCheckboxStyles) {
+      dataTaskChar = this.plugin.keywordManager.getCheckboxState(
+        task.state,
+        settings,
+      );
+    } else if (this.plugin.keywordManager.isActive(task.state)) {
+      dataTaskChar = '/';
+    } else if (this.plugin.keywordManager.isCompleted(task.state)) {
+      dataTaskChar = 'x';
+    } else {
+      dataTaskChar = ' ';
+    }
+
+    const checkbox = li.querySelector<HTMLInputElement>(
+      '.todoseq-embedded-task-checkbox',
+    );
+    if (checkbox) {
+      checkbox.checked = settings.useExtendedCheckboxStyles
+        ? dataTaskChar !== ' '
+        : task.completed;
+      checkbox.setAttribute('data-task', dataTaskChar);
+    }
+
+    li.setAttribute('data-task', dataTaskChar);
+    li.classList.toggle(
+      'todoseq-embedded-task-completed',
+      dataTaskChar === 'x' || dataTaskChar === '-',
+    );
+
+    const stateSpan = li.querySelector<HTMLElement>(
+      '.todoseq-embedded-task-state',
+    );
+    if (stateSpan && stateSpan.textContent !== task.state) {
+      stateSpan.textContent = task.state;
+      stateSpan.setAttribute('aria-checked', String(task.completed));
+      this.pulseStateChange(stateSpan);
+    }
+  }
+
+  private pulseStateChange(el: HTMLElement): void {
+    el.classList.remove('todoseq-state-changed');
+    // Restart the animation when the class is re-applied in the same frame.
+    void el.offsetWidth;
+    el.classList.add('todoseq-state-changed');
+    el.addEventListener(
+      'animationend',
+      () => el.classList.remove('todoseq-state-changed'),
+      { once: true },
+    );
+  }
+
   private buildItemContents(
     textContainer: HTMLElement,
     task: Task,
@@ -790,6 +851,20 @@ export class EmbeddedTaskItemRenderer {
       .forEach((el) => el.classList.remove('todoseq-pressed'));
   }
 
+  /**
+   * Resolve the task's current state from the state manager. Rows can now be
+   * updated in place, so a closure's captured task may lag behind the live
+   * state; the state menu must be built from the current value.
+   */
+  private resolveCurrentState(task: Task): string {
+    const fresh = this.plugin.taskStateManager.findTaskByPathAndLine(
+      task.path,
+      task.line,
+      task.tableCell?.cellIndex,
+    );
+    return (fresh ?? task).state;
+  }
+
   private openStateMenuAtPosition(
     task: Task,
     pos: { x: number; y: number },
@@ -797,9 +872,12 @@ export class EmbeddedTaskItemRenderer {
   ): void {
     BaseDialog.closeAnyActiveDialog();
     this.clearAllPressed();
-    const menu = this.menuBuilder.buildStateMenu(task.state, async (state) => {
-      await this.updateTaskState(task, state);
-    });
+    const menu = this.menuBuilder.buildStateMenu(
+      this.resolveCurrentState(task),
+      async (state) => {
+        await this.updateTaskState(task, state);
+      },
+    );
     if (onHide) menu.onHide(onHide);
     menu.showAtPosition({ x: pos.x, y: pos.y });
   }
@@ -815,9 +893,12 @@ export class EmbeddedTaskItemRenderer {
     BaseDialog.closeAnyActiveDialog();
     this.clearAllPressed();
 
-    const menu = this.menuBuilder.buildStateMenu(task.state, async (state) => {
-      await this.updateTaskState(task, state);
-    });
+    const menu = this.menuBuilder.buildStateMenu(
+      this.resolveCurrentState(task),
+      async (state) => {
+        await this.updateTaskState(task, state);
+      },
+    );
     if (onHide) menu.onHide(onHide);
 
     const maybeShowAtMouseEvent = (
