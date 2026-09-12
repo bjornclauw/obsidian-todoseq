@@ -1,9 +1,42 @@
-import { setIcon } from 'obsidian';
+import { setIcon, setTooltip } from 'obsidian';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { DateUtils } from '../../utils/date-utils';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
+
+/** Priority flag options, mirroring the task context menu. */
+const PRIORITY_OPTIONS: ReadonlyArray<{
+  icon: string;
+  label: string;
+  priority: 'high' | 'med' | 'low' | null;
+  colorClass: string;
+}> = [
+  {
+    icon: 'flag',
+    label: 'Priority A (high)',
+    priority: 'high',
+    colorClass: 'todoseq-priority-high',
+  },
+  {
+    icon: 'flag',
+    label: 'Priority B (medium)',
+    priority: 'med',
+    colorClass: 'todoseq-priority-med',
+  },
+  {
+    icon: 'flag',
+    label: 'Priority C (low)',
+    priority: 'low',
+    colorClass: 'todoseq-priority-low',
+  },
+  {
+    icon: 'flag-off',
+    label: 'No priority',
+    priority: null,
+    colorClass: 'todoseq-priority-none',
+  },
+];
 
 /** Initial field values used to pre-fill the task editor form. */
 export interface TaskEditorInitialValues {
@@ -54,6 +87,11 @@ export class TaskEditorModal {
   private deadlineDate: Date | null;
   private deadlineRepeat: DateRepeatInfo | null;
   private deadlineWarningPeriod: WarningPeriodInfo | null;
+  private priority: 'high' | 'med' | 'low' | null;
+  private priorityButtons: Array<{
+    priority: 'high' | 'med' | 'low' | null;
+    btn: HTMLButtonElement;
+  }> = [];
   private isClosed = false;
   private dateFieldRefresh: (() => void) | null = null;
 
@@ -64,6 +102,7 @@ export class TaskEditorModal {
     this.deadlineDate = options.initial.deadlineDate;
     this.deadlineRepeat = options.initial.deadlineRepeat;
     this.deadlineWarningPeriod = options.initial.deadlineWarningPeriod;
+    this.priority = options.initial.priority;
   }
 
   open(): void {
@@ -136,26 +175,38 @@ export class TaskEditorModal {
     });
     this.populateStateOptions(stateSelect);
 
-    // Priority
+    // Priority (icon flags, matching the task context menu)
     const priorityGroup = form.createDiv({
       cls: 'todoseq-task-editor-field',
     });
     priorityGroup.createEl('label', { text: 'Priority' });
-    const prioritySelect = priorityGroup.createEl('select', {
-      cls: 'todoseq-task-editor-priority',
+    const priorityRow = priorityGroup.createDiv({
+      cls: 'todoseq-task-editor-priority-row',
+      attr: { role: 'radiogroup', 'aria-label': 'Priority' },
     });
-    for (const opt of [
-      { value: '', label: 'No priority' },
-      { value: 'high', label: 'High (A)' },
-      { value: 'med', label: 'Medium (B)' },
-      { value: 'low', label: 'Low (C)' },
-    ]) {
-      prioritySelect.createEl('option', {
-        attr: { value: opt.value },
-        text: opt.label,
+    for (const option of PRIORITY_OPTIONS) {
+      const btn = priorityRow.createEl('button', {
+        cls: [
+          'todoseq-context-menu-icon-btn',
+          'todoseq-task-editor-priority-btn',
+          option.colorClass,
+        ],
+        attr: {
+          type: 'button',
+          role: 'radio',
+          'aria-label': option.label,
+        },
       });
+      setTooltip(btn, option.label);
+      const iconEl = btn.createSpan({ cls: 'todoseq-context-menu-icon' });
+      setIcon(iconEl, option.icon);
+      btn.addEventListener('click', () => {
+        this.priority = option.priority;
+        this.updatePriorityButtons();
+      });
+      this.priorityButtons.push({ priority: option.priority, btn });
     }
-    prioritySelect.value = this.options.initial.priority ?? '';
+    this.updatePriorityButtons();
 
     // Scheduled date
     this.buildDateField(
@@ -191,7 +242,7 @@ export class TaskEditorModal {
       cls: 'todoseq-task-editor-btn-save',
     });
     saveBtn.addEventListener('click', () => {
-      void this.submit(textInput, stateSelect, prioritySelect, descInput);
+      void this.submit(textInput, stateSelect, descInput);
     });
 
     // Keyboard handling: Enter in the task text submits; Escape cancels.
@@ -199,14 +250,15 @@ export class TaskEditorModal {
       textInput.removeClass('todoseq-task-editor-input-error');
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        void this.submit(textInput, stateSelect, prioritySelect, descInput);
+        void this.submit(textInput, stateSelect, descInput);
       }
     });
 
     descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      // Descriptions are single-line, but Enter/Shift+Enter should not
+      // submit the form from this field.
       if (e.key === 'Enter') {
         e.preventDefault();
-        void this.submit(textInput, stateSelect, prioritySelect, descInput);
       }
     });
 
@@ -216,7 +268,7 @@ export class TaskEditorModal {
         this.cancel();
       } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        void this.submit(textInput, stateSelect, prioritySelect, descInput);
+        void this.submit(textInput, stateSelect, descInput);
       }
     });
 
@@ -233,7 +285,6 @@ export class TaskEditorModal {
   private async submit(
     textInput: HTMLTextAreaElement,
     stateSelect: HTMLSelectElement,
-    prioritySelect: HTMLSelectElement,
     descInput: HTMLInputElement,
   ): Promise<void> {
     if (this.isClosed) return;
@@ -245,16 +296,10 @@ export class TaskEditorModal {
       return;
     }
 
-    const priorityValue = prioritySelect.value;
     const fields: TaskComposeFields = {
       text,
       state: stateSelect.value,
-      priority:
-        priorityValue === 'high' ||
-        priorityValue === 'med' ||
-        priorityValue === 'low'
-          ? priorityValue
-          : null,
+      priority: this.priority,
       scheduledDate: this.scheduledDate,
       scheduledRepeat: this.scheduledRepeat,
       scheduledWarningPeriod: this.scheduledWarningPeriod,
@@ -266,6 +311,15 @@ export class TaskEditorModal {
 
     await this.options.onSubmit(fields);
     this.close();
+  }
+
+  /** Reflect the selected priority on the flag buttons. */
+  private updatePriorityButtons(): void {
+    for (const { priority, btn } of this.priorityButtons) {
+      const selected = priority === this.priority;
+      btn.toggleClass('is-selected', selected);
+      btn.setAttr('aria-checked', String(selected));
+    }
   }
 
   private cancel(): void {

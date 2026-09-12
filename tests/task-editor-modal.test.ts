@@ -106,11 +106,34 @@ describe('TaskEditorModal', () => {
       'DOING',
     );
     expect(
-      query<HTMLSelectElement>('.todoseq-task-editor-priority').value,
-    ).toBe('high');
+      query<HTMLButtonElement>('.todoseq-priority-high').classList.contains(
+        'is-selected',
+      ),
+    ).toBe(true);
     expect(
       query<HTMLInputElement>('.todoseq-task-editor-description').value,
     ).toBe('Existing notes');
+  });
+
+  it('renders four priority flag options and updates the selection', () => {
+    openModal();
+
+    const options = document.querySelectorAll(
+      '.todoseq-task-editor-priority-row button',
+    );
+    expect(options.length).toBe(4);
+
+    const high = query<HTMLButtonElement>('.todoseq-priority-high');
+    const med = query<HTMLButtonElement>('.todoseq-priority-med');
+    const none = query<HTMLButtonElement>('.todoseq-priority-none');
+
+    // Defaults to no priority.
+    expect(none.classList.contains('is-selected')).toBe(true);
+
+    med.click();
+    expect(med.classList.contains('is-selected')).toBe(true);
+    expect(none.classList.contains('is-selected')).toBe(false);
+    expect(high.classList.contains('is-selected')).toBe(false);
   });
 
   it('renders the description as a single-line input', () => {
@@ -121,7 +144,7 @@ describe('TaskEditorModal', () => {
     expect(desc.getAttribute('rows')).toBeNull();
   });
 
-  it('submits when Enter is pressed in the description field', async () => {
+  it('does not submit on Enter or Shift+Enter in the description field', async () => {
     const { onSubmit } = openModal();
 
     query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
@@ -130,14 +153,17 @@ describe('TaskEditorModal', () => {
     desc.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: 'Buy milk',
-        description: 'From the store',
+    desc.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        shiftKey: true,
+        bubbles: true,
       }),
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(document.querySelector('.todoseq-task-editor-modal')).not.toBeNull();
   });
 
   it('submits the composed fields and closes', async () => {
@@ -145,7 +171,7 @@ describe('TaskEditorModal', () => {
 
     query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
     query<HTMLSelectElement>('.todoseq-task-editor-state').value = 'DOING';
-    query<HTMLSelectElement>('.todoseq-task-editor-priority').value = 'med';
+    query<HTMLButtonElement>('.todoseq-priority-med').click();
     query<HTMLInputElement>('.todoseq-task-editor-description').value =
       'From the store';
 

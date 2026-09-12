@@ -2661,6 +2661,52 @@
   border-width: 2px;
 }
 
+/* Priority flag row - reuses the context menu icon buttons */
+.todoseq-task-editor-priority-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+
+.todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 100ms ease;
+}
+
+.todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+.todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn.is-selected {
+  background: var(--background-modifier-hover);
+  box-shadow: inset 0 0 0 1.5px var(--interactive-accent);
+}
+
+.is-mobile .todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn,
+.is-phone .todoseq-task-editor-priority-row .todoseq-context-menu-icon-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
 .todoseq-task-editor-date-row {
   display: flex;
   align-items: center;
