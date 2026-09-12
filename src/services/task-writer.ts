@@ -22,6 +22,30 @@ export interface DateLineUpdateResult {
 }
 
 /**
+ * Editable fields used by the task editor modal to compose (create or edit) a
+ * task. Date repeat and warning-period metadata is preserved when editing but
+ * is intentionally not exposed in the mobile editor UI.
+ */
+export interface TaskComposeFields {
+  text: string;
+  state: string;
+  priority: 'high' | 'med' | 'low' | null;
+  scheduledDate: Date | null;
+  scheduledRepeat: DateRepeatInfo | null;
+  scheduledWarningPeriod: WarningPeriodInfo | null;
+  deadlineDate: Date | null;
+  deadlineRepeat: DateRepeatInfo | null;
+  deadlineWarningPeriod: WarningPeriodInfo | null;
+  description: string | null;
+}
+
+/** Result of a compose operation: the updated task snapshot and line delta. */
+export interface TaskComposeResult {
+  task: Task;
+  lineDelta: number;
+}
+
+/**
  * Handles writing task state changes to files.
  */
 export class TaskWriter {
@@ -1065,6 +1089,365 @@ export class TaskWriter {
   }
 
   /**
+   * Build a brand-new task line in markdown checkbox format.
+   * Used by the task editor modal when creating a task.
+   */
+  static buildNewTaskLine(
+    fields: Pick<TaskComposeFields, 'text' | 'state' | 'priority'>,
+    keywordManager: KeywordManager,
+  ): string {
+    const checkboxState = keywordManager.getCheckboxState(
+      fields.state,
+      keywordManager.getSettings(),
+    );
+    const priorityPart =
+      fields.priority === 'high'
+        ? ' [#A]'
+        : fields.priority === 'med'
+          ? ' [#B]'
+          : fields.priority === 'low'
+            ? ' [#C]'
+            : '';
+    const textPart = fields.text ? ` ${fields.text}` : '';
+    return `- [${checkboxState}] ${fields.state}${priorityPart}${textPart}`;
+  }
+
+  /**
+   * Create a new task at the given line in the given file.
+   *
+   * If the target line is blank, the task block replaces it. Otherwise the
+   * block is inserted at the line, pushing existing content down. The task
+   * block includes the task line followed by DESCRIPTION/SCHEDULED/DEADLINE
+   * metadata lines.
+   */
+  async createTaskAtLine(
+    path: string,
+    line: number,
+    fields: TaskComposeFields,
+  ): Promise<TaskComposeResult | null> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+
+    const block = this.buildNewTaskBlock(fields);
+    const editor = this.getSourceModeEditorForPath(path);
+
+    if (editor) {
+      const currentLine = editor.getLine(line) ?? '';
+      const from: EditorPosition = { line, ch: 0 };
+      if (currentLine.trim() === '') {
+        editor.replaceRange(block.join('\n'), from, {
+          line,
+          ch: currentLine.length,
+        });
+      } else {
+        editor.replaceRange(`${block.join('\n')}\n`, from, from);
+      }
+    } else {
+      await this.app.vault.process(file, (data) => {
+        const lines = data.split('\n');
+        const index = Math.max(0, Math.min(line, lines.length));
+        if (lines[index] !== undefined && lines[index].trim() === '') {
+          lines.splice(index, 1, ...block);
+        } else {
+          lines.splice(index, 0, ...block);
+        }
+        return lines.join('\n');
+      });
+    }
+
+    return {
+      task: this.buildComposedTask(path, line, fields, block[0]),
+      lineDelta: 0,
+    };
+  }
+
+  /**
+   * Update an existing task from the task editor modal.
+   *
+   * The task line (text/state/priority) is written first via the standard
+   * update pipeline so CLOSED/STARTED tracking is preserved, then the
+   * DESCRIPTION and date lines are reconciled. All writes happen below the
+   * task line, so the task's own line index remains stable throughout.
+   */
+  async updateTaskFields(
+    task: Task,
+    fields: TaskComposeFields,
+  ): Promise<TaskComposeResult | null> {
+    const file = this.app.vault.getAbstractFileByPath(task.path);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+
+    const description = fields.description?.trim()
+      ? fields.description.trim()
+      : null;
+    const updatedTask: Task = {
+      ...task,
+      text: fields.text,
+      priority: fields.priority,
+    };
+
+    let lineDelta = 0;
+
+    // Task line + state (handles CLOSED/STARTED via the existing pipeline)
+    const afterState = await this.applyLineUpdate(
+      updatedTask,
+      fields.state,
+      true,
+    );
+
+    // DESCRIPTION (always directly below the task line).
+    // Table tasks store everything inline in the cell, so a separate
+    // DESCRIPTION line would corrupt the table.
+    if (!afterState.isTableTask) {
+      lineDelta += await this.setTaskDescription(afterState, description);
+    }
+
+    // SCHEDULED
+    if (fields.scheduledDate) {
+      const result = await this.updateTaskScheduledDate(
+        afterState,
+        fields.scheduledDate,
+        fields.scheduledRepeat,
+        fields.scheduledWarningPeriod,
+      );
+      lineDelta += result.lineDelta ?? 0;
+    } else if (afterState.scheduledDate) {
+      const result = await this.removeTaskScheduledDate(afterState);
+      lineDelta += result.lineDelta ?? 0;
+    }
+
+    // DEADLINE
+    if (fields.deadlineDate) {
+      const result = await this.updateTaskDeadlineDate(
+        afterState,
+        fields.deadlineDate,
+        fields.deadlineRepeat,
+        fields.deadlineWarningPeriod,
+      );
+      lineDelta += result.lineDelta ?? 0;
+    } else if (afterState.deadlineDate) {
+      const result = await this.removeTaskDeadlineDate(afterState);
+      lineDelta += result.lineDelta ?? 0;
+    }
+
+    const updated: Task = {
+      ...afterState,
+      text: fields.text,
+      priority: fields.priority,
+      description: description ?? undefined,
+      scheduledDate: fields.scheduledDate,
+      scheduledDateRepeat: fields.scheduledRepeat,
+      scheduledWarningPeriod: fields.scheduledWarningPeriod,
+      deadlineDate: fields.deadlineDate,
+      deadlineDateRepeat: fields.deadlineRepeat,
+      deadlineWarningPeriod: fields.deadlineWarningPeriod,
+      completed: this.keywordManager.isCompleted(fields.state),
+    };
+
+    return { task: updated, lineDelta };
+  }
+
+  /**
+   * Build the full line block for a new task: task line, DESCRIPTION,
+   * SCHEDULED, and DEADLINE (in that order).
+   */
+  private buildNewTaskBlock(fields: TaskComposeFields): string[] {
+    const taskLine = TaskWriter.buildNewTaskLine(fields, this.keywordManager);
+    const synthetic = this.buildComposedTask('', 0, fields, taskLine);
+    const indent = getDateLineIndent(synthetic);
+    const lines = [taskLine];
+
+    const description = fields.description?.trim();
+    if (description) {
+      lines.push(`${indent}DESCRIPTION: ${description}`);
+    }
+    if (fields.scheduledDate) {
+      lines.push(
+        `${indent}SCHEDULED: ${TaskWriter.buildDateLineContent(
+          fields.scheduledDate,
+          fields.scheduledRepeat,
+          fields.scheduledWarningPeriod,
+        )}`,
+      );
+    }
+    if (fields.deadlineDate) {
+      lines.push(
+        `${indent}DEADLINE: ${TaskWriter.buildDateLineContent(
+          fields.deadlineDate,
+          fields.deadlineRepeat,
+          fields.deadlineWarningPeriod,
+        )}`,
+      );
+    }
+    return lines;
+  }
+
+  /**
+   * Build an immutable Task snapshot for a newly composed task.
+   */
+  private buildComposedTask(
+    path: string,
+    line: number,
+    fields: TaskComposeFields,
+    rawText: string,
+  ): Task {
+    return {
+      path,
+      line,
+      rawText,
+      indent: '',
+      listMarker: '- [ ] ',
+      text: fields.text,
+      description: fields.description?.trim() || undefined,
+      state: fields.state,
+      completed: this.keywordManager.isCompleted(fields.state),
+      priority: fields.priority,
+      scheduledDate: fields.scheduledDate,
+      scheduledDateRepeat: fields.scheduledRepeat,
+      deadlineDate: fields.deadlineDate,
+      deadlineDateRepeat: fields.deadlineRepeat,
+      closedDate: null,
+      startedDate: null,
+      scheduledWarningPeriod: fields.scheduledWarningPeriod,
+      deadlineWarningPeriod: fields.deadlineWarningPeriod,
+      urgency: null,
+      isDailyNote: false,
+      dailyNoteDate: null,
+      subtaskCount: 0,
+      subtaskCompletedCount: 0,
+    };
+  }
+
+  /**
+   * Insert, update, or remove the DESCRIPTION line for a task.
+   * Returns the line delta (+1 insert, -1 remove, 0 update/no-op).
+   */
+  private async setTaskDescription(
+    task: Task,
+    description: string | null,
+  ): Promise<number> {
+    const file = this.app.vault.getAbstractFileByPath(task.path);
+    if (!(file instanceof TFile)) {
+      return 0;
+    }
+
+    const editor = this.getSourceModeEditorForPath(task.path);
+    if (editor) {
+      return this.setDescriptionInEditor(editor, task, description);
+    }
+
+    let lineDelta = 0;
+    await this.app.vault.process(file, (data) => {
+      const lines = data.split('\n');
+      lineDelta = this.updateOrInsertDescriptionLine(
+        lines,
+        task.line,
+        description,
+        task,
+      ).lineDelta;
+      return lines.join('\n');
+    });
+    return lineDelta;
+  }
+
+  private setDescriptionInEditor(
+    editor: Editor,
+    task: Task,
+    description: string | null,
+  ): number {
+    const lines = Array.from({ length: editor.lineCount() }, (_, i) =>
+      editor.getLine(i),
+    );
+    const taskIndent = getTaskIndent(task);
+    const existingIdx = findDescriptionLine(lines, task.line + 1, taskIndent);
+    const indent =
+      existingIdx >= 0
+        ? this.getExistingDateLineIndent(lines[existingIdx])
+        : getDateLineIndent(task);
+
+    if (description === null) {
+      if (existingIdx >= 0) {
+        editor.replaceRange(
+          '',
+          { line: existingIdx, ch: 0 },
+          { line: existingIdx + 1, ch: 0 },
+        );
+        return -1;
+      }
+      return 0;
+    }
+
+    const descLine = `${indent}DESCRIPTION: ${description}`;
+    if (existingIdx >= 0) {
+      editor.replaceRange(
+        descLine,
+        { line: existingIdx, ch: 0 },
+        { line: existingIdx, ch: editor.getLine(existingIdx).length },
+      );
+      return 0;
+    }
+
+    editor.replaceRange(
+      `${descLine}\n`,
+      { line: task.line + 1, ch: 0 },
+      { line: task.line + 1, ch: 0 },
+    );
+    return 1;
+  }
+
+  private updateOrInsertDescriptionLine(
+    lines: string[],
+    taskLineIndex: number,
+    description: string | null,
+    task: Task,
+  ): { lines: string[]; lineDelta: number } {
+    const taskIndent = getTaskIndent(task);
+    const existingIdx = findDescriptionLine(
+      lines,
+      taskLineIndex + 1,
+      taskIndent,
+    );
+
+    if (description === null) {
+      if (existingIdx >= 0) {
+        lines.splice(existingIdx, 1);
+        return { lines, lineDelta: -1 };
+      }
+      return { lines, lineDelta: 0 };
+    }
+
+    if (existingIdx >= 0) {
+      const indent = this.getExistingDateLineIndent(lines[existingIdx]);
+      lines[existingIdx] = `${indent}DESCRIPTION: ${description}`;
+      return { lines, lineDelta: 0 };
+    }
+
+    const indent = getDateLineIndent(task);
+    lines.splice(taskLineIndex + 1, 0, `${indent}DESCRIPTION: ${description}`);
+    return { lines, lineDelta: 1 };
+  }
+
+  /**
+   * Get the editor for a path if that file is active in source mode.
+   * Returns null when the file is inactive or not in source mode.
+   */
+  private getSourceModeEditorForPath(path: string): Editor | null {
+    const md = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const isActive = md?.file?.path === path;
+    const editor = md?.editor;
+    const isSourceMode =
+      isActive &&
+      !!editor &&
+      md?.getViewType() === 'markdown' &&
+      !!md?.getMode &&
+      md.getMode() === 'source';
+    return isSourceMode && editor ? editor : null;
+  }
+
+  /**
    * Helper: write a single line replacement to the file, using Editor API
    * for active files or Vault.process for background files.
    */
@@ -1659,16 +2042,7 @@ export class TaskWriter {
    * Returns null if the file is not active or not in source mode.
    */
   private getEditorForTask(task: Task): Editor | null {
-    const md = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const isActive = md?.file?.path === task.path;
-    const editor = md?.editor;
-    const isSourceMode =
-      isActive &&
-      editor &&
-      md?.getViewType() === 'markdown' &&
-      md?.getMode &&
-      md.getMode() === 'source';
-    return isSourceMode && editor ? editor : null;
+    return this.getSourceModeEditorForPath(task.path);
   }
 
   /**

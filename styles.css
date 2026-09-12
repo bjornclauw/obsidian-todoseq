@@ -2561,3 +2561,205 @@
 .todoseq-dropdown .search-suggest-history-item:hover .suggestion-aux {
   opacity: 1;
 }
+
+/* ============================================================================
+   Task Editor Modal (mobile-first create/edit task form)
+   ============================================================================ */
+
+.todoseq-task-editor-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: var(--layer-modal, 100);
+}
+
+.todoseq-task-editor-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  z-index: calc(var(--layer-modal, 100) + 1);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-l);
+  width: 90vw;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow: hidden;
+  padding: 0;
+}
+
+.todoseq-task-editor-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--size-4-3) var(--size-4-4);
+  font-weight: var(--font-semibold);
+  font-size: 1rem;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-task-editor-close {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.todoseq-task-editor-close:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-task-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  padding: var(--size-4-3) var(--size-4-4);
+  overflow-y: auto;
+}
+
+.todoseq-task-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-2);
+}
+
+.todoseq-task-editor-field label {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+}
+
+.todoseq-task-editor-field input,
+.todoseq-task-editor-field select,
+.todoseq-task-editor-field textarea {
+  width: 100%;
+  padding: var(--size-4-1) var(--size-4-2);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.todoseq-task-editor-field input:focus,
+.todoseq-task-editor-field select:focus,
+.todoseq-task-editor-field textarea:focus {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -1px;
+}
+
+.todoseq-task-editor-field textarea.todoseq-task-editor-input-error {
+  border-color: var(--color-red);
+  border-width: 2px;
+}
+
+.todoseq-task-editor-date-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+
+.todoseq-task-editor-date-btn {
+  flex: 1;
+  text-align: left;
+  padding: var(--size-4-1) var(--size-4-2);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.todoseq-task-editor-date-btn.is-empty {
+  color: var(--text-muted);
+}
+
+.todoseq-task-editor-date-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-task-editor-date-clear {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.todoseq-task-editor-date-clear:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-task-editor-date-clear.is-hidden {
+  display: none;
+}
+
+.todoseq-task-editor-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-4-2);
+  padding: var(--size-4-3) var(--size-4-4);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-task-editor-btn-cancel {
+  padding: var(--size-4-1) var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.todoseq-task-editor-btn-cancel:hover {
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-task-editor-btn-save {
+  padding: var(--size-4-1) var(--size-4-3);
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.todoseq-task-editor-btn-save:hover {
+  background: color-mix(in srgb, var(--interactive-accent) 85%, white);
+}
+
+/* Mobile: present as a bottom sheet with large touch targets. */
+.is-mobile .todoseq-task-editor-modal,
+.is-phone .todoseq-task-editor-modal {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 100vw;
+  max-width: 100vw;
+  max-height: 92vh;
+  border-radius: var(--radius-l) var(--radius-l) 0 0;
+  border-bottom: none;
+}
+
+.is-mobile .todoseq-task-editor-btn-save,
+.is-mobile .todoseq-task-editor-btn-cancel,
+.is-phone .todoseq-task-editor-btn-save,
+.is-phone .todoseq-task-editor-btn-cancel {
+  min-height: 44px;
+  padding: var(--size-4-2) var(--size-4-4);
+}
+
+.is-mobile .todoseq-task-editor-buttons,
+.is-phone .todoseq-task-editor-buttons {
+  padding-bottom: calc(var(--size-4-4) + env(safe-area-inset-bottom));
+}

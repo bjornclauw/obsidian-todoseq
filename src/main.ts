@@ -23,6 +23,7 @@ import { PropertySearchEngine } from './services/property-search-engine';
 import { EventCoordinator } from './services/event-coordinator';
 import { ChangeTracker } from './services/change-tracker';
 import { SmartDateProcessor } from './services/smart-date-processor';
+import { TaskEditorController } from './services/task-editor-controller';
 
 export const TASK_VIEW_ICON = 'list-todo';
 
@@ -65,6 +66,9 @@ export default class TodoTracker extends Plugin {
 
   // Smart date processor for automatic natural language date conversion
   public smartDateProcessor: SmartDateProcessor | null = null;
+
+  // Controller for the mobile-first task editor modal
+  public taskEditorController: TaskEditorController | null = null;
 
   // Public getter methods for internal services
   public getVaultScanner(): VaultScanner | null {

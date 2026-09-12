@@ -17,6 +17,7 @@ import { ReaderViewFormatter } from './view/markdown-renderers/reader-formatting
 import { PropertySearchEngine } from './services/property-search-engine';
 import { EventCoordinator } from './services/event-coordinator';
 import { TaskUpdateCoordinator } from './services/task-update-coordinator';
+import { TaskEditorController } from './services/task-editor-controller';
 import { TodoseqCodeBlockProcessor } from './view/embedded-task-list/code-block-processor';
 import {
   smartDatePlugin,
@@ -128,6 +129,7 @@ export class PluginLifecycleManager {
       this.plugin,
       this.plugin.vaultScanner.getKeywordManager(),
     );
+    this.plugin.taskEditorController = new TaskEditorController(this.plugin);
     this.plugin.editorKeywordMenu = new EditorKeywordMenu(this.plugin);
     this.plugin.statusBarManager = new StatusBarManager(this.plugin);
     this.plugin.statusBarManager.setupStatusBarItem();
@@ -185,6 +187,19 @@ export class PluginLifecycleManager {
       name: 'Open task list in new tab',
       icon: 'list-todo',
       callback: () => this.plugin.uiManager.showTasksInNewTab(),
+    });
+
+    // Add command to create or edit the task at the cursor
+    this.plugin.addCommand({
+      id: 'create-or-edit-task',
+      name: 'Create or edit task',
+      icon: 'square-pen',
+      callback: () => this.plugin.taskEditorController?.openFromActiveEditor(),
+    });
+
+    // Ribbon icon to create or edit the task at the cursor (desktop + mobile)
+    this.plugin.addRibbonIcon('square-pen', 'New or edit task', () => {
+      this.plugin.taskEditorController?.openFromActiveEditor();
     });
 
     // Add command to rescan vault
@@ -629,6 +644,8 @@ export class PluginLifecycleManager {
     // Clear any remaining references
     this.plugin.taskEditor = null;
     this.plugin.editorKeywordMenu = null;
+    this.plugin.taskEditorController?.cleanup();
+    this.plugin.taskEditorController = null;
     this.plugin.taskFormatters.clear();
   }
 
