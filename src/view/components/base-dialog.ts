@@ -253,6 +253,19 @@ export abstract class BaseDialog {
   protected handleKeyDown(e: KeyboardEvent): void {
     if (!this.isShowing) return;
 
+    // Let form controls (e.g. the custom repeat value input) handle their own
+    // keys; otherwise Space/Enter/Arrow would be hijacked by menu navigation.
+    const target = e.target as HTMLElement | null;
+    const isFormControl =
+      !!target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'SELECT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable);
+    if (isFormControl && e.key !== 'Escape') {
+      return;
+    }
+
     switch (e.key) {
       case 'Escape':
         e.preventDefault();

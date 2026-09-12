@@ -78,6 +78,20 @@ describe('DatePicker', () => {
       expect(container).not.toBeNull();
     });
 
+    it('should append to a provided parentEl (e.g. a modal container)', async () => {
+      const parent = activeDocument.body.createDiv({ cls: 'test-parent' });
+      const scopedPicker = new DatePicker(callbacks, {
+        weekStartsOn: 'Monday',
+        parentEl: parent,
+      });
+      await scopedPicker.show({ x: 10, y: 10 });
+
+      const container = parent.querySelector('.todoseq-date-picker');
+      expect(container).not.toBeNull();
+      expect(container?.parentElement).toBe(parent);
+      scopedPicker.cleanup();
+    });
+
     it('should remove container element from DOM on hide', async () => {
       await picker.show({ x: 100, y: 100 });
       picker.hide();
@@ -933,6 +947,15 @@ describe('DatePicker', () => {
       expect(select).not.toBeNull();
       const options = select?.querySelectorAll('option');
       expect(options?.length).toBe(5);
+    });
+
+    it('should focus the value input when the dialog opens', async () => {
+      await openCustomDialog();
+
+      const input = activeDocument.querySelector(
+        '.todoseq-date-picker-custom-repeat-value-input',
+      );
+      expect(activeDocument.activeElement).toBe(input);
     });
 
     it('should save custom repeat with default values when Save is clicked', async () => {

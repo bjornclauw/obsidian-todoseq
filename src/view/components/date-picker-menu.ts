@@ -28,6 +28,14 @@ export interface DatePickerConfig {
    * support recurrence (e.g. markdown table cells).
    */
   allowRepeat?: boolean;
+  /**
+   * Element to append the picker to. Defaults to `document.body`, but callers
+   * opening the picker from an Obsidian `Modal` should pass the modal's
+   * `containerEl`: the modal's focus trap redirects focus back into the modal
+   * when focus lands outside `containerEl`, which would otherwise make the
+   * picker's inputs (e.g. the custom repeat value) impossible to type in.
+   */
+  parentEl?: HTMLElement;
 }
 
 /**
@@ -87,7 +95,10 @@ export class DatePicker extends BaseDialog {
    * Update the configuration (e.g. when settings change)
    */
   updateConfig(config: DatePickerConfig): void {
-    this.config = config;
+    this.config = {
+      ...config,
+      parentEl: config.parentEl ?? this.config.parentEl,
+    };
   }
 
   /**
@@ -199,7 +210,8 @@ export class DatePicker extends BaseDialog {
   // ─── DOM Building ──────────────────────────────────────────────
 
   private async buildPicker(): Promise<void> {
-    this.containerEl = activeDocument.body.createDiv({
+    const parent = this.config.parentEl ?? activeDocument.body;
+    this.containerEl = parent.createDiv({
       cls: 'menu todoseq-date-picker',
       attr: { role: 'menu' },
     });
@@ -1117,6 +1129,10 @@ export class DatePicker extends BaseDialog {
     );
 
     this.containerEl.appendChild(this.customRepeatDialog);
+
+    // Focus the value field so the user can type immediately.
+    valueInput.focus();
+    valueInput.select();
   }
 
   private closeCustomRepeatDialog(): void {

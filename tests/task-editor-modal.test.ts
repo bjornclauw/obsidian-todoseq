@@ -266,4 +266,39 @@ describe('TaskEditorModal (native Modal)', () => {
     expect(document.querySelector('.todoseq-date-picker')).toBeNull();
     expect(document.querySelector('.todoseq-task-editor-modal')).not.toBeNull();
   });
+
+  it('appends the date picker inside the modal container', async () => {
+    openModal();
+
+    query<HTMLButtonElement>('.todoseq-task-editor-date-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const picker = document.querySelector('.todoseq-date-picker');
+    expect(picker).not.toBeNull();
+    expect(
+      document.querySelector('.modal-container .todoseq-date-picker'),
+    ).toBe(picker);
+  });
+
+  it('focuses the custom repeat input opened from the modal', async () => {
+    openModal();
+
+    query<HTMLButtonElement>('.todoseq-task-editor-date-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const repeatRow = query<HTMLElement>(
+      '.todoseq-date-picker-repeat .todoseq-date-picker-menu-row',
+    );
+    repeatRow.click();
+    const customRow = document.querySelectorAll(
+      '.todoseq-date-picker-submenu-row',
+    )[4] as HTMLElement;
+    customRow.click();
+
+    const input = document.querySelector(
+      '.todoseq-date-picker-custom-repeat-value-input',
+    );
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+  });
 });

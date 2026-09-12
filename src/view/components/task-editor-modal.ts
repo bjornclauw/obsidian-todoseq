@@ -465,6 +465,9 @@ export class TaskEditorModal extends Modal {
         {
           weekStartsOn: this.options.weekStartsOn,
           allowRepeat: !this.options.isTableTask,
+          // Keep the picker inside the modal so Obsidian's modal focus trap
+          // does not pull focus back when typing in its inputs.
+          parentEl: this.containerEl,
         },
       );
     }
