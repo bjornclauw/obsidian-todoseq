@@ -1075,4 +1075,57 @@ describe('EmbeddedTaskItemRenderer', () => {
       });
     });
   });
+
+  describe('state keyword click behaviour', () => {
+    it('advances to the next state and does not navigate on keyword click', async () => {
+      const getNextState = jest.fn().mockReturnValue('DOING');
+      const updateTaskByPath = jest.fn().mockResolvedValue(undefined);
+      renderer.plugin.taskUpdateCoordinator = {
+        stateTransitionManager: { getNextState },
+        updateTaskByPath,
+      };
+      renderer.plugin.taskStateManager.findTaskByPathAndLine.mockReturnValue(
+        undefined,
+      );
+      const navigateSpy = jest
+        .spyOn(renderer, 'navigateToTask')
+        .mockImplementation(() => {});
+
+      const task = createBaseTask({ state: 'TODO', text: 'Test task' });
+      const li = renderer.createTaskListItem(task, 0, {});
+      const stateSpan = li.querySelector('.todoseq-embedded-task-state');
+
+      stateSpan!.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(getNextState).toHaveBeenCalledWith('TODO');
+      expect(updateTaskByPath).toHaveBeenCalledWith(
+        task.path,
+        task.line,
+        'DOING',
+        'embedded',
+        undefined,
+      );
+      expect(navigateSpy).not.toHaveBeenCalled();
+      navigateSpy.mockRestore();
+    });
+
+    it('navigates when clicking elsewhere on the row', () => {
+      const navigateSpy = jest
+        .spyOn(renderer, 'navigateToTask')
+        .mockImplementation(() => {});
+
+      const task = createBaseTask({ state: 'TODO', text: 'Test task' });
+      const li = renderer.createTaskListItem(task, 0, {});
+
+      li.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+
+      expect(navigateSpy).toHaveBeenCalled();
+      navigateSpy.mockRestore();
+    });
+  });
 });

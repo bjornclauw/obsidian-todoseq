@@ -474,6 +474,53 @@ export class EmbeddedTaskItemRenderer {
       openStateMenuOnceAtMouseEvent(evt);
     });
 
+    // Left-click / tap advances to the next state — the same quick action as
+    // the dedicated Task List. Right-click and long-press keep opening the
+    // state-selection menu; ignore a click synthesised right after one opens.
+    const advanceState = async (): Promise<void> => {
+      const freshTask = this.plugin.taskStateManager.findTaskByPathAndLine(
+        task.path,
+        task.line,
+        task.tableCell?.cellIndex,
+      );
+      const currentTask = freshTask || task;
+      const stateManager = getStateTransitionManager(
+        this.plugin.taskUpdateCoordinator,
+        this.plugin.keywordManager,
+        this.plugin.settings?.stateTransitions,
+      );
+      const nextState = stateManager.getNextState(currentTask.state);
+      if (nextState === currentTask.state) {
+        return;
+      }
+      await this.updateTaskState(currentTask, nextState);
+    };
+
+    stateSpan.addEventListener('click', (evt: MouseEvent) => {
+      if (Date.now() - lastStateMenuOpenTs < STATE_MENU_DEBOUNCE_MS) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        return;
+      }
+      evt.preventDefault();
+      evt.stopPropagation();
+      void advanceState();
+    });
+
+    stateSpan.addEventListener('keydown', (evt: KeyboardEvent) => {
+      const key = evt.key;
+      if (key === 'Enter' || key === ' ') {
+        evt.preventDefault();
+        evt.stopPropagation();
+        void advanceState();
+      } else if ((key === 'F10' && evt.shiftKey) || key === 'ContextMenu') {
+        evt.preventDefault();
+        evt.stopPropagation();
+        const rect = stateSpan.getBoundingClientRect();
+        openStateMenuOnceAtPosition(rect.left, rect.bottom);
+      }
+    });
+
     if (task.priority) {
       const pri = task.priority;
       const letter = pri === 'high' ? 'A' : pri === 'med' ? 'B' : 'C';
@@ -597,9 +644,18 @@ export class EmbeddedTaskItemRenderer {
     });
 
     li.addEventListener('click', (e) => {
-      if (e.target !== checkbox) {
-        this.navigateToTask(task, e);
+      const target = e.target;
+      if (target === checkbox) {
+        return;
       }
+      if (
+        target instanceof HTMLElement &&
+        target.closest('.todoseq-embedded-task-state')
+      ) {
+        // The state keyword has its own click action (advance to next state).
+        return;
+      }
+      this.navigateToTask(task, e);
     });
 
     let touchTimer: number | null = null;

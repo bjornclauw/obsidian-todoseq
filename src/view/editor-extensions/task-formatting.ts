@@ -1003,8 +1003,16 @@ export class TaskKeywordDecorator {
 
     while ((match = regex.exec(text)) !== null) {
       const letter = match[2];
-      const s = from + match.index;
-      const e = s + match[0].length;
+      // Exclude the surrounding whitespace captured by the regex so the
+      // decoration range matches the bracket token exactly. This mirrors
+      // processPriorityTokens and, critically, keeps the range's start after
+      // an adjacent completed/archived task-text mark that begins at the same
+      // offset (otherwise CodeMirror rejects the out-of-order range and the
+      // whole decoration set is dropped).
+      const leadingSpace = match[1] || '';
+      const trailingSpace = match[3] || '';
+      const s = from + match.index + leadingSpace.length;
+      const e = from + match.index + match[0].length - trailingSpace.length;
 
       if (isLivePreview && !this.isCursorNearPriority(s, e)) {
         builder.add(

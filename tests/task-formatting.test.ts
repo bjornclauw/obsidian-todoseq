@@ -480,3 +480,70 @@ describe('TaskKeywordDecorator block state tracking', () => {
     });
   });
 });
+
+describe('TaskKeywordDecorator table-cell priority ordering', () => {
+  beforeAll(() => {
+    installObsidianDomMocks();
+  });
+
+  /**
+   * Regression: a completed/archived table cell adds a task-text mark that
+   * starts at the keyword end, and a live-preview priority token renders as a
+   * `replace` widget whose range previously included the leading space (same
+   * start offset, lower startSide). CodeMirror rejects the out-of-order range,
+   * the whole decoration set is dropped, and no state/priority/urgency renders.
+   */
+  it('keeps decorations when a completed table cell contains a priority token', () => {
+    const texts = [
+      '| Status | Owner |',
+      '| --- | --- |',
+      '| DONE [#B] Draft release notes | Cy |',
+    ];
+    let offset = 0;
+    const lines = texts.map((text, i) => {
+      const line = {
+        number: i + 1,
+        text,
+        from: offset,
+        to: offset + text.length,
+      };
+      offset += text.length + 1;
+      return line;
+    });
+    const view = {
+      state: {
+        doc: {
+          lines: texts.length,
+          line: (n: number) => lines[n - 1],
+          lineAt: (pos: number) =>
+            lines.find((l) => pos >= l.from && pos <= l.to) ?? lines[0],
+        },
+        selection: { main: { head: 0, from: 0, to: 0 } },
+      },
+      dom: { parentElement: { classList: { contains: () => true } } },
+    };
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const decorator = new (TaskKeywordDecorator as any)(
+      view,
+      createBaseSettings(),
+      {
+        testRegex: /^([-*+]\s+)?(\[[ x]\]\s+)?(DONE|TODO)\s+/,
+        allKeywords: ['TODO', 'DONE'],
+        isHeadingTaskLine: () => false,
+        headingRegex: null,
+      },
+    );
+
+    // A dropped decoration set is `Decoration.none` (size 0).
+    expect(decorator.getDecorations().size).toBeGreaterThan(0);
+    expect(
+      errorSpy.mock.calls.some((c) =>
+        String(c[0]).includes('Error creating task decorations'),
+      ),
+    ).toBe(false);
+
+    errorSpy.mockRestore();
+  });
+});
