@@ -79,7 +79,7 @@ export class TaskEditorController {
           description: null,
         };
 
-    this.modal = new TaskEditorModal({
+    this.modal = new TaskEditorModal(this.plugin.app, {
       mode: target.task ? 'edit' : 'create',
       initial,
       keywordManager,

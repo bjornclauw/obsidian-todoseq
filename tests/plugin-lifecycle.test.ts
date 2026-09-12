@@ -21,6 +21,7 @@ jest.mock('obsidian', () => ({
     this.addDropdown = jest.fn().mockReturnThis();
   }),
   Notice: jest.fn(),
+  Modal: class {},
   TFile: jest.fn(),
   WorkspaceLeaf: jest.fn(),
 }));

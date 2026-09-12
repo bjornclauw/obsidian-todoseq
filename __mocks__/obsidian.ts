@@ -89,6 +89,43 @@ export class ItemView {
   }
 }
 
+export class Modal {
+  app: App;
+  scope: Record<string, unknown> = {};
+  containerEl!: HTMLElement;
+  modalEl!: HTMLElement;
+  titleEl!: HTMLElement;
+  contentEl!: HTMLElement;
+
+  constructor(app: App) {
+    this.app = app;
+  }
+
+  open(): void {
+    this.containerEl = activeDocument.body.createDiv({
+      cls: 'modal-container',
+    });
+    this.containerEl.createDiv({ cls: 'modal-bg' });
+    this.modalEl = this.containerEl.createDiv({ cls: 'modal' });
+    this.titleEl = this.modalEl.createDiv({ cls: 'modal-title' });
+    this.contentEl = this.modalEl.createDiv({ cls: 'modal-content' });
+    this.onOpen();
+  }
+
+  close(): void {
+    this.onClose();
+    this.containerEl?.remove();
+  }
+
+  onOpen(): void {}
+  onClose(): void {}
+
+  setTitle(title: string): this {
+    this.titleEl.setText(title);
+    return this;
+  }
+}
+
 export class WorkspaceLeaf {
   view: ItemView;
   constructor() {

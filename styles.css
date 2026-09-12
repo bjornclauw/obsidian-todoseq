@@ -2563,49 +2563,31 @@
 }
 
 /* ============================================================================
-   Task Editor Modal (mobile-first create/edit task form)
+   Task Editor Modal (native Obsidian Modal, mobile-first)
    ============================================================================ */
 
-.todoseq-task-editor-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: var(--layer-modal, 100);
-}
+/* Obsidian's native Modal provides the backdrop, centering, focus handling
+   and Escape dismissal. We only adjust the title row, the scroll container and
+   the mobile keyboard allowance. */
 
-.todoseq-task-editor-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  z-index: calc(var(--layer-modal, 100) + 1);
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  box-shadow: var(--shadow-l);
-  width: 90vw;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow: hidden;
+.todoseq-task-editor-modal .modal-content {
   padding: 0;
 }
 
-.todoseq-task-editor-title {
+.todoseq-task-editor-modal .modal-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--size-4-3) var(--size-4-4);
-  font-weight: var(--font-semibold);
-  font-size: 1rem;
-  border-bottom: 1px solid var(--background-modifier-border);
+  gap: var(--size-4-2);
+}
+
+/* Hide Obsidian's native close button in favour of our own, so the title row
+   looks consistent across versions. */
+.todoseq-task-editor-modal .modal-close-button {
+  display: none;
 }
 
 .todoseq-task-editor-close {
+  margin-left: auto;
   cursor: pointer;
   color: var(--text-muted);
 }
@@ -2620,7 +2602,6 @@
   flex-direction: column;
   gap: var(--size-4-3);
   padding: var(--size-4-3) var(--size-4-4);
-  overflow-y: auto;
 }
 
 .todoseq-task-editor-field {
@@ -2748,11 +2729,15 @@
 }
 
 .todoseq-task-editor-buttons {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   gap: var(--size-4-2);
   padding: var(--size-4-3) var(--size-4-4);
   border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
 }
 
 .todoseq-task-editor-btn-cancel {
@@ -2783,32 +2768,25 @@
   background: color-mix(in srgb, var(--interactive-accent) 85%, white);
 }
 
-/* Mobile: present as a bottom sheet with large touch targets. */
+/* Mobile keyboard allowance.
+   On mobile Obsidian's WebView does not resize when the soft keyboard opens,
+   which can leave the focused field and the sticky action bar behind it.
+   Adding scroll room to the modal's scroll container while a field that
+   summons the keyboard is focused lets the WebView scroll them clear.
+   We deliberately match only textarea / text input: dropdowns, date pickers
+   and the priority buttons take focus without opening a keyboard. */
 .is-mobile .todoseq-task-editor-modal,
 .is-phone .todoseq-task-editor-modal {
-  top: auto;
-  bottom: var(--todoseq-keyboard-height, 0);
-  left: 0;
-  transform: none;
-  width: 100vw;
-  max-width: 100vw;
-  max-height: calc(92vh - var(--todoseq-keyboard-height, 0px));
-  border-radius: var(--radius-l) var(--radius-l) 0 0;
-  border-bottom: none;
-  transition:
-    bottom 200ms ease,
-    max-height 200ms ease;
+  --todoseq-keyboard-space-allowance: clamp(220px, 35vh, 360px);
 }
 
-/* While the keyboard is open, drop the safe-area padding so the footer
-   stays flush above the keyboard. */
 .is-mobile
-  .todoseq-task-editor-modal.is-keyboard-open
-  .todoseq-task-editor-buttons,
+  .todoseq-task-editor-modal:has(textarea:focus, input[type='text']:focus)
+  .modal-content,
 .is-phone
-  .todoseq-task-editor-modal.is-keyboard-open
-  .todoseq-task-editor-buttons {
-  padding-bottom: var(--size-4-3);
+  .todoseq-task-editor-modal:has(textarea:focus, input[type='text']:focus)
+  .modal-content {
+  padding-bottom: var(--todoseq-keyboard-space-allowance);
 }
 
 .is-mobile .todoseq-task-editor-btn-save,

@@ -11,6 +11,7 @@ import { createTestKeywordManager } from './helpers/test-helper';
 
 beforeAll(() => {
   installObsidianDomMocks();
+  HTMLElement.prototype.scrollIntoView = jest.fn();
 });
 
 function makeInitial(
@@ -45,7 +46,7 @@ function openModal(
 } {
   const onSubmit = overrides.onSubmit ?? jest.fn();
   const onCancel = overrides.onCancel ?? jest.fn();
-  const modal = new TaskEditorModal({
+  const modal = new TaskEditorModal({} as never, {
     mode: overrides.mode ?? 'create',
     initial: makeInitial(overrides.initial),
     keywordManager: createTestKeywordManager(),
@@ -64,22 +65,22 @@ function query<T extends Element>(selector: string): T {
 }
 
 afterEach(() => {
-  document.querySelectorAll('.todoseq-task-editor-modal').forEach((el) => {
-    el.remove();
-  });
-  document
-    .querySelectorAll('.todoseq-task-editor-backdrop')
-    .forEach((el) => el.remove());
+  document.querySelectorAll('.modal-container').forEach((el) => el.remove());
   document
     .querySelectorAll('.todoseq-date-picker, .todoseq-backdrop')
     .forEach((el) => el.remove());
 });
 
-describe('TaskEditorModal', () => {
-  it('renders a create dialog with populated state options', () => {
+describe('TaskEditorModal (native Modal)', () => {
+  it('renders a native modal shell with populated state options', () => {
     openModal();
 
-    expect(query('.todoseq-task-editor-title').textContent).toBe('New task');
+    expect(document.querySelector('.modal-container')).not.toBeNull();
+    expect(document.querySelector('.todoseq-task-editor-modal')).not.toBeNull();
+    expect(query('.todoseq-task-editor-modal .modal-title').textContent).toBe(
+      'New task',
+    );
+
     const stateSelect = query<HTMLSelectElement>('.todoseq-task-editor-state');
     expect(stateSelect.value).toBe('TODO');
     expect(Array.from(stateSelect.options).map((o) => o.value)).toContain(
@@ -98,7 +99,9 @@ describe('TaskEditorModal', () => {
       },
     });
 
-    expect(query('.todoseq-task-editor-title').textContent).toBe('Edit task');
+    expect(query('.todoseq-task-editor-modal .modal-title').textContent).toBe(
+      'Edit task',
+    );
     expect(query<HTMLTextAreaElement>('.todoseq-task-editor-text').value).toBe(
       'Existing task',
     );
@@ -127,7 +130,6 @@ describe('TaskEditorModal', () => {
     const med = query<HTMLButtonElement>('.todoseq-priority-med');
     const none = query<HTMLButtonElement>('.todoseq-priority-none');
 
-    // Defaults to no priority.
     expect(none.classList.contains('is-selected')).toBe(true);
 
     med.click();
@@ -167,7 +169,7 @@ describe('TaskEditorModal', () => {
   });
 
   it('submits the composed fields and closes', async () => {
-    const { onSubmit } = openModal();
+    const { onSubmit, onCancel } = openModal();
 
     query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
     query<HTMLSelectElement>('.todoseq-task-editor-state').value = 'DOING';
@@ -188,6 +190,7 @@ describe('TaskEditorModal', () => {
         deadlineDate: null,
       }),
     );
+    expect(onCancel).not.toHaveBeenCalled();
     expect(document.querySelector('.todoseq-task-editor-modal')).toBeNull();
   });
 
@@ -212,10 +215,9 @@ describe('TaskEditorModal', () => {
 
     expect(onCancel).toHaveBeenCalled();
     expect(document.querySelector('.todoseq-task-editor-modal')).toBeNull();
-    expect(document.querySelector('.todoseq-task-editor-backdrop')).toBeNull();
   });
 
-  it('dismisses an open date picker on backdrop click without closing the task editor', () => {
+  it('dismisses an open date picker on background click without closing the editor', () => {
     const { modal, onCancel } = openModal();
 
     const hide = jest.fn();
@@ -233,54 +235,14 @@ describe('TaskEditorModal', () => {
       cleanup: jest.fn(),
     };
 
-    query<HTMLDivElement>('.todoseq-task-editor-backdrop').click();
+    query<HTMLDivElement>('.modal-bg').click();
 
     expect(hide).toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
     expect(document.querySelector('.todoseq-task-editor-modal')).not.toBeNull();
   });
 
-  it('lets clicks bubble when the date picker is open so it can dismiss itself', () => {
-    const { modal, onCancel } = openModal();
-
-    (
-      modal as unknown as {
-        datePicker: {
-          isVisible: () => boolean;
-          hide: () => void;
-          cleanup: () => void;
-        };
-      }
-    ).datePicker = {
-      isVisible: () => true,
-      hide: jest.fn(),
-      cleanup: jest.fn(),
-    };
-
-    const documentClick = jest.fn();
-    document.addEventListener('click', documentClick);
-    query<HTMLDivElement>('.todoseq-task-editor-modal').click();
-    document.removeEventListener('click', documentClick);
-
-    // Propagation reached the document, where the picker's outside-click
-    // handler lives to dismiss it.
-    expect(documentClick).toHaveBeenCalled();
-    expect(onCancel).not.toHaveBeenCalled();
-    expect(document.querySelector('.todoseq-task-editor-modal')).not.toBeNull();
-  });
-
-  it('stops propagation on clicks when no date picker is open', () => {
-    openModal();
-
-    const documentClick = jest.fn();
-    document.addEventListener('click', documentClick);
-    query<HTMLDivElement>('.todoseq-task-editor-modal').click();
-    document.removeEventListener('click', documentClick);
-
-    expect(documentClick).not.toHaveBeenCalled();
-  });
-
-  it('opens the date picker and closes it again when the task editor is clicked', async () => {
+  it('opens the date picker and closes it again when the editor is clicked', async () => {
     openModal();
 
     query<HTMLButtonElement>('.todoseq-task-editor-date-btn').click();

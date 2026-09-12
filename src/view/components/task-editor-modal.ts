@@ -1,8 +1,7 @@
-import { Platform, setIcon, setTooltip } from 'obsidian';
+import { App, Modal, Platform, setIcon, setTooltip } from 'obsidian';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { DateUtils } from '../../utils/date-utils';
-import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
 
@@ -69,17 +68,19 @@ export interface TaskEditorModalOptions {
 }
 
 /**
- * Mobile-first modal for creating or editing a task.
+ * Mobile-first modal for creating or editing a task, built on Obsidian's
+ * native `Modal`.
  *
- * The layout is a centered, near-full-width sheet on phones and a compact
- * dialog on desktop. It exposes the core task fields (text, state, priority,
- * scheduled date, deadline date, description) and reuses the existing
- * DatePicker for date selection. All persistence is delegated to the caller
- * via `onSubmit`, which is expected to route through TaskWriter.
+ * Using the native modal gives us Obsidian's own backdrop, Escape handling,
+ * focus management and mobile dialog CSS for free. The form lives in
+ * `contentEl` (`.modal-content`), with the action buttons sticky at the
+ * bottom; the mobile keyboard fix is handled in CSS by padding the scroll
+ * container while a text field is focused (see styles.css).
+ *
+ * All persistence is delegated to the caller via `onSubmit`, which is
+ * expected to route through TaskWriter.
  */
-export class TaskEditorModal {
-  private modalEl: HTMLElement | null = null;
-  private backdropEl: HTMLElement | null = null;
+export class TaskEditorModal extends Modal {
   private datePicker: DatePicker | null = null;
 
   private scheduledDate: Date | null;
@@ -93,11 +94,15 @@ export class TaskEditorModal {
     priority: 'high' | 'med' | 'low' | null;
     btn: HTMLButtonElement;
   }> = [];
-  private isClosed = false;
   private dateFieldRefresh: (() => void) | null = null;
-  private stopKeyboardWatch: (() => void) | null = null;
+  /** True once the user saved, so onClose doesn't report a cancel. */
+  private submitted = false;
 
-  constructor(private options: TaskEditorModalOptions) {
+  constructor(
+    app: App,
+    private options: TaskEditorModalOptions,
+  ) {
+    super(app);
     this.scheduledDate = options.initial.scheduledDate;
     this.scheduledRepeat = options.initial.scheduledRepeat;
     this.scheduledWarningPeriod = options.initial.scheduledWarningPeriod;
@@ -107,53 +112,35 @@ export class TaskEditorModal {
     this.priority = options.initial.priority;
   }
 
-  open(): void {
-    // Create backdrop
-    this.backdropEl = activeDocument.body.createDiv({
-      cls: 'todoseq-task-editor-backdrop',
-    });
-    this.backdropEl.addEventListener('click', () => {
-      // While the date picker is open, an outside click should only dismiss
-      // the date picker and keep the task editor open underneath.
-      if (this.datePicker?.isVisible()) {
-        this.datePicker.hide();
-        return;
-      }
-      this.cancel();
-    });
-
-    // Create modal
-    this.modalEl = activeDocument.body.createDiv({
-      cls: 'todoseq-task-editor-modal',
-      attr: { role: 'dialog', 'aria-modal': 'true' },
-    });
-    this.modalEl.addEventListener('click', (e) => {
-      // When the date picker is open, let the click bubble so the picker's own
-      // outside-click handler dismisses it (the task editor stays open). This
-      // also respects the picker's mobile ghost-click suppression, which a
-      // manual hide() here would bypass.
-      if (!this.datePicker?.isVisible()) {
-        e.stopPropagation();
-      }
-    });
-
+  onOpen(): void {
     const isEdit = this.options.mode === 'edit';
+    this.setTitle(isEdit ? 'Edit task' : 'New task');
+    this.modalEl.addClass('todoseq-task-editor-modal');
 
-    // Title bar
-    const titleEl = this.modalEl.createDiv({
-      cls: 'todoseq-task-editor-title',
-    });
-    titleEl.createSpan({ text: isEdit ? 'Edit task' : 'New task' });
-
-    const closeBtn = titleEl.createDiv({
+    // Our own close button, in case a native one isn't rendered.
+    const closeBtn = this.titleEl.createDiv({
       cls: 'todoseq-task-editor-close clickable-icon',
     });
     setIcon(closeBtn, 'x');
     closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', () => this.cancel());
+    closeBtn.addEventListener('click', () => this.close());
 
-    // Form
-    const form = this.modalEl.createDiv({
+    // While the date picker is open, clicking the modal background should only
+    // dismiss the picker, not the whole editor. Capture phase so this runs
+    // before Obsidian's own background-click close handler.
+    const bg = this.containerEl.querySelector('.modal-bg');
+    bg?.addEventListener(
+      'click',
+      (evt) => {
+        if (this.datePicker?.isVisible()) {
+          evt.stopImmediatePropagation();
+          this.datePicker.hide();
+        }
+      },
+      true,
+    );
+
+    const form = this.contentEl.createDiv({
       cls: 'todoseq-task-editor-form',
     });
 
@@ -230,15 +217,15 @@ export class TaskEditorModal {
     });
     descInput.value = this.options.initial.description ?? '';
 
-    // Buttons
-    const buttons = this.modalEl.createDiv({
+    // Buttons (sticky at the bottom of the scroll container)
+    const buttons = form.createDiv({
       cls: 'todoseq-task-editor-buttons',
     });
     const cancelBtn = buttons.createEl('button', {
       text: 'Cancel',
       cls: 'todoseq-task-editor-btn-cancel',
     });
-    cancelBtn.addEventListener('click', () => this.cancel());
+    cancelBtn.addEventListener('click', () => this.close());
     const saveBtn = buttons.createEl('button', {
       text: isEdit ? 'Save changes' : 'Create task',
       cls: 'todoseq-task-editor-btn-save',
@@ -247,7 +234,7 @@ export class TaskEditorModal {
       void this.submit(textInput, stateSelect, descInput);
     });
 
-    // Keyboard handling: Enter in the task text submits; Escape cancels.
+    // Keyboard handling: Enter in the task text submits.
     textInput.addEventListener('keydown', (e: KeyboardEvent) => {
       textInput.removeClass('todoseq-task-editor-input-error');
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -264,55 +251,40 @@ export class TaskEditorModal {
       }
     });
 
-    this.modalEl.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.cancel();
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    // Ctrl/Cmd+Enter submits from anywhere in the form.
+    this.contentEl.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         void this.submit(textInput, stateSelect, descInput);
       }
     });
 
-    // Focus the task text for immediate typing
+    // Focus the task text for immediate typing. On mobile the content scrolls
+    // the field clear of the keyboard once Obsidian's modal finishes opening.
     window.setTimeout(() => {
-      textInput.focus();
+      textInput.focus({ preventScroll: true });
       textInput.setSelectionRange(
         textInput.value.length,
         textInput.value.length,
       );
     }, 50);
 
-    // On mobile, lift the sheet above the soft keyboard as it opens.
-    if (Platform.isMobile && this.modalEl) {
-      const win = this.modalEl.ownerDocument.defaultView ?? window;
-      this.stopKeyboardWatch = new KeyboardInsetWatcher().start(win, (inset) =>
-        this.applyKeyboardInset(inset),
-      );
+    if (Platform.isMobile) {
       for (const field of [textInput, descInput]) {
         field.addEventListener('focus', () => this.scrollFieldIntoView(field));
       }
     }
   }
 
-  /** Offset the sheet above the soft keyboard while it is open. */
-  private applyKeyboardInset(inset: number): void {
-    if (!this.modalEl) return;
-    this.modalEl.setCssProps({
-      '--todoseq-keyboard-height': `${inset}px`,
-    });
-    this.modalEl.toggleClass('is-keyboard-open', inset > 0);
-  }
-
-  /**
-   * Bring a focused field into view after the keyboard animation has settled.
-   */
-  private scrollFieldIntoView(field: HTMLElement): void {
-    window.setTimeout(() => {
-      if (typeof field.scrollIntoView === 'function') {
-        field.scrollIntoView({ block: 'nearest' });
-      }
-    }, 320);
+  onClose(): void {
+    if (this.datePicker) {
+      this.datePicker.cleanup();
+      this.datePicker = null;
+    }
+    this.contentEl.empty();
+    if (!this.submitted) {
+      this.options.onCancel();
+    }
   }
 
   private async submit(
@@ -320,8 +292,6 @@ export class TaskEditorModal {
     stateSelect: HTMLSelectElement,
     descInput: HTMLInputElement,
   ): Promise<void> {
-    if (this.isClosed) return;
-
     const text = textInput.value.trim();
     if (!text) {
       textInput.addClass('todoseq-task-editor-input-error');
@@ -342,6 +312,7 @@ export class TaskEditorModal {
       description: descInput.value.trim() || null,
     };
 
+    this.submitted = true;
     await this.options.onSubmit(fields);
     this.close();
   }
@@ -355,10 +326,15 @@ export class TaskEditorModal {
     }
   }
 
-  private cancel(): void {
-    if (this.isClosed) return;
-    this.options.onCancel();
-    this.close();
+  /**
+   * Bring a focused field into view once the keyboard animation has settled.
+   */
+  private scrollFieldIntoView(field: HTMLElement): void {
+    window.setTimeout(() => {
+      if (typeof field.scrollIntoView === 'function') {
+        field.scrollIntoView({ block: 'nearest' });
+      }
+    }, 320);
   }
 
   /** Build a date field row with a date button and a clear button. */
@@ -374,10 +350,11 @@ export class TaskEditorModal {
 
     const dateBtn = row.createEl('button', {
       cls: 'todoseq-task-editor-date-btn',
+      attr: { type: 'button' },
     });
     const clearBtn = row.createEl('button', {
       cls: 'todoseq-task-editor-date-clear clickable-icon',
-      attr: { 'aria-label': `Clear ${label.toLowerCase()}` },
+      attr: { type: 'button', 'aria-label': `Clear ${label.toLowerCase()}` },
     });
     setIcon(clearBtn, 'x');
 
@@ -517,28 +494,5 @@ export class TaskEditorModal {
       text: initial,
     });
     select.value = initial;
-  }
-
-  /** Remove the modal and any associated date picker from the DOM. */
-  public close(): void {
-    if (this.isClosed) return;
-    this.isClosed = true;
-
-    if (this.stopKeyboardWatch) {
-      this.stopKeyboardWatch();
-      this.stopKeyboardWatch = null;
-    }
-    if (this.datePicker) {
-      this.datePicker.cleanup();
-      this.datePicker = null;
-    }
-    if (this.modalEl) {
-      this.modalEl.remove();
-      this.modalEl = null;
-    }
-    if (this.backdropEl) {
-      this.backdropEl.remove();
-      this.backdropEl = null;
-    }
   }
 }
