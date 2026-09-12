@@ -302,6 +302,22 @@ describe('EmbeddedTaskListRenderer', () => {
       expect(completedSpan?.textContent).toBe('Completed: hide');
     });
 
+    it('renders group-by in header', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = { groupBy: 'folder' };
+      const header = renderer.renderCollapsibleHeaderNoTitle(
+        container,
+        params,
+        true,
+        5,
+      );
+
+      const groupSpan = header.querySelector(
+        '.todoseq-embedded-task-list-group',
+      );
+      expect(groupSpan?.textContent).toBe('Group: folder');
+    });
+
     it('adds expanded class to chevron when not collapsed', () => {
       const container = document.createElement('div');
       const params: TodoseqParameters = {};
@@ -758,6 +774,172 @@ describe('EmbeddedTaskListRenderer', () => {
       expect(container.querySelector('.todoseq-embedded-task-list')).not.toBe(
         firstList,
       );
+    });
+  });
+
+  describe('renderTaskList - grouped mode', () => {
+    const groupHeaders = (container: HTMLElement) =>
+      Array.from(
+        container.querySelectorAll('.todoseq-embedded-task-group-header'),
+      );
+    const groupLabel = (header: Element) =>
+      header.querySelector('.todoseq-embedded-task-group-label')?.textContent;
+
+    it('renders one header and one list per folder group in first-appearance order', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = { groupBy: 'folder' };
+      const tasks = [
+        createBaseTask({ path: 'projects/a.md', line: 0 }),
+        createBaseTask({ path: 'notes/b.md', line: 0 }),
+        createBaseTask({ path: 'projects/c.md', line: 0 }),
+      ];
+
+      renderer.renderTaskList(container, tasks, params);
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        'projects/',
+        'notes/',
+      ]);
+      const lists = container.querySelectorAll('.todoseq-embedded-task-list');
+      expect(lists).toHaveLength(2);
+      expect(
+        lists[0].querySelectorAll('.todoseq-embedded-task-item'),
+      ).toHaveLength(2);
+      expect(
+        lists[1].querySelectorAll('.todoseq-embedded-task-item'),
+      ).toHaveLength(1);
+    });
+
+    it('renders a per-group task count', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ path: 'projects/a.md', line: 0 }),
+        createBaseTask({ path: 'projects/b.md', line: 0 }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'folder' });
+
+      const count = groupHeaders(container)[0].querySelector(
+        '.todoseq-embedded-task-group-count',
+      );
+      expect(count?.textContent).toBe('2');
+    });
+
+    it('groups by heading and falls back to (No heading)', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ parentHeading: 'Work' }),
+        createBaseTask({ parentHeading: undefined }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'heading' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        'Work',
+        '(No heading)',
+      ]);
+    });
+
+    it('groups by file', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ path: 'a/roadmap.md', line: 0 }),
+        createBaseTask({ path: 'a/notes.md', line: 0 }),
+        createBaseTask({ path: 'a/roadmap.md', line: 3 }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'file' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        'roadmap',
+        'notes',
+      ]);
+    });
+
+    it('renders empty state and no group headers when there are no tasks', () => {
+      const container = document.createElement('div');
+
+      renderer.renderTaskList(container, [], { groupBy: 'folder' });
+
+      expect(groupHeaders(container)).toHaveLength(0);
+      expect(
+        container.querySelector('.todoseq-embedded-task-list-empty'),
+      ).toBeTruthy();
+    });
+
+    it('rebuilds grouped lists instead of using the in-place fast path', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = { groupBy: 'folder' };
+      const a = createBaseTask({
+        path: 'a/one.md',
+        line: 0,
+        state: 'TODO',
+        text: 'A',
+      });
+      const b = createBaseTask({
+        path: 'b/two.md',
+        line: 0,
+        state: 'TODO',
+        text: 'B',
+      });
+      renderer.renderTaskList(container, [a, b], params);
+      const firstList = container.querySelector('.todoseq-embedded-task-list');
+
+      const bDone = createBaseTask({
+        path: 'b/two.md',
+        line: 0,
+        state: 'DONE',
+        text: 'B',
+      });
+      renderer.renderTaskList(container, [a, bDone], params);
+
+      expect(container.querySelector('.todoseq-embedded-task-list')).not.toBe(
+        firstList,
+      );
+      const states = Array.from(
+        container.querySelectorAll('.todoseq-embedded-task-state'),
+      ).map((el) => el.textContent);
+      expect(states).toEqual(['TODO', 'DONE']);
+    });
+
+    it('does not duplicate lists when re-rendering a grouped collapsible list', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {
+        collapse: true,
+        title: 'Grouped',
+        groupBy: 'folder',
+      };
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0 }),
+        createBaseTask({ path: 'b/two.md', line: 0 }),
+      ];
+      const toggle = jest.fn();
+
+      renderer.renderTaskList(
+        container,
+        tasks,
+        params,
+        2,
+        false,
+        toggle,
+        'id-grouped',
+      );
+      renderer.renderTaskList(
+        container,
+        tasks,
+        params,
+        2,
+        false,
+        toggle,
+        'id-grouped',
+      );
+
+      expect(
+        container.querySelectorAll('.todoseq-embedded-task-list'),
+      ).toHaveLength(2);
+      expect(
+        container.querySelectorAll('.todoseq-embedded-task-group-header'),
+      ).toHaveLength(2);
     });
   });
 

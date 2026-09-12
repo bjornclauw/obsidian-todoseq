@@ -873,7 +873,8 @@
 .todoseq-embedded-task-list-sort,
 .todoseq-embedded-task-list-completed,
 .todoseq-embedded-task-list-future,
-.todoseq-embedded-task-list-limit {
+.todoseq-embedded-task-list-limit,
+.todoseq-embedded-task-list-group {
   background-color: var(--background-modifier-selection);
   padding: var(--size-2-1) var(--size-2-3);
   border-radius: var(--radius-s);
@@ -897,6 +898,35 @@
   padding: 0;
   margin: 0;
   margin-inline-start: -2ch;
+}
+
+/* Grouped task list header (group-by) */
+.todoseq-embedded-task-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-2);
+  margin-top: var(--size-4-2);
+  font-family: var(--font-monospace);
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-embedded-task-list-container
+  > .todoseq-embedded-task-group-header:first-child {
+  margin-top: 0;
+}
+
+.todoseq-embedded-task-group-count {
+  background-color: var(--background-modifier-selection);
+  padding: var(--size-2-1) var(--size-2-3);
+  border-radius: var(--radius-s);
+  font-weight: var(--font-normal);
 }
 
 /* Individual task item */
@@ -980,7 +1010,9 @@
   font-size: 0.9rem;
   white-space: nowrap; /* Prevent keyword wrapping */
   border-radius: var(--radius-s);
-  transition: color 0.2s ease, background-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 /* Brief highlight when a task's state changes in place (no full re-render). */

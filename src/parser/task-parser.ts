@@ -46,6 +46,13 @@ import {
 type RegexPair = { test: RegExp; capture: RegExp };
 
 /**
+ * Matches any Markdown ATX heading and captures its display text.
+ * Capture group 1 = hashes, group 2 = heading text (without trailing hashes).
+ * Used to track the nearest preceding heading for task grouping.
+ */
+const MARKDOWN_HEADING_REGEX = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+
+/**
  * Markdown task parser for TODOseq.
  * Parses tasks from markdown files using markdown syntax.
  * Implements ITaskParser interface for multi-format support.
@@ -1174,9 +1181,22 @@ export class TaskParser implements ITaskParser {
 
     const tasks: Task[] = [];
     const processedLines = new Set<number>();
+    let curHeading: string | undefined;
 
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
+
+      // Track the nearest preceding Markdown heading for grouping. A heading
+      // task ("# TODO x") updates the context for following tasks but belongs
+      // to the prior heading itself (captured as `priorHeading`).
+      const priorHeading = curHeading;
+      if (!inBlock) {
+        const headingMatch = MARKDOWN_HEADING_REGEX.exec(line);
+        if (headingMatch) {
+          const headingText = headingMatch[2].trim();
+          curHeading = headingText.length > 0 ? headingText : undefined;
+        }
+      }
 
       // Skip blank lines
       if (line.trim() === '') {
@@ -1193,6 +1213,7 @@ export class TaskParser implements ITaskParser {
           processedLines,
         );
         if (footnoteTask) {
+          footnoteTask.parentHeading = curHeading;
           tasks.push(footnoteTask);
         }
         continue;
@@ -1235,6 +1256,7 @@ export class TaskParser implements ITaskParser {
             processedLines,
           );
           if (commentTask) {
+            commentTask.parentHeading = curHeading;
             tasks.push(commentTask);
           }
         }
@@ -1248,7 +1270,11 @@ export class TaskParser implements ITaskParser {
 
       // Table cell task detection
       if (/^\s*\|/.test(line) && !this.testRegex.test(line)) {
-        tasks.push(...this.parseTasksFromTableCells(line, index, path));
+        const cellTasks = this.parseTasksFromTableCells(line, index, path);
+        for (const cellTask of cellTasks) {
+          cellTask.parentHeading = curHeading;
+        }
+        tasks.push(...cellTasks);
         continue;
       }
 
@@ -1263,6 +1289,7 @@ export class TaskParser implements ITaskParser {
           file,
         );
         if (headingTask) {
+          headingTask.parentHeading = priorHeading;
           tasks.push(headingTask);
         }
         continue;
@@ -1300,6 +1327,7 @@ export class TaskParser implements ITaskParser {
       );
 
       if (task) {
+        task.parentHeading = curHeading;
         tasks.push(task);
       }
     }

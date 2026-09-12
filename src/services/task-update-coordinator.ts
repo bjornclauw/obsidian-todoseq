@@ -653,13 +653,14 @@ export class TaskUpdateCoordinator {
         return null;
       }
       const block = this.readEditorTaskBlock(editor, index);
-      return parser.parseTaskBlock(
+      const reparsed = parser.parseTaskBlock(
         block,
         index,
         task.path,
         undefined,
         task.tableCell?.cellIndex,
       );
+      return this.preserveParentHeading(reparsed, task);
     } catch (error) {
       console.debug(
         '[TaskUpdateCoordinator] Failed to resolve task from editor',
@@ -689,13 +690,14 @@ export class TaskUpdateCoordinator {
       if (index === null) {
         return null;
       }
-      return parser.parseTaskBlock(
+      const reparsed = parser.parseTaskBlock(
         lines,
         index,
         task.path,
         file,
         task.tableCell?.cellIndex,
       );
+      return this.preserveParentHeading(reparsed, task);
     } catch (error) {
       console.debug(
         '[TaskUpdateCoordinator] Failed to resolve live task from file',
@@ -703,6 +705,21 @@ export class TaskUpdateCoordinator {
       );
       return null;
     }
+  }
+
+  /**
+   * Carry the grouping context from the cached task onto a freshly re-parsed
+   * copy. Single-block re-parses have no surrounding lines, so they cannot
+   * recover the nearest heading themselves.
+   */
+  private preserveParentHeading(
+    reparsed: Task | null,
+    original: Task,
+  ): Task | null {
+    if (reparsed && reparsed.parentHeading === undefined) {
+      reparsed.parentHeading = original.parentHeading;
+    }
+    return reparsed;
   }
 
   /** Find an open Markdown editor showing `path`, if any. */

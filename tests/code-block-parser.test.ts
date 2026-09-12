@@ -545,4 +545,49 @@ collapse: true`;
       expect(params.wrapContent).toBe('dynamic');
     });
   });
+
+  describe('group-by parameter', () => {
+    it('should parse group-by: folder', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: folder');
+      expect(params.groupBy).toBe('folder');
+      expect(params.error).toBeUndefined();
+    });
+
+    it('should parse group-by: file', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: file');
+      expect(params.groupBy).toBe('file');
+    });
+
+    it('should parse group-by: heading', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: heading');
+      expect(params.groupBy).toBe('heading');
+    });
+
+    it('should be case-insensitive and ignore surrounding whitespace', () => {
+      const params = TodoseqCodeBlockParser.parse('  group-by:   Heading  ');
+      expect(params.groupBy).toBe('heading');
+    });
+
+    it('should default to undefined when not specified', () => {
+      const params = TodoseqCodeBlockParser.parse('search: tag:test');
+      expect(params.groupBy).toBeUndefined();
+    });
+
+    it('should error on an invalid group-by value listing the options', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: bogus');
+      expect(params.error).toContain('Invalid group-by option');
+      expect(params.error).toContain('folder');
+      expect(params.error).toContain('file');
+      expect(params.error).toContain('heading');
+    });
+
+    it('should combine with search and sort', () => {
+      const source = 'search: tag:test\nsort: priority\ngroup-by: folder';
+      const params = TodoseqCodeBlockParser.parse(source);
+      expect(params.searchQuery).toBe('tag:test');
+      expect(params.sortMethod).toBe('priority');
+      expect(params.groupBy).toBe('folder');
+      expect(params.error).toBeUndefined();
+    });
+  });
 });

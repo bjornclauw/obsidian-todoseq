@@ -25,6 +25,11 @@ export type FutureOption =
   'show-all' | 'show-upcoming' | 'hide' | 'sort-to-end';
 
 /**
+ * Valid grouping options for embedded task lists (location grouping)
+ */
+export type GroupByOption = 'folder' | 'file' | 'heading';
+
+/**
  * Parsed parameters from a todoseq code block
  */
 export interface TodoseqParameters {
@@ -49,6 +54,7 @@ export interface TodoseqParameters {
   skipScheduledWarningIfDeadline?: boolean;
   skipDeadlineWarningIfScheduled?: boolean;
   showDescription?: 'hide' | 'show';
+  groupBy?: GroupByOption;
   error?: string;
 }
 
@@ -96,6 +102,7 @@ export class TodoseqCodeBlockParser {
       let skipScheduledWarningIfDeadline: boolean | undefined;
       let skipDeadlineWarningIfScheduled: boolean | undefined;
       let showDescription: 'hide' | 'show' | undefined;
+      let groupBy: GroupByOption | undefined;
 
       // Parse each line for parameters
       for (const line of lines) {
@@ -131,6 +138,19 @@ export class TodoseqCodeBlockParser {
           } else {
             throw new Error(
               `Invalid sort method: ${sortValue}. Valid options: filepath, scheduled, deadline, closed, started, priority, urgency, keyword`,
+            );
+          }
+        } else if (trimmed.startsWith('group-by:')) {
+          const groupValue = trimmed
+            .substring('group-by:'.length)
+            .trim()
+            .toLowerCase();
+          const validGroupBy: GroupByOption[] = ['folder', 'file', 'heading'];
+          if (validGroupBy.includes(groupValue as GroupByOption)) {
+            groupBy = groupValue as GroupByOption;
+          } else {
+            throw new Error(
+              `Invalid group-by option: ${groupValue}. Valid options: folder, file, heading`,
             );
           }
         } else if (trimmed.startsWith('show-completed:')) {
@@ -453,6 +473,7 @@ export class TodoseqCodeBlockParser {
         skipScheduledWarningIfDeadline,
         skipDeadlineWarningIfScheduled,
         showDescription,
+        groupBy,
       };
     } catch (error) {
       const errorMessage =
@@ -476,6 +497,7 @@ export class TodoseqCodeBlockParser {
         skipScheduledWarningIfDeadline: undefined,
         skipDeadlineWarningIfScheduled: undefined,
         showDescription: undefined,
+        groupBy: undefined,
       };
     }
   }

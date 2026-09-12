@@ -14,6 +14,7 @@ import {
   readTaskBlockFromVault,
 } from '../../utils/task-sub-bullets';
 import { EmbeddedTaskItemRenderer } from './embedded-task-item-renderer';
+import { groupTasks } from '../../utils/task-group';
 
 /**
  * Snapshot of the last rendered (non-collapsible) list for a container, used
@@ -410,6 +411,7 @@ export class EmbeddedTaskListRenderer {
       const paramsSignature = this.listParamsSignature(params, totalTasksCount);
       const previous = this.renderedLists.get(container);
       if (
+        !params.groupBy &&
         previous &&
         previous.paramsSignature === paramsSignature &&
         this.sameTaskOrder(previous.keys, tasks)
@@ -575,9 +577,15 @@ export class EmbeddedTaskListRenderer {
       headerEl.setAttribute('aria-expanded', String(!isCollapsed));
     }
 
-    // Remove old content elements (footer, task list, truncated indicator, empty state)
+    // Remove old content elements (footer, task list(s), group headers,
+    // truncated indicator, empty state)
     const oldFooter = container.querySelector('.todoseq-result-count-footer');
-    const oldTaskList = container.querySelector('.todoseq-embedded-task-list');
+    const oldTaskLists = container.querySelectorAll(
+      '.todoseq-embedded-task-list',
+    );
+    const oldGroupHeaders = container.querySelectorAll(
+      '.todoseq-embedded-task-group-header',
+    );
     const oldTruncated = container.querySelector(
       '.todoseq-embedded-task-list-truncated',
     );
@@ -589,7 +597,8 @@ export class EmbeddedTaskListRenderer {
     );
 
     if (oldFooter) oldFooter.remove();
-    if (oldTaskList) oldTaskList.remove();
+    oldTaskLists.forEach((el) => el.remove());
+    oldGroupHeaders.forEach((el) => el.remove());
     if (oldTruncated) oldTruncated.remove();
     if (oldEmpty) oldEmpty.remove();
     // Remove old header when hasTitle is true (title case) to prevent duplicates
@@ -696,6 +705,9 @@ export class EmbeddedTaskListRenderer {
     if (params.sortMethod !== 'default') {
       parts.push(`sort: ${params.sortMethod}`);
     }
+    if (params.groupBy !== undefined) {
+      parts.push(`group: ${params.groupBy}`);
+    }
 
     if (parts.length > 0) {
       header.createSpan({
@@ -792,6 +804,14 @@ export class EmbeddedTaskListRenderer {
       });
     }
 
+    // Show group-by if specified
+    if (params.groupBy !== undefined) {
+      header.createSpan({
+        cls: 'todoseq-embedded-task-list-group',
+        text: `Group: ${params.groupBy}`,
+      });
+    }
+
     // Create chevron icon container after the header content
     const chevronSpan = header.createSpan({
       cls: 'todoseq-collapse-toggle-icon',
@@ -877,7 +897,8 @@ export class EmbeddedTaskListRenderer {
         params.sortMethod !== 'default' ||
         params.completed !== undefined ||
         params.future !== undefined ||
-        params.limit !== undefined
+        params.limit !== undefined ||
+        params.groupBy !== undefined
       )
     );
   }
@@ -922,6 +943,13 @@ export class EmbeddedTaskListRenderer {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-limit',
         text: `Limit: ${params.limit}`,
+      });
+    }
+
+    if (params.groupBy !== undefined) {
+      header.createSpan({
+        cls: 'todoseq-embedded-task-list-group',
+        text: `Group: ${params.groupBy}`,
       });
     }
   }
@@ -1024,20 +1052,7 @@ export class EmbeddedTaskListRenderer {
       }
     }
 
-    // Create task list
-    const taskList = container.createEl('ul', {
-      cls: 'todoseq-embedded-task-list',
-    });
-
-    // Render each task
-    tasks.forEach((task, index) => {
-      const taskItem = this.itemRenderer.createTaskListItem(
-        task,
-        index,
-        params,
-      );
-      taskList.appendChild(taskItem);
-    });
+    this.renderTaskItems(container, tasks, params);
 
     // Add truncated indicator if results were limited
     if (
@@ -1056,6 +1071,52 @@ export class EmbeddedTaskListRenderer {
     if (tasks.length === 0) {
       this.renderEmptyState(container);
     }
+  }
+
+  /**
+   * Render the task rows. With `group-by` set, render a header (label + count)
+   * followed by a sibling list per group in first-appearance order; otherwise
+   * render a single flat list.
+   */
+  private renderTaskItems(
+    container: HTMLElement,
+    tasks: Task[],
+    params: TodoseqParameters,
+  ): void {
+    if (params.groupBy) {
+      for (const group of groupTasks(tasks, params.groupBy)) {
+        const header = container.createDiv({
+          cls: 'todoseq-embedded-task-group-header',
+        });
+        header.createSpan({
+          cls: 'todoseq-embedded-task-group-label',
+          text: group.label,
+        });
+        header.createSpan({
+          cls: 'todoseq-embedded-task-group-count',
+          text: String(group.tasks.length),
+        });
+
+        const groupList = container.createEl('ul', {
+          cls: 'todoseq-embedded-task-list',
+        });
+        group.tasks.forEach((task, index) => {
+          groupList.appendChild(
+            this.itemRenderer.createTaskListItem(task, index, params),
+          );
+        });
+      }
+      return;
+    }
+
+    const taskList = container.createEl('ul', {
+      cls: 'todoseq-embedded-task-list',
+    });
+    tasks.forEach((task, index) => {
+      taskList.appendChild(
+        this.itemRenderer.createTaskListItem(task, index, params),
+      );
+    });
   }
 
   /**
@@ -1091,20 +1152,7 @@ export class EmbeddedTaskListRenderer {
       }
     }
 
-    // Create task list
-    const taskList = container.createEl('ul', {
-      cls: 'todoseq-embedded-task-list',
-    });
-
-    // Render each task
-    tasks.forEach((task, index) => {
-      const taskItem = this.itemRenderer.createTaskListItem(
-        task,
-        index,
-        params,
-      );
-      taskList.appendChild(taskItem);
-    });
+    this.renderTaskItems(container, tasks, params);
 
     // Add truncated indicator if results were limited
     if (

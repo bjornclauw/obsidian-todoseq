@@ -24,6 +24,7 @@ Using the following parameters within the `todoseq` code block you define which 
 - `search:` any valid search string (see [search](/search.html))
 - `title:` (optional) adds a custom title displayed above the task list
 - `sort:` (optional) one of `filepath`, `scheduled`, `deadline`, `closed`, `priority`, `urgency`, or `keyword`. Default is `filepath`
+- `group-by:` (optional) one of `folder`, `file`, or `heading`. Splits the results into labelled sections (see [Group By](#group-by))
 - `limit:` (optional) set the display limit to restrict the number of results shown
 - `show-completed:` (optional) one of `show`, `hide`, `sort-to-end`. Controls how completed tasks are displayed. Defaults to `show`. (`completed:` is an alternative alias)
 - `show-file:` (optional) `show`, `hide`, `true`, or `false`. Controls whether to show the source file info column. Defaults to `show` (responsive layout)
@@ -137,6 +138,26 @@ search: file:Project1 OR tag:project1
 limit: 10
 ```
 ````
+
+### Group By
+
+The `group-by:` parameter splits the results into labelled sections. Valid options are:
+
+- `folder` - Group by the task's folder (`projects/`), with `/` for the vault root
+- `file` - Group by the source file, using the file name without its extension
+- `heading` - Group by the nearest preceding heading in the file (`(No heading)` when a task has none)
+
+Sections appear in the order their first task appears in the results, and tasks keep the current `sort:` order within each section. `group-by:` composes with `search:`, `sort:` and `limit:` — the limit still counts tasks and is applied before grouping.
+
+````txt
+```todoseq
+search: -state:completed
+sort: deadline
+group-by: folder
+```
+````
+
+> **Note:** Only one `group-by:` field is supported per code block.
 
 ### Show File Info
 
