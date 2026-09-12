@@ -61,6 +61,12 @@ export interface RecurrenceUpdateResult {
 }
 
 /**
+ * Delay before a completed recurring task is rolled forward. Long enough to
+ * let the completion write settle, short enough to feel immediate.
+ */
+export const RECURRENCE_DELAY_MS = 50;
+
+/**
  * Configuration options for RecurrenceCoordinator.
  */
 export interface RecurrenceCoordinatorOptions {
@@ -97,7 +103,7 @@ export class RecurrenceCoordinator {
     private keywordManager: KeywordManager,
     options: RecurrenceCoordinatorOptions = {},
   ) {
-    this.defaultDelayMs = options.defaultDelayMs ?? 50;
+    this.defaultDelayMs = options.defaultDelayMs ?? RECURRENCE_DELAY_MS;
   }
 
   /**

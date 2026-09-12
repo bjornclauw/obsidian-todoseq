@@ -65,7 +65,7 @@ describe('TaskEditorController', () => {
         updateTaskFields: jest.fn(),
       },
       taskUpdateCoordinator: {
-        scheduleRecurrenceForCompletedTask: jest.fn(),
+        scheduleRecurrenceIfRecurring: jest.fn(),
       },
       settings: { weekStartsOn: 'Monday' as const },
       refreshAllTaskListViews: jest.fn(),
@@ -242,7 +242,7 @@ describe('TaskEditorController', () => {
         { recordCompletion: true },
       );
       expect(
-        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
       ).toHaveBeenCalledWith(updated);
     });
 
@@ -261,7 +261,7 @@ describe('TaskEditorController', () => {
       );
 
       expect(
-        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
       ).not.toHaveBeenCalled();
       expect(plugin.taskEditor.updateTaskFields).toHaveBeenCalledWith(
         task,
@@ -305,7 +305,7 @@ describe('TaskEditorController', () => {
         { recordCompletion: false },
       );
       expect(
-        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
       ).not.toHaveBeenCalled();
     });
 
@@ -344,7 +344,7 @@ describe('TaskEditorController', () => {
         { recordCompletion: true },
       );
       expect(
-        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
       ).toHaveBeenCalledWith(updated);
     });
 
@@ -383,7 +383,7 @@ describe('TaskEditorController', () => {
         { recordCompletion: true },
       );
       expect(
-        plugin.taskUpdateCoordinator.scheduleRecurrenceForCompletedTask,
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
       ).toHaveBeenCalled();
     });
 

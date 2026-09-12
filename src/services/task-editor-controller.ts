@@ -218,7 +218,7 @@ export class TaskEditorController {
           recordCompletion,
         });
         if (recordCompletion && result) {
-          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceForCompletedTask(
+          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceIfRecurring(
             result.task,
           );
         }
@@ -230,7 +230,7 @@ export class TaskEditorController {
           { recordCompletion },
         );
         if (recordCompletion && result) {
-          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceForCompletedTask(
+          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceIfRecurring(
             result.task,
           );
         }

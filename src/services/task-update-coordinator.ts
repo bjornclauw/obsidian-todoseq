@@ -22,7 +22,10 @@ import { TaskWriter } from './task-writer';
 import { TFile, MarkdownView } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { ChangeTracker } from './change-tracker';
-import { RecurrenceCoordinator } from './recurrence-coordinator';
+import {
+  RecurrenceCoordinator,
+  RECURRENCE_DELAY_MS,
+} from './recurrence-coordinator';
 import { TaskStateTransitionManager } from './task-state-transition-manager';
 import {
   calculateTaskUrgency,
@@ -345,12 +348,13 @@ export class TaskUpdateCoordinator {
   }
 
   /**
-   * Schedule the standard delayed recurrence roll-forward for a task that was
-   * just completed outside of `updateTask` (e.g. by the Task Editor modal).
-   * The caller is responsible for having already written the RESET state and,
-   * where applicable, a CLOSED date.
+   * Schedule the delayed recurrence roll-forward for a task with repeating
+   * dates that was completed outside of `updateTask` (e.g. by the Task Editor
+   * modal). No-op when the task has no repeating dates. The caller is
+   * responsible for having already written the RESET state and, where
+   * applicable, a CLOSED date.
    */
-  scheduleRecurrenceForCompletedTask(task: Task): void {
+  scheduleRecurrenceIfRecurring(task: Task): void {
     const hasRepeatingDates =
       (task.scheduledDateRepeat != null && task.scheduledDate != null) ||
       (task.deadlineDateRepeat != null && task.deadlineDate != null);
@@ -920,7 +924,10 @@ export class TaskUpdateCoordinator {
         updatedTask.deadlineDate != null);
 
     if (isOriginalCompleted && taskHasRepeatingDates) {
-      this.recurrenceCoordinator.scheduleRecurrence(updatedTask, 50);
+      this.recurrenceCoordinator.scheduleRecurrence(
+        updatedTask,
+        RECURRENCE_DELAY_MS,
+      );
     }
   }
 
@@ -941,7 +948,10 @@ export class TaskUpdateCoordinator {
         updatedTask.deadlineDate != null);
 
     if (taskHasRepeatingDates) {
-      this.recurrenceCoordinator.scheduleRecurrence(updatedTask, 50);
+      this.recurrenceCoordinator.scheduleRecurrence(
+        updatedTask,
+        RECURRENCE_DELAY_MS,
+      );
     }
   }
 

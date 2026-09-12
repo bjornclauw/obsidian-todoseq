@@ -6,6 +6,11 @@ import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
 
+/** Delay before focusing the task text, to let the modal finish opening. */
+const FOCUS_DELAY_MS = 50;
+/** Delay before scrolling a focused field into view, after the keyboard settles. */
+const KEYBOARD_SETTLE_MS = 320;
+
 /** Priority flag options, mirroring the task context menu. */
 const PRIORITY_OPTIONS: ReadonlyArray<{
   icon: string;
@@ -98,6 +103,8 @@ export class TaskEditorModal extends Modal {
   private dateFieldRefresh: (() => void) | null = null;
   /** True once the user saved, so onClose doesn't report a cancel. */
   private submitted = false;
+  /** True once the modal is closing/closed, to ignore deferred callbacks. */
+  private closed = false;
   private stopKeyboardWatch: (() => void) | null = null;
 
   constructor(
@@ -253,15 +260,18 @@ export class TaskEditorModal extends Modal {
       }
     });
 
-    // Focus the task text for immediate typing. On mobile the content scrolls
-    // the field clear of the keyboard once Obsidian's modal finishes opening.
-    window.setTimeout(() => {
+    // Focus the task text for immediate typing. Use the modal's own window so
+    // popout windows work; on mobile the content scrolls the field clear of the
+    // keyboard once Obsidian's modal finishes opening.
+    const win = this.modalEl?.ownerDocument.defaultView ?? window;
+    win.setTimeout(() => {
+      if (this.closed) return;
       textInput.focus({ preventScroll: true });
       textInput.setSelectionRange(
         textInput.value.length,
         textInput.value.length,
       );
-    }, 50);
+    }, FOCUS_DELAY_MS);
 
     if (Platform.isMobile) {
       for (const field of [textInput, descInput]) {
@@ -271,7 +281,6 @@ export class TaskEditorModal extends Modal {
       // :has(:focus). Dismissing the soft keyboard (system back/gesture) often
       // leaves the field focused, which would otherwise keep the allowance and
       // the shifted layout until a background tap blurs it.
-      const win = this.modalEl?.ownerDocument.defaultView ?? window;
       this.stopKeyboardWatch = new KeyboardInsetWatcher().start(win, (inset) =>
         this.applyKeyboardInset(inset),
       );
@@ -296,6 +305,7 @@ export class TaskEditorModal extends Modal {
   }
 
   onClose(): void {
+    this.closed = true;
     if (this.stopKeyboardWatch) {
       this.stopKeyboardWatch();
       this.stopKeyboardWatch = null;
@@ -336,7 +346,14 @@ export class TaskEditorModal extends Modal {
     };
 
     this.submitted = true;
-    await this.options.onSubmit(fields);
+    try {
+      await this.options.onSubmit(fields);
+    } catch (error) {
+      // Keep the modal open so the user can retry; the caller reports the error.
+      this.submitted = false;
+      console.error('Failed to save task', error);
+      return;
+    }
     this.close();
   }
 
@@ -353,11 +370,13 @@ export class TaskEditorModal extends Modal {
    * Bring a focused field into view once the keyboard animation has settled.
    */
   private scrollFieldIntoView(field: HTMLElement): void {
-    window.setTimeout(() => {
+    const win = this.modalEl?.ownerDocument.defaultView ?? window;
+    win.setTimeout(() => {
+      if (this.closed) return;
       if (typeof field.scrollIntoView === 'function') {
         field.scrollIntoView({ block: 'nearest' });
       }
-    }, 320);
+    }, KEYBOARD_SETTLE_MS);
   }
 
   /** Build a date field row with a date button and a clear button. */
@@ -485,7 +504,7 @@ export class TaskEditorModal extends Modal {
       if (
         group === 'archivedKeywords' &&
         this.options.mode === 'create' &&
-        initial !== 'ARCHIVED'
+        !this.options.keywordManager.isArchived(initial)
       ) {
         continue;
       }
