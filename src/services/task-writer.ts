@@ -3,7 +3,7 @@ import { Task, DateRepeatInfo, WarningPeriodInfo } from '../types/task';
 import { CHECKBOX_DETECTION_REGEX } from '../utils/patterns';
 import { KeywordManager } from '../utils/keyword-manager';
 import { DateUtils } from '../utils/date-utils';
-import { buildWarningPeriodString } from '../utils/date-repeater';
+import { buildWarningPeriodString, hasRepeater } from '../utils/date-repeater';
 import {
   findDateLine,
   findDescriptionLine,
@@ -87,6 +87,16 @@ export class TaskWriter {
     const repeatStr = repeat ? ` ${repeat.raw}` : '';
     const warningStr = buildWarningPeriodString(warningPeriod);
     return `<${DateUtils.formatDateContent(date)}${timeStr}${repeatStr}${warningStr}>`;
+  }
+
+  /**
+   * Format a CLOSED/STARTED timestamp for a table cell. Cells store these as a
+   * wikilink: `[[YYYY-MM-DD DOW HH:mm]]`.
+   */
+  private static formatTableCellTimestamp(date: Date): string {
+    // DateUtils.formatClosedDate returns "[YYYY-MM-DD DOW HH:mm]"; wrapping it
+    // in another pair of brackets yields the cell wikilink "[[…]]".
+    return `[${DateUtils.formatClosedDate(date)}]`;
   }
 
   // Pure formatter of a task line given a new state and optional priority retention
@@ -249,7 +259,13 @@ export class TaskWriter {
     // just happened. On such a write CLOSED is added/kept, never removed.
     const shouldWriteClosed =
       !!settings?.trackClosedDate && (completed || recordCompletion);
-    const shouldRemoveClosed = !shouldWriteClosed && !!task.closedDate;
+    // CLOSED is only removed when a task genuinely leaves the completed state.
+    // Archived tasks keep their completion record, and recurring tasks keep the
+    // last-completion record across reactivations.
+    const preservesClosed =
+      this.keywordManager.isArchived(newState) || hasRepeater(task);
+    const shouldRemoveClosed =
+      !shouldWriteClosed && !!task.closedDate && !preservesClosed;
 
     // STARTED tracking: trigger on first entry into an active state.
     // Idempotent and one-way — never removed on reactivation (first-ever-start).
@@ -508,7 +524,10 @@ export class TaskWriter {
 
     const shouldWriteClosed =
       !!this.settings?.trackClosedDate && (completed || recordCompletion);
-    const shouldRemoveClosed = !shouldWriteClosed;
+    // Archived tasks and recurring tasks keep their completion record.
+    const preservesClosed =
+      this.keywordManager.isArchived(newState) || hasRepeater(task);
+    const shouldRemoveClosed = !shouldWriteClosed && !preservesClosed;
 
     // Extract just the keyword + text part (strip indent + listMarker)
     let cellContent = newLine;
@@ -520,6 +539,9 @@ export class TaskWriter {
     }
     cellContent = cellContent.trim();
 
+    const isActiveState = this.keywordManager.isActive(newState);
+    let startedInserted = false;
+
     let fullCellContent = cellContent;
     await this.modifyTableCell(task, (origCell) => {
       const brIdx = origCell.indexOf('<br');
@@ -527,11 +549,10 @@ export class TaskWriter {
 
       // Add or update CLOSED date when trackClosedDate is enabled
       if (shouldWriteClosed) {
-        const closedDateStr = DateUtils.formatClosedDate(new Date());
         // CLOSED dates in cells use [[...]] wikilink format.
         // Support both old [date] and new [[date]] formats for migration
         const closedPattern = /\s*<br\s*\/?>\s*CLOSED:\s*\[{1,2}[^\]]+\]{1,2}/i;
-        const closedTag = `<br>CLOSED: [[${closedDateStr}]]`;
+        const closedTag = `<br>CLOSED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
         if (closedPattern.test(dateSuffix)) {
           dateSuffix = dateSuffix.replace(closedPattern, closedTag);
         } else {
@@ -549,6 +570,17 @@ export class TaskWriter {
         );
       }
 
+      // STARTED: first-ever-start, idempotent and one-way (add only). Table
+      // cells mirror the [[...]] timestamp format used for CLOSED.
+      if (isActiveState && this.settings?.trackStartedDate) {
+        const startedPattern =
+          /\s*<br\s*\/?>\s*STARTED:\s*\[{1,2}[^\]]+\]{1,2}/i;
+        if (!startedPattern.test(dateSuffix)) {
+          dateSuffix = `${dateSuffix}<br>STARTED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
+          startedInserted = true;
+        }
+      }
+
       fullCellContent = `${cellContent}${dateSuffix}`;
       return fullCellContent;
     });
@@ -563,6 +595,7 @@ export class TaskWriter {
       state: newState,
       completed,
       closedDate,
+      startedDate: startedInserted ? new Date() : task.startedDate,
     };
   }
 
@@ -1290,7 +1323,7 @@ export class TaskWriter {
 
   /**
    * Build the full line block for a new task: task line, DESCRIPTION,
-   * SCHEDULED, and DEADLINE (in that order).
+   * STARTED, SCHEDULED, DEADLINE, and CLOSED (in that order).
    */
   private buildNewTaskBlock(
     fields: TaskComposeFields,
@@ -1310,6 +1343,16 @@ export class TaskWriter {
     const description = fields.description?.trim();
     if (description) {
       lines.push(`${indent}DESCRIPTION: ${description}`);
+    }
+    // STARTED is written first among the date lines (before
+    // SCHEDULED/DEADLINE/CLOSED) when the task is created already active.
+    const shouldWriteStarted =
+      !!this.settings?.trackStartedDate &&
+      this.keywordManager.isActive(fields.state);
+    if (shouldWriteStarted) {
+      lines.push(
+        `${indent}STARTED: ${DateUtils.formatStartedDate(new Date())}`,
+      );
     }
     if (fields.scheduledDate) {
       lines.push(
@@ -1351,6 +1394,9 @@ export class TaskWriter {
     const shouldWriteClosed =
       !!this.settings?.trackClosedDate &&
       (this.keywordManager.isCompleted(fields.state) || recordCompletion);
+    const shouldWriteStarted =
+      !!this.settings?.trackStartedDate &&
+      this.keywordManager.isActive(fields.state);
     return {
       path,
       line,
@@ -1367,7 +1413,7 @@ export class TaskWriter {
       deadlineDate: fields.deadlineDate,
       deadlineDateRepeat: fields.deadlineRepeat,
       closedDate: shouldWriteClosed ? new Date() : null,
-      startedDate: null,
+      startedDate: shouldWriteStarted ? new Date() : null,
       scheduledWarningPeriod: fields.scheduledWarningPeriod,
       deadlineWarningPeriod: fields.deadlineWarningPeriod,
       urgency: null,

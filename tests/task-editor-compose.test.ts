@@ -181,6 +181,33 @@ describe('TaskWriter.createTaskAtLine', () => {
     expect(updateFn(content)).toContain('CLOSED:');
   });
 
+  it('writes a STARTED line before SCHEDULED when creating an active task', async () => {
+    const { writer, mockApp, mockPlugin } = createWriter();
+    mockPlugin.settings.trackStartedDate = true;
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine(
+      'test.md',
+      0,
+      makeFields({
+        state: 'DOING',
+        scheduledDate: new Date(2026, 2, 10),
+      }),
+    );
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    const written = updateFn(content);
+    expect(written).toContain('- [ ] DOING Task text');
+    expect(written).toContain('STARTED:');
+    expect(written.indexOf('STARTED:')).toBeLessThan(
+      written.indexOf('SCHEDULED:'),
+    );
+    expect(result?.task.startedDate).not.toBeNull();
+  });
+
   it('returns null when the target file cannot be resolved', async () => {
     const { writer, mockApp } = createWriter();
     mockApp.vault.getAbstractFileByPath = jest.fn().mockReturnValue(null);

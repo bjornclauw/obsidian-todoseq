@@ -490,6 +490,113 @@ describe('TaskWriter Instance Methods', () => {
       expect(processed).not.toContain('CLOSED:');
       expect(result.closedDate).toBeNull();
     });
+
+    it('preserves CLOSED when archiving a completed task', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'DONE',
+        completed: true,
+        closedDate: new Date('2026-03-09'),
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn('DONE Task text\nCLOSED: [2026-03-09 Mon]');
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'ARCHIVED');
+
+      expect(processed).toContain('CLOSED: [2026-03-09 Mon]');
+      expect(result.closedDate).not.toBeNull();
+    });
+
+    it('preserves CLOSED when reactivating a recurring task', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'TODO',
+        completed: false,
+        closedDate: new Date('2026-03-12'),
+        scheduledDate: new Date('2026-04-01'),
+        scheduledDateRepeat: { type: '+', unit: 'm', value: 1, raw: '+1m' },
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn(
+              'TODO Pay rent\nSCHEDULED: <2026-04-01 Wed +1m>\nCLOSED: [2026-03-12 Thu]',
+            );
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'DOING');
+
+      expect(processed).toContain('CLOSED: [2026-03-12 Thu]');
+      expect(result.closedDate).not.toBeNull();
+    });
+
+    it('preserves CLOSED when archiving a table-cell task', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'DONE',
+        completed: true,
+        isTableTask: true,
+        tableCell: { cellIndex: 1 } as never,
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn(
+              '| a | DONE Task <br>CLOSED: [[2026-03-09 Mon]] |',
+            );
+            return Promise.resolve(processed);
+          },
+        );
+
+      await taskWriter.applyLineUpdate(task, 'ARCHIVED');
+
+      expect(processed).toContain('CLOSED: [[2026-03-09 Mon]]');
+    });
+
+    it('adds STARTED when a table-cell task enters an active state', async () => {
+      mockPlugin.settings.trackStartedDate = true;
+      const task: Task = createBaseTask({
+        state: 'TODO',
+        completed: false,
+        isTableTask: true,
+        tableCell: { cellIndex: 1 } as never,
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn('| a | TODO Task |');
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'DOING');
+
+      expect(processed).toContain('STARTED: [[');
+      expect(result.startedDate).not.toBeNull();
+    });
   });
 
   describe('updateKeywordManager', () => {

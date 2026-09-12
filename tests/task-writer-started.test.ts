@@ -354,11 +354,7 @@ describe('TaskWriter - STARTED date handling', () => {
       expect(proto).not.toContain('removeTaskStartedDate');
     });
 
-    it('table cell tasks: STARTED not written inline (documented limitation)', async () => {
-      // Table cell tasks use inline format; STARTED insertion is not
-      // supported there (per plan: "verify documented behavior"). The
-      // applyTableCellUpdate path has no STARTED branch, so cell content
-      // must remain untouched apart from state.
+    it('table cell tasks: STARTED written inline as a wikilink', async () => {
       const cellTask = createCheckboxTask({
         isTableTask: true,
         tableCell: { cellIndex: 0 },
@@ -368,8 +364,10 @@ describe('TaskWriter - STARTED date handling', () => {
       // Table path goes through applyTableCellUpdate via applyLineUpdate
       const result = await taskWriter.applyLineUpdate(cellTask, 'DOING');
       expect(result.state).toBe('DOING');
-      // No STARTED was injected into the cell content
-      expect(result.rawText).not.toContain('STARTED');
+      // STARTED is injected into the cell as [[YYYY-MM-DD DOW HH:mm]]
+      expect(result.rawText).toContain('STARTED: [[');
+      expect(result.rawText).not.toContain('STARTED: [[[');
+      expect(result.startedDate).not.toBeNull();
     });
   });
 

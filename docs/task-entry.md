@@ -462,8 +462,9 @@ The CLOSED date uses square brackets `[]` instead of angle brackets `<>` to dist
 #### CLOSED Date Behavior
 
 - **Automatic Addition**: When you mark a task as completed (e.g., transition from TODO to DONE), a CLOSED date is automatically added if the "Track closed date" setting is enabled.
-- **Automatic Removal**: When you reactivate a completed task (e.g., transition from DONE to TODO), the CLOSED date is automatically removed.
-- **Recurring Tasks**: When you complete a recurring task, it is immediately reopened (reset to the next inactive state) and its dates advance, while a CLOSED date recording that completion is added and **kept** as the last-completion record. Each future completion updates the CLOSED date to the latest time.
+- **Automatic Removal**: When you reactivate a completed task (e.g., transition from DONE to TODO), the CLOSED date is automatically removed — except for archived tasks and recurring tasks (see below).
+- **Recurring Tasks**: When you complete a recurring task, it is immediately reopened (reset to the next inactive state) and its dates advance, while a CLOSED date recording that completion is added and **kept** as the last-completion record. The CLOSED date is also retained when the recurring task later moves between states. Each future completion updates the CLOSED date to the latest time.
+- **Archived Tasks**: Archiving a task that already has a CLOSED date keeps it, so the completion record survives archiving.
 - **Manual Editing**: You can manually add or remove CLOSED dates directly in your notes.
 
 ### STARTED Date
@@ -484,7 +485,7 @@ The STARTED date uses square brackets `[]` (the same inactive-timestamp conventi
 
 #### STARTED Date Behavior
 
-- **Automatic Addition**: When a task transitions into an active state (e.g., TODO → DOING), a STARTED date is automatically added if the "Track started date" setting is enabled.
+- **Automatic Addition**: When a task transitions into an active state (e.g., TODO → DOING), a STARTED date is automatically added if the "Track started date" setting is enabled. This also applies to tasks created already in an active state and to tasks defined in table cells.
 - **Idempotent**: The STARTED date is written once. It is never updated, duplicated, or removed by later state changes.
 - **First-ever semantics**: STARTED records when a task first became active. If you pause (DOING → WAIT), reactivate, or resume a task, the original STARTED date is retained — it spans the task's whole life, across multiple work sessions.
 - **Duration**: Together with the CLOSED date, STARTED enables duration calculation (STARTED to CLOSED) and "what did I start today?" queries via the `started:` search filter.

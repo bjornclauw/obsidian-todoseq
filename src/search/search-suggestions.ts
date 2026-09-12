@@ -303,6 +303,18 @@ export class SearchSuggestions {
   }
 
   /**
+   * Format a Date as a local `YYYY-MM-DD` literal. Uses local date parts so a
+   * task date is not shifted to the previous day for timezones ahead of UTC
+   * (which is what `toISOString()` would do for a local-midnight date).
+   */
+  private static formatDateLiteral(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
    * Extract all unique scheduled dates from tasks
    * @param tasks Array of tasks to analyze
    * @param mode Current view mode (optional)
@@ -321,8 +333,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.scheduledDate) {
-        const dateStr = task.scheduledDate.toISOString().split('T')[0];
-        datesSet.add(dateStr);
+        datesSet.add(this.formatDateLiteral(task.scheduledDate));
       }
     });
 
@@ -351,8 +362,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.deadlineDate) {
-        const dateStr = task.deadlineDate.toISOString().split('T')[0];
-        datesSet.add(dateStr);
+        datesSet.add(this.formatDateLiteral(task.deadlineDate));
       }
     });
 
@@ -381,8 +391,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.closedDate) {
-        const dateStr = task.closedDate.toISOString().split('T')[0];
-        datesSet.add(dateStr);
+        datesSet.add(this.formatDateLiteral(task.closedDate));
       }
     });
 
@@ -411,8 +420,7 @@ export class SearchSuggestions {
 
     filteredTasks.forEach((task) => {
       if (task.startedDate) {
-        const dateStr = task.startedDate.toISOString().split('T')[0];
-        datesSet.add(dateStr);
+        datesSet.add(this.formatDateLiteral(task.startedDate));
       }
     });
 

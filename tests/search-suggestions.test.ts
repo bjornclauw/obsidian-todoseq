@@ -554,7 +554,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with closed date',
           listMarker: '-',
           text: 'task with closed date',
-          closedDate: new Date('2023-05-15T00:00:00Z'),
+          closedDate: new Date(2023, 4, 15),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -562,7 +562,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with different closed date',
           listMarker: '-',
           text: 'task with different closed date',
-          closedDate: new Date('2023-06-20T00:00:00Z'),
+          closedDate: new Date(2023, 5, 20),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -601,7 +601,7 @@ describe('Search Suggestions', () => {
     });
 
     it('should deduplicate same closed dates', () => {
-      const date = new Date('2023-05-15T00:00:00Z');
+      const date = new Date(2023, 4, 15);
       const tasks = [
         createBaseTask({
           path: 'notes/tasks.md',
@@ -634,7 +634,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with scheduled date',
           listMarker: '-',
           text: 'task with scheduled date',
-          scheduledDate: new Date('2023-01-15T00:00:00Z'),
+          scheduledDate: new Date(2023, 0, 15),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -642,7 +642,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with different scheduled date',
           listMarker: '-',
           text: 'task with different scheduled date',
-          scheduledDate: new Date('2023-02-20T00:00:00Z'),
+          scheduledDate: new Date(2023, 1, 20),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -677,7 +677,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with deadline',
           listMarker: '-',
           text: 'task with deadline',
-          deadlineDate: new Date('2023-03-10T00:00:00Z'),
+          deadlineDate: new Date(2023, 2, 10),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -685,7 +685,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with different deadline',
           listMarker: '-',
           text: 'task with different deadline',
-          deadlineDate: new Date('2023-04-05T00:00:00Z'),
+          deadlineDate: new Date(2023, 3, 5),
         }),
       ];
 
@@ -705,7 +705,7 @@ describe('Search Suggestions', () => {
     });
 
     it('should handle tasks with same scheduled date', () => {
-      const date = new Date('2023-01-15T00:00:00Z');
+      const date = new Date(2023, 0, 15);
       const tasks = [
         createBaseTask({
           path: 'notes/tasks.md',
@@ -861,9 +861,9 @@ describe('Search Suggestions', () => {
       listMarker: '-',
       text: 'completed task',
       completed: true,
-      scheduledDate: new Date('2023-01-15T00:00:00Z'),
-      deadlineDate: new Date('2023-03-10T00:00:00Z'),
-      closedDate: new Date('2023-02-01T00:00:00Z'),
+      scheduledDate: new Date(2023, 0, 15),
+      deadlineDate: new Date(2023, 2, 10),
+      closedDate: new Date(2023, 1, 1),
     });
 
     const activeTask = createBaseTask({
@@ -873,8 +873,8 @@ describe('Search Suggestions', () => {
       listMarker: '-',
       text: 'active task',
       completed: false,
-      scheduledDate: new Date('2023-02-20T00:00:00Z'),
-      deadlineDate: new Date('2023-04-05T00:00:00Z'),
+      scheduledDate: new Date(2023, 1, 20),
+      deadlineDate: new Date(2023, 3, 5),
       closedDate: null,
     });
 
@@ -1041,7 +1041,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO task with deadline',
           listMarker: '-',
           text: 'task with deadline',
-          deadlineDate: new Date('2023-03-10T00:00:00Z'),
+          deadlineDate: new Date(2023, 2, 10),
         }),
         createBaseTask({
           path: 'notes/tasks.md',
@@ -1057,7 +1057,7 @@ describe('Search Suggestions', () => {
           rawText: 'TODO another task with deadline',
           listMarker: '-',
           text: 'another task with deadline',
-          deadlineDate: new Date('2023-04-05T00:00:00Z'),
+          deadlineDate: new Date(2023, 3, 5),
         }),
       ];
 

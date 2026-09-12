@@ -683,7 +683,10 @@ export class DatePicker extends BaseDialog {
   }
 
   private formatMonthYear(date: Date): string {
-    return date.toLocaleDateString(undefined, {
+    // Use a fixed English locale to match the hardcoded English weekday
+    // labels and keep the calendar consistent (and tests deterministic)
+    // regardless of the host locale.
+    return date.toLocaleDateString('en-US', {
       month: 'short',
       year: 'numeric',
     });

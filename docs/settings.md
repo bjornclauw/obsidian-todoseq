@@ -403,7 +403,7 @@ FIXME Handle edge cases
 - CLOSED date uses Org-mode syntax with square brackets: `CLOSED: [2025-01-18 Fri 14:30]`
 - Records the date and time when the task was completed
 - Removes CLOSED date when a non-recurring completed task is reactivated
-- Recurring tasks keep their CLOSED date: completing one reopens it (resets the state and advances the dates) and the CLOSED date is retained as the last-completion record
+- Keeps CLOSED when a task is archived or when the task is recurring (last-completion record)
 
 **When Disabled:**
 
@@ -421,6 +421,7 @@ FIXME Handle edge cases
 **When Enabled:**
 
 - Adds a STARTED date when a task first enters an active state (e.g., TODO → DOING)
+- Also applies to tasks created already active and to tasks in table cells
 - STARTED date uses the same square-bracket syntax as CLOSED: `STARTED: [2025-01-18 Fri 09:00]`
 - Records when the task _first_ became active — written once, idempotently
 - Does NOT remove the STARTED date when tasks are reactivated (unlike CLOSED); only manual editing removes it
