@@ -991,6 +991,93 @@ describe('DatePicker', () => {
     });
   });
 
+  describe('metadata change notifications', () => {
+    it('notifies the caller when a repeat is selected on an existing date', async () => {
+      const date = new Date(2026, 4, 10);
+      await picker.show({ x: 100, y: 100 }, 'scheduled', date);
+
+      const repeatRow = activeDocument.querySelector(
+        '.todoseq-date-picker-repeat .todoseq-date-picker-menu-row',
+      ) as HTMLElement;
+      repeatRow.click();
+      const dailyRow = activeDocument.querySelectorAll(
+        '.todoseq-date-picker-submenu-row',
+      )[0] as HTMLElement;
+      dailyRow.click();
+
+      expect(callbacks.onDateSelected).toHaveBeenCalled();
+      const [calledDate, repeat, mode] = (
+        callbacks.onDateSelected as jest.Mock
+      ).mock.calls.at(-1);
+      expect(calledDate).toEqual(date);
+      expect(repeat.raw).toBe('.+1d');
+      expect(mode).toBe('scheduled');
+    });
+
+    it('notifies the caller when a warning period is selected on an existing date', async () => {
+      const date = new Date(2026, 4, 10);
+      await picker.show({ x: 100, y: 100 }, 'scheduled', date);
+
+      const warningRow = activeDocument.querySelector(
+        '.todoseq-date-picker-warning-period .todoseq-date-picker-menu-row',
+      ) as HTMLElement;
+      warningRow.click();
+      // Index 1 is the "1 day" preset (index 0 is "None").
+      const oneDayRow = activeDocument.querySelectorAll(
+        '.todoseq-date-picker-submenu-row',
+      )[1] as HTMLElement;
+      oneDayRow.click();
+
+      expect(callbacks.onDateSelected).toHaveBeenCalled();
+      const [calledDate, , , warningPeriod] = (
+        callbacks.onDateSelected as jest.Mock
+      ).mock.calls.at(-1);
+      expect(calledDate).toEqual(date);
+      expect(warningPeriod).toEqual({
+        value: 1,
+        unit: 'd',
+        isFirstOnly: false,
+      });
+    });
+
+    it('notifies the caller when a time is selected on an existing date', async () => {
+      const date = new Date(2026, 4, 10);
+      await picker.show({ x: 100, y: 100 }, 'scheduled', date);
+
+      const timeRow = activeDocument.querySelector(
+        '.todoseq-date-picker-time .todoseq-date-picker-menu-row',
+      ) as HTMLElement;
+      timeRow.click();
+      // Two 30-minute slots per hour, so index 18 is 09:00.
+      const nineAmRow = activeDocument.querySelectorAll(
+        '.todoseq-date-picker-submenu-row',
+      )[18] as HTMLElement;
+      nineAmRow.click();
+
+      expect(callbacks.onDateSelected).toHaveBeenCalled();
+      const calledDate = (callbacks.onDateSelected as jest.Mock).mock.calls.at(
+        -1,
+      )[0];
+      expect(calledDate?.getHours()).toBe(9);
+      expect(calledDate?.getMinutes()).toBe(0);
+    });
+
+    it('does not notify while no date is selected', async () => {
+      await picker.show({ x: 100, y: 100 });
+
+      const repeatRow = activeDocument.querySelector(
+        '.todoseq-date-picker-repeat .todoseq-date-picker-menu-row',
+      ) as HTMLElement;
+      repeatRow.click();
+      const dailyRow = activeDocument.querySelectorAll(
+        '.todoseq-date-picker-submenu-row',
+      )[0] as HTMLElement;
+      dailyRow.click();
+
+      expect(callbacks.onDateSelected).not.toHaveBeenCalled();
+    });
+  });
+
   describe('no date option', () => {
     it('should invoke callback with null date when "No date" is clicked', async () => {
       await picker.show({ x: 100, y: 100 });

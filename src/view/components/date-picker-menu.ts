@@ -816,11 +816,13 @@ export class DatePicker extends BaseDialog {
     this.selectedTime = time;
     this.closeTimePicker();
     this.refreshTimeSection();
+    this.notifyMetadataChange();
   }
 
   private clearTime(): void {
     this.selectedTime = null;
     this.refreshTimeSection();
+    this.notifyMetadataChange();
   }
 
   private refreshTimeSection(): void {
@@ -971,6 +973,7 @@ export class DatePicker extends BaseDialog {
     this.selectedRepeat = repeat;
     this.closeRepeatPicker();
     this.refreshRepeatSection();
+    this.notifyMetadataChange();
   }
 
   private openCustomRepeatDialog(): void {
@@ -1107,6 +1110,7 @@ export class DatePicker extends BaseDialog {
       this.selectedRepeat = repeat;
       this.closeCustomRepeatDialog();
       this.refreshRepeatSection();
+      this.notifyMetadataChange();
     });
 
     // Position the dialog
@@ -1127,6 +1131,7 @@ export class DatePicker extends BaseDialog {
   private clearRepeat(): void {
     this.selectedRepeat = null;
     this.refreshRepeatSection();
+    this.notifyMetadataChange();
   }
 
   private refreshRepeatSection(): void {
@@ -1278,11 +1283,13 @@ export class DatePicker extends BaseDialog {
     this.selectedWarningPeriod = wp;
     this.closeWarningPeriodPicker();
     this.refreshWarningPeriodSection();
+    this.notifyMetadataChange();
   }
 
   private clearWarningPeriod(): void {
     this.selectedWarningPeriod = null;
     this.refreshWarningPeriodSection();
+    this.notifyMetadataChange();
   }
 
   private refreshWarningPeriodSection(): void {
@@ -1378,6 +1385,7 @@ export class DatePicker extends BaseDialog {
       this.selectedWarningPeriod = { value, unit, isFirstOnly: false };
       dialog.remove();
       this.refreshWarningPeriodSection();
+      this.notifyMetadataChange();
     });
 
     dialog.addClass('todoseq-date-picker-custom-repeat-centered');
@@ -1457,6 +1465,21 @@ export class DatePicker extends BaseDialog {
     }
 
     return date;
+  }
+
+  /**
+   * Notify the caller when repeat or warning-period metadata changes on an
+   * already-selected date. Without this, changing only the repeat or warning
+   * period would not be persisted until the user (re)selected a date.
+   */
+  private notifyMetadataChange(): void {
+    if (!this.selectedDate) return;
+    this.callbacks.onDateSelected(
+      this.buildSelectedDateTime(),
+      this.selectedRepeat,
+      this.mode,
+      this.selectedWarningPeriod ?? null,
+    );
   }
 
   // ─── Date Calculations ─────────────────────────────────────────
