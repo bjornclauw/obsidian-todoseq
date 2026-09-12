@@ -322,8 +322,10 @@ describe('date-repeater', () => {
           expect(result.getMinutes()).toBe(0);
         });
 
-        it('initial date before now, time after now: should use time from initial', () => {
-          // initial:<2026-01-01 Thu 20:00 .+1d> current:<2026-03-05 Thu 09:30>, expected:<2026-03-05 Thu 20:00 .+1d>
+        it('initial date before now, time after now: shifts one day from today (Org restart)', () => {
+          // initial:<2026-01-01 Thu 20:00 .+1d> current:<2026-03-05 Thu 09:30>
+          // Org's `.+` moves the base to today then adds the interval, so the
+          // result is tomorrow at the base time — not today.
           const baseDate = new Date('2026-01-01T20:00:00'); // Thu 20:00
           const repeat = {
             type: '.+' as const,
@@ -334,11 +336,31 @@ describe('date-repeater', () => {
           const fromDate = new Date('2026-03-05T09:30:00'); // Thu 09:30
 
           const result = calculateNextRepeatDate(baseDate, repeat, fromDate);
-          // Should be same day at 20:00 (Thu Mar 5)
+          // Should be next day at 20:00 (Fri Mar 6)
           expect(result.getFullYear()).toBe(2026);
           expect(result.getMonth()).toBe(2); // March
-          expect(result.getDate()).toBe(5); // Thursday
+          expect(result.getDate()).toBe(6); // Friday
           expect(result.getHours()).toBe(20);
+          expect(result.getMinutes()).toBe(0);
+        });
+
+        it('.+1w shifts one week from the completion day, not the original weekday', () => {
+          // .+ is relative to the completion date, so it must not snap back to
+          // the original Thursday; the base time-of-day is preserved.
+          const baseDate = new Date('2026-03-05T10:00:00'); // Thursday
+          const repeat = {
+            type: '.+' as const,
+            unit: 'w' as const,
+            value: 1,
+            raw: '.+1w',
+          };
+          const fromDate = new Date('2026-03-08T11:00:00'); // Sunday
+
+          const result = calculateNextRepeatDate(baseDate, repeat, fromDate);
+          expect(result.getMonth()).toBe(2); // March
+          expect(result.getDate()).toBe(15); // Sunday (completion + 1 week)
+          expect(result.getDay()).toBe(0); // Sunday, not Thursday
+          expect(result.getHours()).toBe(10);
           expect(result.getMinutes()).toBe(0);
         });
 

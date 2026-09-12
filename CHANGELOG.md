@@ -14,6 +14,7 @@
 - Adding or changing a repeating date on an already-completed task now advances the occurrence (previously it was silently inert). Archived tasks do not recur.
 - Cancelling a recurring task no longer rolls it forward: it stays in the cancelled state (and still records a CLOSED date).
 - Reactivating an archived task now keeps its SCHEDULED/DEADLINE/CLOSED/STARTED metadata, so a repeating task keeps recurring after it is un-archived.
+- Fixed `.+` (from-done) repeaters for day and week units to match Org mode: the next date is one interval from the completion day (preserving the original time-of-day), instead of returning the same day or snapping to the original weekday.
 - Editing an already-completed recurring task in the task editor no longer reopens it unless you complete it or change its schedule.
 - Kept the task editor modal above the mobile soft keyboard and scrolled the focused field into view.
 

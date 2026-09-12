@@ -206,49 +206,25 @@ function calculateNextOccurrenceAfter(
   value: number,
   fromDate: Date,
 ): Date {
-  // Extract base time for comparison and preservation
+  // Base time-of-day is preserved for date units; hourly uses the current time.
   const baseHours = baseDate.getHours();
   const baseMinutes = baseDate.getMinutes();
-  const baseTimeInMinutes = baseHours * 60 + baseMinutes;
 
-  // Create result starting from today
+  // Start from "now" and apply the interval from there (Org's `restart`
+  // repeater), then restore the base time-of-day.
   let result = new Date(fromDate);
-  const fromHours = fromDate.getHours();
-  const fromMinutes = fromDate.getMinutes();
-  const fromTimeInMinutes = fromHours * 60 + fromMinutes;
 
-  // For d/w units:
-  // - If base time > from time: use today at base time
-  // - Otherwise: add one day/week
   if (unit === 'd' || unit === 'w') {
-    if (baseTimeInMinutes > fromTimeInMinutes) {
-      // Use today at base time
-      result.setHours(baseHours, baseMinutes, 0, 0);
-    } else {
-      // Add one day/week
-      if (unit === 'w') {
-        result.setDate(result.getDate() + value * 7);
-      } else {
-        result.setDate(result.getDate() + value);
-      }
-      // Preserve base time after adding
-      result.setHours(baseHours, baseMinutes, 0, 0);
-
-      // For weekly, ensure correct day of week
-      if (unit === 'w') {
-        const baseDayOfWeek = baseDate.getDay();
-        while (result.getDay() !== baseDayOfWeek) {
-          result.setDate(result.getDate() + 1);
-        }
-        result.setHours(baseHours, baseMinutes, 0, 0);
-      }
-    }
+    // Move to today, then add the interval. No day-of-week snapping: `.+` is
+    // relative to the completion date, not the original date.
+    const days = unit === 'w' ? value * 7 : value;
+    result.setDate(result.getDate() + days);
+    result.setHours(baseHours, baseMinutes, 0, 0);
   } else if (unit === 'h') {
-    // For hourly: add x hours to from time, preserving from minutes
-    result.setHours(fromHours + value, fromMinutes, 0, 0);
+    // For hourly: exactly `value` hours from now, preserving the current minutes.
+    result.setHours(result.getHours() + value, result.getMinutes(), 0, 0);
   } else {
-    // For m/y units: add to from date, preserving base time
-    result = new Date(fromDate);
+    // For m/y units: add to today, preserving base time
     result.setHours(baseHours, baseMinutes, 0, 0);
 
     switch (unit) {
