@@ -193,20 +193,25 @@ export class TaskEditorController {
 
     const keywordManager = this.plugin.taskStateManager.getKeywordManager();
     const willBeCompleted = keywordManager.isCompleted(fields.state);
+    const willBeRecurrenceCompletion =
+      willBeCompleted && !keywordManager.isCanceled(fields.state);
     const hasRepeatingDates =
       (fields.scheduledRepeat != null && fields.scheduledDate != null) ||
       (fields.deadlineRepeat != null && fields.deadlineDate != null);
     // Roll a recurring occurrence forward when the task is completed now, or
     // when its schedule/repeat is added or changed on an already-completed
-    // task. Unrelated edits (e.g. text) to a completed recurring task do not
-    // reopen it — matching the other surfaces.
-    const wasCompleted = target.task
-      ? keywordManager.isCompleted(target.task.state)
+    // task. Cancellations and unrelated edits (e.g. text) to a completed
+    // recurring task do not reopen it — matching the other surfaces.
+    const wasRecurrenceCompletion = target.task
+      ? keywordManager.isCompleted(target.task.state) &&
+        !keywordManager.isCanceled(target.task.state)
       : false;
     const scheduleChanged = target.task
       ? this.hasScheduleChanged(target.task, fields)
       : false;
-    const completingNow = willBeCompleted && (!wasCompleted || scheduleChanged);
+    const completingNow =
+      willBeRecurrenceCompletion &&
+      (!wasRecurrenceCompletion || scheduleChanged);
     const recordCompletion = completingNow && hasRepeatingDates;
     const writeFields: TaskComposeFields = recordCompletion
       ? { ...fields, state: keywordManager.getDefaultInactive() }

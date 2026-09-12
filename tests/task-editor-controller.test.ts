@@ -387,6 +387,45 @@ describe('TaskEditorController', () => {
       ).toHaveBeenCalled();
     });
 
+    it('does not reopen a recurring task when it is canceled', async () => {
+      const { controller, plugin } = createHarness(['TODO Task text']);
+      const repeat = {
+        type: '+' as const,
+        unit: 'd' as const,
+        value: 1,
+        raw: '+1d',
+      };
+      const task = createBaseTask({
+        line: 0,
+        state: 'TODO',
+        scheduledDate: new Date('2026-06-15'),
+        scheduledDateRepeat: repeat,
+      });
+      plugin.taskEditor.updateTaskFields.mockResolvedValue({
+        task: { ...task, state: 'CANCELED' },
+        lineDelta: 0,
+      });
+
+      await save(
+        controller,
+        { path: 'test.md', line: 0, task },
+        makeFields({
+          state: 'CANCELED',
+          scheduledDate: new Date('2026-06-15'),
+          scheduledRepeat: repeat,
+        }),
+      );
+
+      expect(plugin.taskEditor.updateTaskFields).toHaveBeenCalledWith(
+        task,
+        expect.objectContaining({ state: 'CANCELED' }),
+        { recordCompletion: false },
+      );
+      expect(
+        plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
+      ).not.toHaveBeenCalled();
+    });
+
     it('does not throw when the coordinator is unavailable', async () => {
       const { controller, plugin } = createHarness(['TODO Task text']);
       plugin.taskUpdateCoordinator = null as never;

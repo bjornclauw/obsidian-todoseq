@@ -16,6 +16,8 @@ import { TFile } from 'obsidian';
 global.document = {
   querySelectorAll: jest.fn(() => []),
 } as any;
+(window as unknown as { activeDocument: Document }).activeDocument =
+  global.document as unknown as Document;
 
 // Mock Obsidian App
 const mockApp = {
@@ -618,6 +620,64 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
       );
 
       expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('does not roll a recurring task when it is canceled', async () => {
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      taskStateManager.addTask(task);
+      const spy = recurrenceSpy();
+      (mockPlugin.taskEditor.updateTaskState as jest.Mock).mockClear();
+
+      await taskUpdateCoordinator.updateTaskState(task, 'CANCELED');
+
+      // Cancellation is terminal: no state reset, no recurrence.
+      expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
+        task,
+        'CANCELED',
+        { recordCompletion: false },
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('re-adds an un-archived task with its repeat metadata intact', async () => {
+      const fullTask: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      };
+      // The task is not in the state manager (as after archiving), and the full
+      // file parse (parseFile) supplies the date lines.
+      const vaultScanner = (
+        mockPlugin as unknown as {
+          vaultScanner: {
+            getParser: () => { parseFile: () => Task[] };
+          };
+        }
+      ).vaultScanner;
+      vaultScanner.getParser = () => ({ parseFile: () => [fullTask] });
+
+      await taskUpdateCoordinator.updateTaskByPath(
+        'test.md',
+        0,
+        'TODO',
+        'task-list',
+      );
+
+      const stored = taskStateManager.findTaskByPathAndLine('test.md', 0);
+      expect(stored?.scheduledDateRepeat).not.toBeNull();
+      expect(stored?.scheduledDate).not.toBeNull();
     });
   });
 

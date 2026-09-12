@@ -318,15 +318,15 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
   });
 
   it('should re-add task when transitioning from archived to non-archived state', async () => {
+    const reactivated = createBaseTask({
+      path: 'test.md',
+      line: 0,
+      state: 'TODO',
+      rawText: 'TODO Reactivated task',
+    });
     const mockParser = {
-      parseLine: jest.fn().mockReturnValue(
-        createBaseTask({
-          path: 'test.md',
-          line: 0,
-          state: 'TODO',
-          rawText: 'TODO Reactivated task',
-        }),
-      ),
+      // Re-adding parses the whole file so date/repeat metadata is preserved.
+      parseFile: jest.fn().mockReturnValue([reactivated]),
     };
 
     mockPlugin.vaultScanner.getParser.mockReturnValue(mockParser);

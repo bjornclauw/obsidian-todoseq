@@ -426,8 +426,19 @@ export class TaskUpdateCoordinator {
         return null;
       }
 
-      const line = lines[taskLine];
-      const parsedTask = parser.parseLine(line, taskLine, taskPath);
+      // Parse the whole file so the task carries its SCHEDULED/DEADLINE/
+      // CLOSED/STARTED/DESCRIPTION lines. parseLine(AsTask) parses only the
+      // task line and returns null dates, which would drop recurrence metadata
+      // when a task is re-added after being un-archived.
+      const parsedTask =
+        parser
+          .parseFile(content, taskPath, file)
+          .find(
+            (candidate) =>
+              candidate.line === taskLine &&
+              (cellIndex === undefined ||
+                candidate.tableCell?.cellIndex === cellIndex),
+          ) ?? null;
 
       if (parsedTask) {
         const existingTask = this.taskStateManager.findTaskByPathAndLine(
@@ -457,16 +468,18 @@ export class TaskUpdateCoordinator {
     let recordCompletion = false;
 
     if (context.type === 'state' && context.newState) {
-      const isOriginalStateCompleted = this.keywordManager.isCompleted(
-        context.newState,
-      );
+      // Only a genuine completion (DONE), not a cancellation, rolls a
+      // recurring task forward.
+      const isRecurrenceCompletion =
+        this.keywordManager.isCompleted(context.newState) &&
+        !this.keywordManager.isCanceled(context.newState);
       const repeats = hasRepeatingDates(context.task);
 
       // For recurring tasks being marked complete, the state is reset to the
       // next inactive state immediately (instant reopen) while still stamping
       // a CLOSED date so the completion is recorded. The delayed recurrence
       // update then advances the dates and preserves the CLOSED line.
-      if (isOriginalStateCompleted && repeats) {
+      if (isRecurrenceCompletion && repeats) {
         // Use cached state transition manager instead of creating new instance
         newState = this.stateTransitionManager.getNextState(context.newState);
         recordCompletion = true;
@@ -903,10 +916,11 @@ export class TaskUpdateCoordinator {
     context: ProcessingContext,
   ): void {
     // Use originalNewState to check if user requested completion
-    // This is the state they clicked (e.g., DONE), not what was written (e.g., TODO)
-    const isOriginalCompleted = this.keywordManager.isCompleted(
-      context.originalNewState,
-    );
+    // This is the state they clicked (e.g., DONE), not what was written (e.g., TODO).
+    // Cancellations are terminal and must not roll a recurring task forward.
+    const isOriginalCompleted =
+      this.keywordManager.isCompleted(context.originalNewState) &&
+      !this.keywordManager.isCanceled(context.originalNewState);
 
     if (isOriginalCompleted && hasRepeatingDates(updatedTask)) {
       this.recurrenceCoordinator.scheduleRecurrence(
@@ -922,7 +936,10 @@ export class TaskUpdateCoordinator {
    * task). Archived tasks are skipped: archiving is terminal.
    */
   private handleRecurrenceForCompletedTask(updatedTask: Task): void {
-    if (!this.keywordManager.isCompleted(updatedTask.state)) {
+    if (
+      !this.keywordManager.isCompleted(updatedTask.state) ||
+      this.keywordManager.isCanceled(updatedTask.state)
+    ) {
       return;
     }
 
