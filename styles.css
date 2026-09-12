@@ -2606,7 +2606,9 @@
   padding: var(--size-4-1) var(--size-4-2);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
-  background: var(--background-primary);
+  /* background-color (not the `background` shorthand) so the native
+     <select> chevron background-image is preserved. */
+  background-color: var(--background-modifier-form-field);
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   font-family: inherit;
@@ -2623,6 +2625,11 @@
 .todoseq-task-editor-field textarea.todoseq-task-editor-input-error {
   border-color: var(--color-red);
   border-width: 2px;
+}
+
+/* Reserve room for the native select chevron. */
+.todoseq-task-editor-field select {
+  padding: var(--dropdown-padding, var(--size-4-1) var(--size-4-2));
 }
 
 /* Priority flag row - reuses the context menu icon buttons */
@@ -2679,11 +2686,18 @@
 
 .todoseq-task-editor-date-btn {
   flex: 1;
+  display: flex;
+  align-items: center;
+  /* Obsidian buttons are flex boxes centred by default; a date field should
+     read as a left-aligned input. */
+  justify-content: flex-start;
   text-align: left;
+  /* Match the native input height (Obsidian uses border-box globally). */
+  height: var(--input-height);
   padding: var(--size-4-1) var(--size-4-2);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
-  background: var(--background-primary);
+  background-color: var(--background-modifier-form-field);
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   cursor: pointer;
@@ -2694,7 +2708,7 @@
 }
 
 .todoseq-task-editor-date-btn:hover {
-  background: var(--background-modifier-hover);
+  background-color: var(--background-modifier-hover);
 }
 
 .todoseq-task-editor-date-clear {
@@ -2707,8 +2721,10 @@
   background: var(--background-modifier-hover);
 }
 
+/* Keep the clear-button column reserved when no date is set so the
+   Scheduled and Deadline rows stay the same width. */
 .todoseq-task-editor-date-clear.is-hidden {
-  display: none;
+  visibility: hidden;
 }
 
 .todoseq-task-editor-buttons {
@@ -2761,6 +2777,9 @@
 .is-mobile .todoseq-task-editor-modal,
 .is-phone .todoseq-task-editor-modal {
   --todoseq-keyboard-space-allowance: clamp(220px, 35vh, 360px);
+  /* Obsidian sizes the phone modal radius for touch (--touch-radius-xs, ~18px).
+     Use a calmer corner for the editor. */
+  --modal-radius: var(--radius-m);
 }
 
 .is-mobile .todoseq-task-editor-modal.is-keyboard-open .modal-content,
@@ -2785,5 +2804,6 @@
 .callout[data-callout='repeats'] {
   --callout-color: 124, 108, 240;
   --callout-icon: lucide-repeat;
+  /* Themes often enlarge callouts; keep the log compact. */
+  --callout-radius: var(--radius-s);
 }
-

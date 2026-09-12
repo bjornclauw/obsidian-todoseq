@@ -1,25 +1,44 @@
 import { App, TFile } from 'obsidian';
 import { Task } from '../types/task';
 import { CHECKBOX_DETECTION_REGEX, BULLET_LIST_PATTERN } from './patterns';
+import { isRepeatLogLine } from './repeat-log';
 
 export function taskHasCheckbox(task: Task): boolean {
   return CHECKBOX_DETECTION_REGEX.test(task.rawText);
 }
 
+/** Leading whitespace plus quote (`> `) prefixes of a line. */
+function leadingPrefixLength(line: string): number {
+  return line.match(/^\s*(?:>\s*)*/)?.[0].length ?? 0;
+}
+
+/**
+ * True for a task's own metadata lines: DESCRIPTION/STARTED/SCHEDULED/DEADLINE/
+ * CLOSED and the `[!repeats]` log. Quote prefixes are ignored.
+ */
+function isTaskMetadataLine(line: string): boolean {
+  const content = line.replace(/^\s*(?:>\s*)*/, '');
+  return (
+    /^(DESCRIPTION|STARTED|SCHEDULED|DEADLINE|CLOSED):/i.test(content) ||
+    isRepeatLogLine(line)
+  );
+}
+
 export function buildRemovalRange(
   lines: string[],
-  taskLine: number,
+  task: Task,
 ): { start: number; end: number } {
-  let end = taskLine;
-  for (let i = taskLine + 1; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith('SCHEDULED:') || trimmed.startsWith('DEADLINE:')) {
-      end = i;
-    } else {
-      break;
-    }
+  const taskIndentLen = task.indent.length;
+  let end = task.line;
+  for (let i = task.line + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '') break;
+    if (!isTaskMetadataLine(line)) break;
+    // Metadata must be at the task's indent or deeper.
+    if (leadingPrefixLength(line) < taskIndentLen) break;
+    end = i;
   }
-  return { start: taskLine, end };
+  return { start: task.line, end };
 }
 
 export function findSubtaskEnd(
@@ -79,7 +98,7 @@ export function getSubtaskLinesFromLines(
   lines: string[],
   task: Task,
 ): string[] {
-  const { end: dateEnd } = buildRemovalRange(lines, task.line);
+  const { end: dateEnd } = buildRemovalRange(lines, task);
   return extractSubtaskLines(
     lines,
     dateEnd,
@@ -92,7 +111,7 @@ export function getTaskRemovalRange(
   lines: string[],
   task: Task,
 ): { start: number; end: number } {
-  const { start, end: dateEnd } = buildRemovalRange(lines, task.line);
+  const { start, end: dateEnd } = buildRemovalRange(lines, task);
   const subtaskEnd = findSubtaskEnd(
     lines,
     dateEnd,
@@ -104,10 +123,11 @@ export function getTaskRemovalRange(
 
 export function modifyLinesForMigration(
   lines: string[],
-  taskLine: number,
+  task: Task,
   oldKeyword: string,
   migrateState: string,
 ): string[] {
+  const taskLine = task.line;
   const result = [...lines];
   const taskLineContent = result[taskLine];
   if (!taskLineContent) return result;
@@ -125,7 +145,7 @@ export function modifyLinesForMigration(
     );
   }
 
-  const { end } = buildRemovalRange(result, taskLine);
+  const { end } = buildRemovalRange(result, task);
   if (end > taskLine) {
     result.splice(taskLine + 1, end - taskLine);
   }
@@ -134,7 +154,7 @@ export function modifyLinesForMigration(
 }
 
 export function readTaskBlockFromLines(lines: string[], task: Task): string[] {
-  const { start } = buildRemovalRange(lines, task.line);
+  const { start } = buildRemovalRange(lines, task);
   const { end } = getTaskRemovalRange(lines, task);
 
   const parentIndentLen = task.indent.length;

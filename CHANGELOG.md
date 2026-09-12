@@ -17,6 +17,8 @@
 - Reactivating an archived task now keeps its SCHEDULED/DEADLINE/CLOSED/STARTED metadata, so a repeating task keeps recurring after it is un-archived.
 - Fixed `.+` (from-done) repeaters for day and week units to match Org mode: the next date is one interval from the completion day (preserving the original time-of-day), instead of returning the same day or snapping to the original weekday.
 - Fixed stale date/status metadata when cycling a task's state right after editing its date lines in the note (e.g. deleting a `SCHEDULED` line and immediately cycling to DOING left the repeat status behind). State changes now re-read the task's date metadata from the live source (the open editor buffer, otherwise the file) instead of trusting the asynchronously updated state manager, so recurrence decisions and the saved state always match what the note shows.
+- Fixed date lines inserted into a note that has no trailing newline being merged onto the previous line (e.g. adding a `DEADLINE` immediately after the last `SCHEDULED` line).
+- Fixed Copy/Move/Migrate to today's daily note not carrying the whole task block: `DESCRIPTION`/`STARTED`/`CLOSED`/`[!repeats]` were only included for indented tasks, so keyword-only tasks left metadata behind (and Move/Migrate could leave `SCHEDULED`/`DEADLINE` behind when a `DESCRIPTION`/`STARTED` line preceded them). The full metadata block is now recognised at the task's own indent.
 
 ## 0.20.0
 

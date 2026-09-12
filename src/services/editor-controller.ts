@@ -1538,7 +1538,7 @@ export class EditorController {
         const taskKeyword = task.state || 'TODO';
         const modified = modifyLinesForMigration(
           fileLines,
-          lineNumber,
+          task,
           taskKeyword,
           migrateState,
         );

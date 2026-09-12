@@ -174,7 +174,7 @@ export class EmbeddedTaskListRenderer {
     const taskKeyword = task.state || 'TODO';
     const modified = modifyLinesForMigration(
       sourceLines,
-      task.line,
+      task,
       taskKeyword,
       migrateState,
     );

@@ -9,6 +9,7 @@ import {
   findSubtaskEnd,
   extractSubtaskLines,
 } from '../src/utils/task-sub-bullets';
+import { createBaseTask } from './helpers/test-helper';
 
 describe('getDropAction', () => {
   it('returns copy with no modifiers', () => {
@@ -43,7 +44,10 @@ describe('getDropAction', () => {
 describe('buildRemovalRange', () => {
   it('returns single line range when no date lines follow', () => {
     const lines = ['TODO some task', 'NEXT_LINE content', 'ANOTHER line'];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 0 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 0,
+    });
   });
 
   it('includes SCHEDULED line', () => {
@@ -52,7 +56,10 @@ describe('buildRemovalRange', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'NEXT_LINE content',
     ];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 1 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 1,
+    });
   });
 
   it('includes DEADLINE line', () => {
@@ -61,7 +68,10 @@ describe('buildRemovalRange', () => {
       'DEADLINE: <2026-04-03 Fri>',
       'NEXT_LINE content',
     ];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 1 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 1,
+    });
   });
 
   it('includes both SCHEDULED and DEADLINE lines', () => {
@@ -71,7 +81,10 @@ describe('buildRemovalRange', () => {
       'DEADLINE: <2026-04-03 Fri>',
       'NEXT_LINE content',
     ];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 2 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 2,
+    });
   });
 
   it('stops at first non-date line', () => {
@@ -82,12 +95,18 @@ describe('buildRemovalRange', () => {
       'NOT A DATE',
       'DEADLINE: <2026-04-03 Fri>',
     ];
-    expect(buildRemovalRange(lines, 1)).toEqual({ start: 1, end: 2 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 1 }))).toEqual({
+      start: 1,
+      end: 2,
+    });
   });
 
   it('handles task at end of file with no trailing lines', () => {
     const lines = ['some other line', 'TODO some task'];
-    expect(buildRemovalRange(lines, 1)).toEqual({ start: 1, end: 1 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 1 }))).toEqual({
+      start: 1,
+      end: 1,
+    });
   });
 
   it('handles task at end of file with date lines', () => {
@@ -97,7 +116,10 @@ describe('buildRemovalRange', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'DEADLINE: <2026-04-03 Fri>',
     ];
-    expect(buildRemovalRange(lines, 1)).toEqual({ start: 1, end: 3 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 1 }))).toEqual({
+      start: 1,
+      end: 3,
+    });
   });
 
   it('handles indented SCHEDULED/DEADLINE with leading whitespace', () => {
@@ -107,24 +129,35 @@ describe('buildRemovalRange', () => {
       '  DEADLINE: <2026-04-03 Fri>',
       'NEXT content',
     ];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 2 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 2,
+    });
   });
 
-  it('stops at CLOSED line (not a date line to remove)', () => {
+  it('includes SCHEDULED, CLOSED and DEADLINE lines', () => {
     const lines = [
       'TODO some task',
       'SCHEDULED: <2026-04-02 Thu>',
       'CLOSED: [2026-04-01 Wed]',
       'DEADLINE: <2026-04-03 Fri>',
     ];
-    expect(buildRemovalRange(lines, 0)).toEqual({ start: 0, end: 1 });
+    expect(buildRemovalRange(lines, createBaseTask({ line: 0 }))).toEqual({
+      start: 0,
+      end: 3,
+    });
   });
 });
 
 describe('modifyLinesForMigration', () => {
   it('replaces keyword with migrate state', () => {
     const lines = ['TODO buy groceries', 'other content'];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['DONE buy groceries', 'other content']);
   });
 
@@ -134,7 +167,12 @@ describe('modifyLinesForMigration', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['DONE buy groceries', 'other content']);
   });
 
@@ -144,7 +182,12 @@ describe('modifyLinesForMigration', () => {
       'DEADLINE: <2026-04-03 Fri>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['DONE buy groceries', 'other content']);
   });
 
@@ -155,7 +198,12 @@ describe('modifyLinesForMigration', () => {
       'DEADLINE: <2026-04-03 Fri>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'MIGRATED');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'MIGRATED',
+    );
     expect(result).toEqual(['MIGRATED buy groceries', 'other content']);
   });
 
@@ -165,13 +213,23 @@ describe('modifyLinesForMigration', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', '');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      '',
+    );
     expect(result).toEqual(['buy groceries', 'other content']);
   });
 
   it('handles task with no date lines (keyword change only)', () => {
     const lines = ['DOING write tests', 'other content'];
-    const result = modifyLinesForMigration(lines, 0, 'DOING', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'DOING',
+      'DONE',
+    );
     expect(result).toEqual(['DONE write tests', 'other content']);
   });
 
@@ -181,7 +239,12 @@ describe('modifyLinesForMigration', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['- DONE buy groceries', 'other content']);
   });
 
@@ -191,7 +254,12 @@ describe('modifyLinesForMigration', () => {
       'SCHEDULED: <2026-04-02 Thu>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['DONE [#A] important task', 'other content']);
   });
 
@@ -202,7 +270,31 @@ describe('modifyLinesForMigration', () => {
       '  DEADLINE: <2026-04-03 Fri>',
       'other content',
     ];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
+    expect(result).toEqual(['DONE buy groceries', 'other content']);
+  });
+
+  it('removes the full metadata block for a keyword-only task', () => {
+    const lines = [
+      'TODO buy groceries',
+      'DESCRIPTION: x',
+      'STARTED: [2026-03-01 Sun 09:00]',
+      'SCHEDULED: <2026-04-02 Thu>',
+      'DEADLINE: <2026-04-03 Fri>',
+      'CLOSED: [2026-04-01 Wed 10:00]',
+      'other content',
+    ];
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['DONE buy groceries', 'other content']);
   });
 
@@ -215,7 +307,12 @@ describe('modifyLinesForMigration', () => {
       '- [ ] subtask',
       '# Another section',
     ];
-    const result = modifyLinesForMigration(lines, 1, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 1 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual([
       '# Header',
       'DONE buy groceries',
@@ -226,7 +323,12 @@ describe('modifyLinesForMigration', () => {
 
   it('handles case-insensitive keyword replacement', () => {
     const lines = ['todo buy groceries', 'other content'];
-    const result = modifyLinesForMigration(lines, 0, 'todo', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'todo',
+      'DONE',
+    );
     expect(result).toEqual(['DONE buy groceries', 'other content']);
   });
 
@@ -236,13 +338,23 @@ describe('modifyLinesForMigration', () => {
       'TODO buy groceries',
       'SCHEDULED: <2026-04-02 Thu>',
     ];
-    const result = modifyLinesForMigration(lines, 1, 'TODO', 'DONE');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 1 }),
+      'TODO',
+      'DONE',
+    );
     expect(result).toEqual(['# Header', 'DONE buy groceries']);
   });
 
   it('handles empty migrateState removing keyword with list marker', () => {
     const lines = ['- TODO buy groceries', 'SCHEDULED: <2026-04-02 Thu>'];
-    const result = modifyLinesForMigration(lines, 0, 'TODO', '');
+    const result = modifyLinesForMigration(
+      lines,
+      createBaseTask({ line: 0 }),
+      'TODO',
+      '',
+    );
     expect(result).toEqual(['- buy groceries']);
   });
 });

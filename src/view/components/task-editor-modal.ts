@@ -150,13 +150,13 @@ export class TaskEditorModal extends Modal {
       cls: 'todoseq-task-editor-form',
     });
 
-    // Task text (required)
+    // Task text (required, single line - tasks are single lines in the note)
     const textGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
     textGroup.createEl('label', { text: 'Task' });
-    const textInput = textGroup.createEl('textarea', {
+    const textInput = textGroup.createEl('input', {
       cls: 'todoseq-task-editor-text',
       attr: {
-        rows: '2',
+        type: 'text',
         placeholder: 'What needs to be done?',
       },
     });
@@ -331,7 +331,7 @@ export class TaskEditorModal extends Modal {
   }
 
   private async submit(
-    textInput: HTMLTextAreaElement,
+    textInput: HTMLInputElement,
     stateSelect: HTMLSelectElement,
     descInput: HTMLInputElement | null,
   ): Promise<void> {

@@ -194,6 +194,22 @@ export class TaskWriter {
     };
   }
 
+  /**
+   * Leading newline needed when inserting a line at `insertIndex`.
+   *
+   * Obsidian clamps an out-of-range `{ line }` position to the end of the
+   * document, so inserting at `editor.lineCount()` appends after the last
+   * character. When the document does not end with a newline that merges the
+   * inserted line onto the previous one, so prepend one.
+   */
+  private leadingNewlineForInsert(editor: Editor, insertIndex: number): string {
+    if (insertIndex < editor.lineCount()) {
+      return '';
+    }
+    const lastLine = editor.getLine(editor.lineCount() - 1);
+    return typeof lastLine === 'string' && lastLine.length > 0 ? '\n' : '';
+  }
+
   /** Editor-API mirror of {@link applyRepeatLogToLines}. */
   private updateRepeatLogInEditor(
     editor: Editor,
@@ -220,8 +236,9 @@ export class TaskWriter {
     // terminated the last replaced line. Re-add it when content follows, or the
     // log swallows the blank line under it and pulls the rest of the note in.
     const suffix = endBefore < editor.lineCount() ? '\n' : '';
+    const prefix = this.leadingNewlineForInsert(editor, start);
     editor.replaceRange(
-      `${region.join('\n')}${suffix}`,
+      `${prefix}${region.join('\n')}${suffix}`,
       { line: start, ch: 0 },
       { line: endBefore, ch: 0 },
     );
@@ -1646,10 +1663,11 @@ export class TaskWriter {
       return 0;
     }
 
+    const insertIdx = task.line + 1;
     editor.replaceRange(
-      `${descLine}\n`,
-      { line: task.line + 1, ch: 0 },
-      { line: task.line + 1, ch: 0 },
+      `${this.leadingNewlineForInsert(editor, insertIdx)}${descLine}\n`,
+      { line: insertIdx, ch: 0 },
+      { line: insertIdx, ch: 0 },
     );
     return 1;
   }
@@ -1813,7 +1831,11 @@ export class TaskWriter {
           const indent = this.getEffectiveDateLineIndent(lines, -1, task);
           const from: EditorPosition = { line: insertIndex, ch: 0 };
           const to: EditorPosition = { line: insertIndex, ch: 0 };
-          editor.replaceRange(`${indent}STARTED: ${dateStr}\n`, from, to);
+          editor.replaceRange(
+            `${this.leadingNewlineForInsert(editor, insertIndex)}${indent}STARTED: ${dateStr}\n`,
+            from,
+            to,
+          );
           lineDelta = 1;
         }
       } else {
@@ -1948,7 +1970,11 @@ export class TaskWriter {
           // Insert new CLOSED line at calculated position
           const from: EditorPosition = { line: insertIndex, ch: 0 };
           const to: EditorPosition = { line: insertIndex, ch: 0 };
-          editor.replaceRange(`${closedIndent}CLOSED: ${dateStr}\n`, from, to);
+          editor.replaceRange(
+            `${this.leadingNewlineForInsert(editor, insertIndex)}${closedIndent}CLOSED: ${dateStr}\n`,
+            from,
+            to,
+          );
           lineDelta = 1; // New line inserted
         }
       } else {
@@ -2400,7 +2426,7 @@ export class TaskWriter {
     );
     const indent = this.getEffectiveDateLineIndent(lines, -1, task);
     editor.replaceRange(
-      `${indent}${dateType}: ${dateStr}\n`,
+      `${this.leadingNewlineForInsert(editor, insertIdx)}${indent}${dateType}: ${dateStr}\n`,
       { line: insertIdx, ch: 0 },
       { line: insertIdx, ch: 0 },
     );

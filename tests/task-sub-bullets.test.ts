@@ -332,3 +332,48 @@ describe('readTaskBlockFromLines', () => {
     ]);
   });
 });
+
+describe('full metadata block on keyword-only tasks', () => {
+  it('getTaskRemovalRange includes DESCRIPTION/STARTED/SCHEDULED/DEADLINE/CLOSED', () => {
+    const lines = [
+      'TODO Task',
+      'DESCRIPTION: x',
+      'STARTED: [2026-03-01 Sun 09:00]',
+      'SCHEDULED: <2026-03-10 Tue>',
+      'DEADLINE: <2026-03-20 Fri>',
+      'CLOSED: [2026-03-01 Sun 10:00]',
+      'NEXT',
+    ];
+    const task = createTask({ rawText: 'TODO Task', line: 0, indent: '' });
+    expect(getTaskRemovalRange(lines, task)).toEqual({ start: 0, end: 5 });
+  });
+
+  it('readTaskBlockFromLines carries the whole metadata block', () => {
+    const lines = [
+      'TODO Task',
+      'DESCRIPTION: x',
+      'SCHEDULED: <2026-03-10 Tue>',
+      'DEADLINE: <2026-03-20 Fri>',
+      'NEXT',
+    ];
+    const task = createTask({ rawText: 'TODO Task', line: 0, indent: '' });
+    expect(readTaskBlockFromLines(lines, task)).toEqual([
+      'TODO Task',
+      'DESCRIPTION: x',
+      'SCHEDULED: <2026-03-10 Tue>',
+      'DEADLINE: <2026-03-20 Fri>',
+    ]);
+  });
+
+  it('includes the [!repeats] log', () => {
+    const lines = [
+      'TODO Pay rent',
+      'SCHEDULED: <2026-03-10 Tue +1w>',
+      '> [!repeats]- Repeats: 1 (latest 50)',
+      '> - #1 · closed 2026-03-01 Sun 09:00 · due 2026-03-01 Sun',
+      'NEXT',
+    ];
+    const task = createTask({ rawText: 'TODO Pay rent', line: 0, indent: '' });
+    expect(getTaskRemovalRange(lines, task)).toEqual({ start: 0, end: 3 });
+  });
+});

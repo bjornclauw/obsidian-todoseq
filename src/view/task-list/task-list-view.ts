@@ -1672,7 +1672,7 @@ export class TaskListView extends ItemView {
     const taskKeyword = task.state || 'TODO';
     const modified = modifyLinesForMigration(
       sourceLines,
-      task.line,
+      task,
       taskKeyword,
       migrateState,
     );

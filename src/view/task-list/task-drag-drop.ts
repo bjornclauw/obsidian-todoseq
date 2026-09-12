@@ -416,10 +416,7 @@ export class TaskDragDropHandler {
       const sourceLines = sourceContent.split('\n');
 
       if (action === 'move') {
-        const { start, end: dateEnd } = buildRemovalRange(
-          sourceLines,
-          task.line,
-        );
+        const { start, end: dateEnd } = buildRemovalRange(sourceLines, task);
         const subtaskEnd = findSubtaskEnd(
           sourceLines,
           dateEnd,
@@ -436,7 +433,7 @@ export class TaskDragDropHandler {
         const taskKeyword = task.state || 'TODO';
         const modified = modifyLinesForMigration(
           sourceLines,
-          task.line,
+          task,
           taskKeyword,
           migrateState,
         );
