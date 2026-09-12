@@ -153,7 +153,10 @@ describe('TaskWriter Instance Methods', () => {
         .fn()
         .mockReturnValue(mockTFile);
 
-      await taskWriter.applyLineUpdate(task, 'DONE', true, true);
+      await taskWriter.applyLineUpdate(task, 'DONE', {
+        keepPriority: true,
+        forceVaultApi: true,
+      });
 
       expect(mockApp.vault.process).toHaveBeenCalled();
       expect(mockEditor.replaceRange).not.toHaveBeenCalled();
@@ -454,13 +457,9 @@ describe('TaskWriter Instance Methods', () => {
           },
         );
 
-      const result = await taskWriter.applyLineUpdate(
-        task,
-        'TODO',
-        true,
-        false,
-        true,
-      );
+      const result = await taskWriter.applyLineUpdate(task, 'TODO', {
+        recordCompletion: true,
+      });
 
       expect(processed).toContain('CLOSED:');
       expect(result.closedDate).not.toBeNull();
@@ -633,13 +632,7 @@ describe('TaskWriter Instance Methods', () => {
 
       await taskWriter.updateTaskState(task);
 
-      expect(applyLineUpdateSpy).toHaveBeenCalledWith(
-        task,
-        'DOING',
-        true,
-        false,
-        false,
-      );
+      expect(applyLineUpdateSpy).toHaveBeenCalledWith(task, 'DOING', {});
     });
 
     it('should update task to DONE for custom keywords', async () => {
@@ -657,13 +650,7 @@ describe('TaskWriter Instance Methods', () => {
       await taskWriter.updateTaskState(task);
 
       // CUSTOM is inactive keyword, should transition to default Active (DOING)
-      expect(applyLineUpdateSpy).toHaveBeenCalledWith(
-        task,
-        'DOING',
-        true,
-        false,
-        false,
-      );
+      expect(applyLineUpdateSpy).toHaveBeenCalledWith(task, 'DOING', {});
     });
 
     it('should use specified state when provided', async () => {
@@ -680,13 +667,7 @@ describe('TaskWriter Instance Methods', () => {
 
       await taskWriter.updateTaskState(task, 'LATER');
 
-      expect(applyLineUpdateSpy).toHaveBeenCalledWith(
-        task,
-        'LATER',
-        true,
-        false,
-        false,
-      );
+      expect(applyLineUpdateSpy).toHaveBeenCalledWith(task, 'LATER', {});
     });
   });
 
@@ -723,12 +704,7 @@ describe('TaskWriter Instance Methods', () => {
       await taskWriter.updateTaskCycleState(task);
 
       // CUSTOM is inactive keyword, should transition to default Active (DOING)
-      expect(applyLineUpdateSpy).toHaveBeenCalledWith(
-        task,
-        'DOING',
-        true,
-        false,
-      );
+      expect(applyLineUpdateSpy).toHaveBeenCalledWith(task, 'DOING', {});
     });
 
     it('should use specified state when provided for cycle', async () => {
@@ -745,12 +721,7 @@ describe('TaskWriter Instance Methods', () => {
 
       await taskWriter.updateTaskCycleState(task, 'LATER');
 
-      expect(applyLineUpdateSpy).toHaveBeenCalledWith(
-        task,
-        'LATER',
-        true,
-        false,
-      );
+      expect(applyLineUpdateSpy).toHaveBeenCalledWith(task, 'LATER', {});
     });
 
     it('should handle custom keywords in updateTaskCycleState', async () => {

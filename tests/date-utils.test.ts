@@ -1,4 +1,8 @@
 import { DateUtils, warningPeriodToDays } from '../src/utils/date-utils';
+import { LocaleUtils } from '../src/utils/locale-utils';
+
+// Pin the display locale so formatting is deterministic across machines.
+LocaleUtils.setLocale('en');
 
 // Timezones to test with
 const testTimezones = ['UTC', 'America/Toronto', 'Asia/Tokyo'];
@@ -6,30 +10,6 @@ const testTimezones = ['UTC', 'America/Toronto', 'Asia/Tokyo'];
 // Wrap all tests to run in each timezone
 testTimezones.forEach((timezone) => {
   describe(`DateUtils (timezone: ${timezone})`, () => {
-    // Force a deterministic locale for all toLocale* calls in tests
-    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
-    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
-
-    beforeAll(() => {
-      Date.prototype.toLocaleDateString = function (
-        locales?: any,
-        options?: any,
-      ) {
-        return originalToLocaleDateString.call(this, 'en-US', options);
-      };
-      Date.prototype.toLocaleTimeString = function (
-        locales?: any,
-        options?: any,
-      ) {
-        return originalToLocaleTimeString.call(this, 'en-US', options);
-      };
-    });
-
-    afterAll(() => {
-      Date.prototype.toLocaleDateString = originalToLocaleDateString;
-      Date.prototype.toLocaleTimeString = originalToLocaleTimeString;
-    });
-
     describe('formatDateForDisplay', () => {
       // Mock the current date to ensure consistent test results
       beforeEach(() => {

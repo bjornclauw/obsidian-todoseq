@@ -700,12 +700,9 @@ export class TaskUpdateCoordinator {
   ): Promise<Task> {
     switch (context.type) {
       case 'state':
-        return taskEditor.updateTaskState(
-          task,
-          context.newState,
-          false,
-          context.recordCompletion,
-        );
+        return taskEditor.updateTaskState(task, context.newState, {
+          recordCompletion: context.recordCompletion,
+        });
 
       case 'scheduled-date':
         if (!context.newDate) {

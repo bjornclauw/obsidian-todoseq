@@ -351,11 +351,9 @@ export class ReaderViewFormatter {
       );
     } else if (this.plugin.taskEditor) {
       // Fallback to TaskEditor if coordinator not available
-      await this.plugin.taskEditor.updateTaskState(
-        taskToUpdate,
-        newState,
-        true,
-      );
+      await this.plugin.taskEditor.updateTaskState(taskToUpdate, newState, {
+        forceVaultApi: true,
+      });
     }
 
     // Refresh the reader view to show changes (like CLOSED date line added/removed)
@@ -2949,11 +2947,9 @@ export class ReaderViewFormatter {
       );
     } else if (this.plugin.taskEditor) {
       // Fallback to TaskEditor if coordinator not available
-      await this.plugin.taskEditor.updateTaskState(
-        taskToUpdate,
-        newState,
-        true,
-      );
+      await this.plugin.taskEditor.updateTaskState(taskToUpdate, newState, {
+        forceVaultApi: true,
+      });
     }
 
     // Refresh the reader view to show changes (like CLOSED date line added/removed)

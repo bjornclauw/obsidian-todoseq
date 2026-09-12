@@ -785,7 +785,9 @@ export class EmbeddedTaskItemRenderer {
           task.tableCell?.cellIndex,
         );
       } else if (this.plugin.taskEditor) {
-        await this.plugin.taskEditor.updateTaskState(task, newState, true);
+        await this.plugin.taskEditor.updateTaskState(task, newState, {
+          forceVaultApi: true,
+        });
       }
     } catch (error) {
       console.error('Error updating task state:', error);

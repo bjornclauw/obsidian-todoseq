@@ -16,11 +16,13 @@ import { moment } from 'obsidian';
 let localeOverride: string | null = null;
 
 const relativeTimeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+const weekdayLabelCache = new Map<string, string[]>();
 
 export class LocaleUtils {
   /** Override the locale (e.g. from tests). Pass null to clear. */
   static setLocale(locale: string | null): void {
     localeOverride = locale;
+    weekdayLabelCache.clear();
   }
 
   /** The active locale, e.g. `en`, `nl`, `de`, `zh-cn`. */
@@ -75,6 +77,11 @@ export class LocaleUtils {
    * `2024-01-07` is a Sunday, used as the anchor for the names.
    */
   static getWeekdayLabels(weekStartsOn: 'Monday' | 'Sunday'): string[] {
+    const locale = this.getLocale();
+    const cacheKey = `${locale}|${weekStartsOn}`;
+    const cached = weekdayLabelCache.get(cacheKey);
+    if (cached) return cached;
+
     const startDay = weekStartsOn === 'Monday' ? 1 : 0;
     const labels: string[] = [];
     for (let i = 0; i < 7; i++) {
@@ -82,6 +89,7 @@ export class LocaleUtils {
       const date = new Date(2024, 0, 7 + dayIndex);
       labels.push(this.formatDate(date, { weekday: 'short' }));
     }
+    weekdayLabelCache.set(cacheKey, labels);
     return labels;
   }
 

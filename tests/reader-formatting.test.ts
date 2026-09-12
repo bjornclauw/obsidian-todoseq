@@ -1504,7 +1504,7 @@ describe('ReaderViewFormatter', () => {
       expect(taskEditor.updateTaskState).toHaveBeenCalledWith(
         mockTask,
         'DONE',
-        true,
+        { forceVaultApi: true },
       );
 
       (formatter as any).plugin.taskUpdateCoordinator = savedCoordinator;

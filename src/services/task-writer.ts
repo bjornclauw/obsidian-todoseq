@@ -255,10 +255,16 @@ export class TaskWriter {
   async applyLineUpdate(
     task: Task,
     newState: string,
-    keepPriority = true,
-    forceVaultApi = false,
-    recordCompletion = false,
+    options: {
+      keepPriority?: boolean;
+      forceVaultApi?: boolean;
+      recordCompletion?: boolean;
+    } = {},
   ): Promise<Task> {
+    const keepPriority = options.keepPriority ?? true;
+    const forceVaultApi = options.forceVaultApi ?? false;
+    const recordCompletion = options.recordCompletion ?? false;
+
     // Table tasks use vault.process for cell-level writes
     if (task.isTableTask && task.tableCell) {
       return this.applyTableCellUpdate(
@@ -725,8 +731,7 @@ export class TaskWriter {
   async updateTaskState(
     task: Task,
     nextState: string | null = null,
-    forceVaultApi = false,
-    recordCompletion = false,
+    options: { forceVaultApi?: boolean; recordCompletion?: boolean } = {},
   ): Promise<Task> {
     let state: string;
     if (nextState == null) {
@@ -739,20 +744,14 @@ export class TaskWriter {
     } else {
       state = nextState;
     }
-    return await this.applyLineUpdate(
-      task,
-      state,
-      true,
-      forceVaultApi,
-      recordCompletion,
-    );
+    return await this.applyLineUpdate(task, state, options);
   }
 
   // Cycles a task to its next state using TaskStateTransitionManager.getCycleState() and persists change
   async updateTaskCycleState(
     task: Task,
     nextState: string | null = null,
-    forceVaultApi = false,
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task> {
     let state: string;
     if (nextState == null) {
@@ -765,7 +764,7 @@ export class TaskWriter {
     } else {
       state = nextState;
     }
-    return await this.applyLineUpdate(task, state, true, forceVaultApi);
+    return await this.applyLineUpdate(task, state, options);
   }
 
   // Updates task priority and persists change
@@ -1287,13 +1286,9 @@ export class TaskWriter {
     // Task line + state (handles CLOSED/STARTED via the existing pipeline).
     // recordCompletion stamps a CLOSED date even when writing an inactive
     // state (recurring roll-forward).
-    const afterState = await this.applyLineUpdate(
-      updatedTask,
-      fields.state,
-      true,
-      false,
-      options.recordCompletion ?? false,
-    );
+    const afterState = await this.applyLineUpdate(updatedTask, fields.state, {
+      recordCompletion: options.recordCompletion ?? false,
+    });
 
     // DESCRIPTION (always directly below the task line).
     // Table tasks store everything inline in the cell, so a separate

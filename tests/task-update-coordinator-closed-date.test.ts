@@ -340,8 +340,7 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
       expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
         task,
         'TODO',
-        false,
-        true,
+        { recordCompletion: true },
       );
     });
 
@@ -359,8 +358,7 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
       expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
         task,
         'DONE',
-        false,
-        false,
+        { recordCompletion: false },
       );
     });
   });
