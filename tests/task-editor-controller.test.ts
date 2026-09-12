@@ -157,6 +157,30 @@ describe('TaskEditorController', () => {
       expect(target.task?.rawText).toBe('TODO Task text');
     });
 
+    it('walks up from a [!repeats] log line to the owning task', () => {
+      const { controller } = createHarness([
+        'TODO Pay rent',
+        '  SCHEDULED: <2026-03-10 Tue +1w>',
+        '  > [!repeats]- Repeats: 1 (latest 50)',
+        '  > - #1 · closed 2026-03-01 Sun 09:12 · due 2026-03-01 Sun',
+      ]);
+
+      const target = (
+        controller as unknown as {
+          resolveTarget: (
+            path: string,
+            line: number,
+          ) => {
+            line: number;
+            task: { rawText: string } | null;
+          };
+        }
+      ).resolveTarget('test.md', 3);
+
+      expect(target.line).toBe(0);
+      expect(target.task?.rawText).toBe('TODO Pay rent');
+    });
+
     it('returns a null task when the cursor is not on a task', () => {
       const { controller } = createHarness(['Just some paragraph text']);
 

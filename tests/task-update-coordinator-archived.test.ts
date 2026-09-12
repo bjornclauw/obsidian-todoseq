@@ -4,6 +4,7 @@
 
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
+import { TaskParser } from '../src/parser/task-parser';
 import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
 import {
@@ -302,6 +303,109 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
     expect(reactivatedTask?.scheduledDateRepeat).not.toBeNull();
     expect(reactivatedTask?.scheduledDate).not.toBeNull();
     expect(reactivatedTask?.closedDate).not.toBeNull();
+  });
+
+  it('re-reads date metadata from the file before a state update', async () => {
+    // The stored copy still has the old SCHEDULED repeater, but the file no
+    // longer contains it (the scanner has not caught up yet).
+    const stale = createBaseTask({
+      path: 'test.md',
+      line: 0,
+      state: 'TODO',
+      rawText: 'TODO Pay rent',
+      scheduledDate: new Date('2026-03-10'),
+      scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+    });
+    taskStateManager.addTask(stale);
+    mockPlugin.vaultScanner.getParser.mockReturnValue(
+      TaskParser.create(keywordManager, null),
+    );
+    mockApp.vault.read.mockResolvedValue('TODO Pay rent');
+
+    await taskUpdateCoordinator.updateTaskByPath(
+      'test.md',
+      0,
+      'DOING',
+      'editor',
+    );
+
+    const updated = taskStateManager.findTaskByPathAndLine('test.md', 0);
+    expect(updated?.state).toBe('DOING');
+    expect(updated?.scheduledDate).toBeNull();
+    expect(updated?.scheduledDateRepeat).toBeNull();
+  });
+
+  it('re-reads date metadata from an open editor buffer before a state update', async () => {
+    const stale = createBaseTask({
+      path: 'test.md',
+      line: 0,
+      state: 'TODO',
+      rawText: 'TODO Pay rent',
+      scheduledDate: new Date('2026-03-10'),
+      scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+    });
+    taskStateManager.addTask(stale);
+    mockPlugin.vaultScanner.getParser.mockReturnValue(
+      TaskParser.create(keywordManager, null),
+    );
+
+    // The editor buffer no longer has the SCHEDULED line.
+    const editorLines = ['TODO Pay rent'];
+    const editor = {
+      lineCount: () => editorLines.length,
+      getLine: (i: number) => editorLines[i] ?? '',
+    };
+    (mockApp.workspace as unknown as Record<string, unknown>).getLeavesOfType =
+      jest
+        .fn()
+        .mockReturnValue([{ view: { file: { path: 'test.md' }, editor } }]);
+
+    await taskUpdateCoordinator.updateTaskByPath(
+      'test.md',
+      0,
+      'DOING',
+      'editor',
+    );
+
+    const updated = taskStateManager.findTaskByPathAndLine('test.md', 0);
+    expect(updated?.state).toBe('DOING');
+    expect(updated?.scheduledDate).toBeNull();
+    expect(updated?.scheduledDateRepeat).toBeNull();
+  });
+
+  it('keeps the repeater when it is still present in the editor buffer', async () => {
+    const stale = createBaseTask({
+      path: 'test.md',
+      line: 0,
+      state: 'TODO',
+      rawText: 'TODO Pay rent',
+    });
+    taskStateManager.addTask(stale);
+    mockPlugin.vaultScanner.getParser.mockReturnValue(
+      TaskParser.create(keywordManager, null),
+    );
+
+    const editorLines = ['TODO Pay rent', '  SCHEDULED: <2026-03-10 Tue +1w>'];
+    const editor = {
+      lineCount: () => editorLines.length,
+      getLine: (i: number) => editorLines[i] ?? '',
+    };
+    (mockApp.workspace as unknown as Record<string, unknown>).getLeavesOfType =
+      jest
+        .fn()
+        .mockReturnValue([{ view: { file: { path: 'test.md' }, editor } }]);
+
+    await taskUpdateCoordinator.updateTaskByPath(
+      'test.md',
+      0,
+      'DOING',
+      'editor',
+    );
+
+    const updated = taskStateManager.findTaskByPathAndLine('test.md', 0);
+    expect(updated?.state).toBe('DOING');
+    expect(updated?.scheduledDate).toBeTruthy();
+    expect(updated?.scheduledDateRepeat?.raw).toBe('+1w');
   });
 
   it('should NOT re-add task when transitioning to archived state', async () => {

@@ -649,6 +649,18 @@ describe('DatePicker', () => {
       expect(repeatLabel?.textContent).toBe('Repeat');
     });
 
+    it('should hide the repeat section when allowRepeat is false', async () => {
+      const noRepeatPicker = new DatePicker(callbacks, {
+        weekStartsOn: 'Monday',
+        allowRepeat: false,
+      });
+      await noRepeatPicker.show({ x: 100, y: 100 });
+      expect(
+        activeDocument.querySelector('.todoseq-date-picker-repeat'),
+      ).toBeNull();
+      noRepeatPicker.cleanup();
+    });
+
     it('should show formatted repeat when repeat is selected', async () => {
       const repeat = {
         type: '.+' as const,

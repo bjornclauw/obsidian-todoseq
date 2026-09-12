@@ -36,6 +36,7 @@ export interface Task {
   _lastUpdateTime?: number; // timestamp of last task update by TODOseq (used for race condition prevention)
   isTableTask?: boolean; // true if task was parsed from a markdown table cell
   tableCell?: { cellIndex: number }; // position info for table cell tasks
+  repeatCount?: number | null; // total completed occurrences from the [!repeats] log title
 }
 
 export type KeywordGroup =

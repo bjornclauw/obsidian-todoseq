@@ -12,6 +12,7 @@ import {
 } from '../utils/task-urgency';
 import { getDailyNoteInfo } from '../utils/daily-note-utils';
 import { extractDateMetadata } from '../utils/date-repeater';
+import { parseRepeatLogTotal } from '../utils/repeat-log';
 import {
   getIndentLength,
   parseTableCells,
@@ -809,6 +810,7 @@ export class TaskParser implements ITaskParser {
     scheduledWarningPeriod: WarningPeriodInfo | null;
     deadlineWarningPeriod: WarningPeriodInfo | null;
     description: string | null;
+    repeatCount: number | null;
   } {
     let scheduledDate: Date | null = null;
     let scheduledDateRepeat: DateRepeatInfo | null = null;
@@ -819,6 +821,7 @@ export class TaskParser implements ITaskParser {
     let scheduledWarningPeriod: WarningPeriodInfo | null = null;
     let deadlineWarningPeriod: WarningPeriodInfo | null = null;
     let description: string | null = null;
+    let repeatCount: number | null = null;
 
     let scheduledFound = false;
     let deadlineFound = false;
@@ -827,6 +830,11 @@ export class TaskParser implements ITaskParser {
 
     for (let i = startIndex; i < lines.length; i++) {
       const nextLine = lines[i];
+
+      // Guard against sparse arrays (parseTaskBlock may pass them).
+      if (nextLine === undefined) {
+        break;
+      }
 
       // Check if we've moved to a different indent level or non-empty line that's not a date line
       const nextLineTrimmed = nextLine.trim();
@@ -883,6 +891,14 @@ export class TaskParser implements ITaskParser {
           );
         }
       } else {
+        // Check for the recurring-completion log callout title so the running
+        // total is available even though the log sits after the date lines.
+        const repeatTotal = parseRepeatLogTotal(nextLine);
+        if (repeatTotal !== null) {
+          repeatCount = repeatTotal;
+          continue;
+        }
+
         // Check for DESCRIPTION: line
         const descText = this.getDescriptionText(nextLine);
         if (descText !== null) {
@@ -913,6 +929,7 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      repeatCount,
     };
   }
 
@@ -1032,6 +1049,11 @@ export class TaskParser implements ITaskParser {
 
     for (let i = startIndex; i < lines.length; i++) {
       const nextLine = lines[i];
+
+      // Guard against sparse arrays (parseTaskBlock may pass them).
+      if (nextLine === undefined) {
+        break;
+      }
 
       // Handle quoted lines specially for indent calculation
       let contentLine = nextLine;
@@ -1283,6 +1305,128 @@ export class TaskParser implements ITaskParser {
     }
 
     return tasks;
+  }
+
+  /**
+   * Parse the single task that starts at `lines[index]`, together with its
+   * following SCHEDULED/DEADLINE/CLOSED/STARTED/DESCRIPTION lines.
+   *
+   * Unlike {@link parseFile} this does not run the code-fence state machine and
+   * only ever looks from `index` onward (the date/subtask scan stops at the
+   * first unrelated line), so it is O(block) and allocates no synthetic file.
+   *
+   * Intended for re-reading a known task at write time from the live editor
+   * buffer or from freshly read file contents, where the cached task's parsed
+   * date/repeat metadata may be stale.
+   *
+   * @param lines Full (or sparse, indexed from the file start) lines array
+   * @param index Index of the task line within `lines`
+   * @param path File path stored on the returned task
+   * @param file Optional TFile for daily-note detection
+   * @param cellIndex Optional table-cell index to disambiguate table tasks
+   */
+  public parseTaskBlock(
+    lines: string[],
+    index: number,
+    path: string,
+    file?: TFile,
+    cellIndex?: number,
+  ): Task | null {
+    if (index < 0 || index >= lines.length) {
+      return null;
+    }
+
+    const tasks = this.parseTaskAtLine(
+      lines,
+      index,
+      path,
+      new Set<number>(),
+      file,
+    );
+    if (tasks.length === 0) {
+      return null;
+    }
+    if (cellIndex !== undefined) {
+      return (
+        tasks.find((task) => task.tableCell?.cellIndex === cellIndex) ??
+        tasks[0]
+      );
+    }
+    return tasks[0];
+  }
+
+  /**
+   * Parse the task(s) beginning at `lines[index]`. Mirrors the per-line
+   * dispatch in {@link parseFile} without the enclosing code-fence/block state.
+   */
+  private parseTaskAtLine(
+    lines: string[],
+    index: number,
+    path: string,
+    processedLines: Set<number>,
+    file?: TFile,
+  ): Task[] {
+    const line = lines[index];
+    if (line === undefined || line.trim() === '') {
+      return [];
+    }
+
+    if (FOOTNOTE_DEFINITION_REGEX.test(line)) {
+      const task = this.tryParseFootnoteTask(
+        line,
+        path,
+        index,
+        lines,
+        processedLines,
+      );
+      return task ? [task] : [];
+    }
+
+    if (SINGLE_LINE_COMMENT_REGEX.test(line)) {
+      if (!this.includeCommentBlocks) {
+        return [];
+      }
+      const task = this.tryParseCommentBlockTask(
+        line,
+        path,
+        index,
+        lines,
+        processedLines,
+      );
+      return task ? [task] : [];
+    }
+
+    if (/^\s*\|/.test(line) && !this.testRegex.test(line)) {
+      return this.parseTasksFromTableCells(line, index, path);
+    }
+
+    if (this.headingRegex.test(line)) {
+      const task = this.tryParseHeadingTask(
+        line,
+        path,
+        index,
+        lines,
+        processedLines,
+        file,
+      );
+      return task ? [task] : [];
+    }
+
+    if (!this.shouldParseLine(line, undefined, false)) {
+      return [];
+    }
+
+    const taskDetails = this.extractTaskDetails(line, this.captureRegex);
+    const task = this.createTaskFromDetails(
+      line,
+      path,
+      index,
+      taskDetails,
+      lines,
+      processedLines,
+      file,
+    );
+    return task ? [task] : [];
   }
 
   /**
@@ -1687,6 +1831,7 @@ export class TaskParser implements ITaskParser {
       deadlineDateRepeat,
       scheduledWarningPeriod,
       deadlineWarningPeriod,
+      repeatCount,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -1697,6 +1842,7 @@ export class TaskParser implements ITaskParser {
     task.startedDate = startedDate;
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
+    task.repeatCount = repeatCount;
 
     // Extract subtasks from lines following date lines
     // Footnote tasks don't have checkboxes
@@ -1821,6 +1967,7 @@ export class TaskParser implements ITaskParser {
       deadlineDateRepeat,
       scheduledWarningPeriod,
       deadlineWarningPeriod,
+      repeatCount,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -1831,6 +1978,7 @@ export class TaskParser implements ITaskParser {
     task.startedDate = startedDate;
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
+    task.repeatCount = repeatCount;
 
     // Extract subtasks from lines following date lines
     // Check if parent task has a checkbox (use CHECKBOX_DETECTION_REGEX to detect
@@ -1946,6 +2094,7 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      repeatCount,
     } = this.extractTaskDates(lines, index + 1, indent);
 
     task.scheduledDate = scheduledDate;
@@ -1957,6 +2106,7 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
+    task.repeatCount = repeatCount;
 
     // Calculate urgency for non-completed tasks
     if (!task.completed) {
@@ -2096,6 +2246,7 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      repeatCount,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -2107,6 +2258,7 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
+    task.repeatCount = repeatCount;
 
     // Extract subtasks from lines following date lines
     // Check if parent task has a checkbox (use CHECKBOX_DETECTION_REGEX to detect

@@ -402,8 +402,9 @@ FIXME Handle edge cases
 - Adds a CLOSED date when tasks are marked as completed
 - CLOSED date uses Org-mode syntax with square brackets: `CLOSED: [2025-01-18 Fri 14:30]`
 - Records the date and time when the task was completed
-- Removes CLOSED date when a non-recurring completed task is reactivated
-- Keeps CLOSED when a task is archived or when the task is recurring (last-completion record)
+- Removes CLOSED date when a completed task is reactivated
+- Keeps CLOSED when a task is archived
+- Recurring completions do not write CLOSED when "Track repeat history" is enabled; otherwise a CLOSED date is kept as the last-completion record
 
 **When Disabled:**
 
@@ -430,6 +431,34 @@ FIXME Handle edge cases
 
 - No STARTED date is added automatically
 - Manual STARTED dates in notes are still recognized and parsed
+
+### Track Repeat History
+
+**Setting**: "Track repeat history" (toggle)
+
+**Description**: Record each recurring completion in a collapsed `[!repeats]` callout instead of writing a CLOSED date.
+
+**Default**: Enabled
+
+**When Enabled:**
+
+- Adds/refreshes a collapsed callout at the end of a recurring task with one entry per completed occurrence (iteration, completion time and occurrence date), newest first
+- Removes any CLOSED date left on the recurring task by an older version
+- The callout title stores the running total so iteration numbers continue past the configured limit
+
+**When Disabled:**
+
+- Recurring completions fall back to writing a CLOSED date (when "Track closed date" is enabled), and no `[!repeats]` callout is written
+
+### Repeat History Limit
+
+**Setting**: "Repeat history limit" (number)
+
+**Description**: Maximum number of recent completions kept in each `[!repeats]` callout.
+
+**Default**: 50 (minimum 1)
+
+The oldest entries are dropped once the limit is reached; the running total in the callout title continues counting.
 
 ### Smart Date Recognition
 

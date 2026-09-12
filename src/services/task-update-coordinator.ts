@@ -10,6 +10,9 @@
  * - Async phase (background): file write, conditional recurrence scheduling (for state updates with repeating dates), state finalization
  * - Per-task locking prevents race conditions from rapid updates
  * - Per-file queueing ensures serialized writes to same file
+ * - State updates re-read date/repeat metadata from the live source (open
+ *   editor buffer, else the file) so an asynchronously-updated cache cannot
+ *   drive recurrence or finalization from stale data
  *
  * This design ensures consistent behavior on both desktop and mobile.
  */
@@ -20,7 +23,7 @@ import { hasRepeatingDates } from '../utils/date-repeater';
 import TodoTracker from '../main';
 import { TaskStateManager } from './task-state-manager';
 import { TaskWriter } from './task-writer';
-import { TFile, MarkdownView } from 'obsidian';
+import { TFile, MarkdownView, Editor } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { ChangeTracker } from './change-tracker';
 import {
@@ -249,7 +252,24 @@ export class TaskUpdateCoordinator {
    * @returns Promise resolving when async phase is complete (for testing)
    */
   async updateTask(context: UpdateContext): Promise<void> {
-    const procContext = this.buildProcessingContext(context);
+    let effective = context;
+    if (context.type === 'state') {
+      // Refresh date/repeat metadata from the live source before deciding
+      // recurrence and finalising state (see resolveLiveTaskFromEditor).
+      const fromEditor = this.resolveLiveTaskFromEditor(context.task);
+      if (fromEditor) {
+        effective = { ...context, task: fromEditor };
+      } else if (this.plugin.vaultScanner?.getParser()) {
+        const fromVault = await this.resolveLiveStateTaskFromVault(
+          context.task,
+        );
+        if (fromVault) {
+          effective = { ...context, task: fromVault };
+        }
+      }
+    }
+
+    const procContext = this.buildProcessingContext(effective);
     this.performSyncPhase(procContext);
     return this.queueAsyncPhase(procContext);
   }
@@ -599,6 +619,167 @@ export class TaskUpdateCoordinator {
   }
 
   /**
+   * Re-read a task's date/repeat/CLOSED metadata from its live source before a
+   * state update.
+   *
+   * The {@link TaskStateManager} copy is updated asynchronously by the vault
+   * scanner, so it can be stale right after the user edits a date line (or the
+   * scanner's skip-own-writes window suppresses the change). Deciding recurrence
+   * or finalising state from that stale copy is what previously left a repeat
+   * status behind after the SCHEDULED line was deleted.
+   *
+   * The cached task is still used for identity: we locate it by its recorded
+   * line (falling back to a unique raw-text match) and only refresh its fields.
+   *
+   * The editor case is synchronous (freshest and cheap) so optimistic UI is not
+   * delayed; the file case is async because it needs a read.
+   */
+  private resolveLiveTaskFromEditor(task: Task): Task | null {
+    const parser = this.plugin.vaultScanner?.getParser();
+    if (!parser) {
+      return null;
+    }
+
+    const editor = this.findEditorForPath(task.path);
+    if (!editor) {
+      return null;
+    }
+
+    try {
+      const index = this.locateTaskLine(
+        (i) => editor.getLine(i),
+        editor.lineCount(),
+        task,
+      );
+      if (index === null) {
+        return null;
+      }
+      const block = this.readEditorTaskBlock(editor, index);
+      return parser.parseTaskBlock(
+        block,
+        index,
+        task.path,
+        undefined,
+        task.tableCell?.cellIndex,
+      );
+    } catch (error) {
+      console.debug(
+        '[TaskUpdateCoordinator] Failed to resolve task from editor',
+        error,
+      );
+      return null;
+    }
+  }
+
+  /** File-based counterpart of {@link resolveLiveTaskFromEditor}. */
+  private async resolveLiveStateTaskFromVault(
+    task: Task,
+  ): Promise<Task | null> {
+    const parser = this.plugin.vaultScanner?.getParser();
+    if (!parser) {
+      return null;
+    }
+
+    try {
+      const file = this.plugin.app.vault.getAbstractFileByPath(task.path);
+      if (!(file instanceof TFile)) {
+        return null;
+      }
+      const content = await this.plugin.app.vault.read(file);
+      const lines = content.split('\n');
+      const index = this.locateTaskLine((i) => lines[i], lines.length, task);
+      if (index === null) {
+        return null;
+      }
+      return parser.parseTaskBlock(
+        lines,
+        index,
+        task.path,
+        file,
+        task.tableCell?.cellIndex,
+      );
+    } catch (error) {
+      console.debug(
+        '[TaskUpdateCoordinator] Failed to resolve live task from file',
+        error,
+      );
+      return null;
+    }
+  }
+
+  /** Find an open Markdown editor showing `path`, if any. */
+  private findEditorForPath(path: string): Editor | null {
+    const workspace = this.plugin.app.workspace as unknown as {
+      getLeavesOfType?: (type: string) => Array<{
+        view?: {
+          file?: { path?: string } | null;
+          editor?: Editor;
+        };
+      }>;
+    };
+    const leaves = workspace.getLeavesOfType?.('markdown') ?? [];
+    for (const leaf of leaves) {
+      const view = leaf.view;
+      if (view?.file?.path === path && view.editor) {
+        return view.editor;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Locate the task within a set of lines. Prefers the recorded line, then a
+   * unique raw-text match, then the recorded line as a last resort (the caller
+   * still validates the parsed result).
+   */
+  private locateTaskLine(
+    getLine: (index: number) => string | undefined,
+    length: number,
+    task: Task,
+  ): number | null {
+    if (getLine(task.line) === task.rawText) {
+      return task.line;
+    }
+
+    let match = -1;
+    for (let i = 0; i < length; i++) {
+      if (getLine(i) === task.rawText) {
+        if (match >= 0) {
+          // Ambiguous raw-text match; fall back to the recorded line.
+          return task.line >= 0 && task.line < length ? task.line : null;
+        }
+        match = i;
+      }
+    }
+
+    if (match >= 0) {
+      return match;
+    }
+    return task.line >= 0 && task.line < length ? task.line : null;
+  }
+
+  /**
+   * Read the task line and its contiguous date/DESCRIPTION lines from an
+   * editor as a sparse array (only the task block is materialised).
+   */
+  private readEditorTaskBlock(editor: Editor, index: number): string[] {
+    const block: string[] = [];
+    block.length = index + 1;
+    block[index] = editor.getLine(index);
+
+    const metadataRe =
+      /^\s*(>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i;
+    for (let i = index + 1; i < editor.lineCount(); i++) {
+      const line = editor.getLine(i);
+      if (line.trim() === '' || !metadataRe.test(line)) {
+        break;
+      }
+      block[i] = line;
+    }
+    return block;
+  }
+
+  /**
    * ASYNC PHASE: Perform file write, recurrence, and state finalization.
    */
   private async performAsyncPhase(context: ProcessingContext): Promise<void> {
@@ -610,11 +791,12 @@ export class TaskUpdateCoordinator {
         throw new Error('TaskEditor is not initialized');
       }
 
-      // When source is 'editor', use the editor-parsed task directly
-      // The stored vault-scanned task may be stale (e.g. still has slash command text)
-      // and must not be substituted — the editor always has the latest content
+      // When source is 'editor' use the editor-parsed task directly, and for
+      // state updates updateTask() has already refreshed the task from the live
+      // buffer/file (resolveLiveTaskFromEditor / resolveLiveStateTaskFromVault),
+      // so use that too. Otherwise fall back to the stored copy.
       const currentTask =
-        context.source === 'editor'
+        context.source === 'editor' || context.type === 'state'
           ? context.task
           : this.resolveStoredTask(context);
 
@@ -880,6 +1062,7 @@ export class TaskUpdateCoordinator {
             deadlineDateRepeat: updatedTask.deadlineDateRepeat,
             scheduledWarningPeriod: updatedTask.scheduledWarningPeriod,
             deadlineWarningPeriod: updatedTask.deadlineWarningPeriod,
+            repeatCount: updatedTask.repeatCount,
             urgency,
           },
           cellIndex,

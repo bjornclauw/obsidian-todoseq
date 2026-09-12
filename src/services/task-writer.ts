@@ -5,6 +5,14 @@ import { KeywordManager } from '../utils/keyword-manager';
 import { DateUtils } from '../utils/date-utils';
 import { buildWarningPeriodString, hasRepeater } from '../utils/date-repeater';
 import {
+  REPEAT_LOG_ENTRY_RE,
+  buildRepeatLogEntry,
+  buildRepeatLogTitle,
+  getLineIndent,
+  isRepeatLogLine,
+  parseRepeatLogTotal,
+} from '../utils/repeat-log';
+import {
   findDateLine,
   findDescriptionLine,
   getTaskIndent,
@@ -75,18 +83,149 @@ export class TaskWriter {
 
   /**
    * Whether a CLOSED date should be written. `recordCompletion` forces one for
-   * a recurring completion even though the persisted state is the reset state.
+   * a recurring completion only when the repeat log is disabled; otherwise the
+   * completion is recorded in the `[!repeats]` callout instead.
    */
   private shouldWriteClosed(state: string, recordCompletion: boolean): boolean {
-    return (
-      !!this.settings?.trackClosedDate &&
-      (this.keywordManager.isCompleted(state) || recordCompletion)
-    );
+    if (!this.settings?.trackClosedDate) {
+      return false;
+    }
+    if (this.keywordManager.isCompleted(state)) {
+      return true;
+    }
+    return recordCompletion && !this.settings?.trackRepeatHistory;
   }
 
   /** Whether an existing CLOSED date must be kept (archived or recurring task). */
   private preservesClosed(task: Task, newState: string): boolean {
     return this.keywordManager.isArchived(newState) || hasRepeater(task);
+  }
+
+  /** Whether recurring completions are logged in a `[!repeats]` callout. */
+  private isRepeatLogEnabled(): boolean {
+    return !!this.settings?.trackRepeatHistory;
+  }
+
+  /** Configured maximum number of entries kept in a `[!repeats]` callout. */
+  private repeatHistoryLimit(): number {
+    const limit = this.settings?.repeatHistoryLimit ?? 50;
+    return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  }
+
+  /** True for a line that belongs to a task's contiguous metadata block. */
+  private isMetadataBlockLine(line: string): boolean {
+    return (
+      /^\s*(?:>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i.test(
+        line,
+      ) || isRepeatLogLine(line)
+    );
+  }
+
+  /**
+   * Insert or refresh the `[!repeats]` callout for a recurring completion.
+   * Mutates `lines` in place and returns the region that changed so the caller
+   * can mirror the same edit through the editor API.
+   */
+  private applyRepeatLogToLines(
+    lines: string[],
+    task: Task,
+    total: number,
+    limit: number,
+    closedAt: Date,
+    occurrence: Date | null,
+  ): { lineDelta: number; start: number; endBefore: number } {
+    // Scan the task's metadata block, skipping blank lines, to find any existing
+    // log. Tolerating blanks means a stray blank line (e.g. left where a date
+    // line was removed) does not cause a duplicate log to be created, matching
+    // the parser which also skips blanks when reading date lines.
+    let titleIdx = -1;
+    let lastMetaIdx = task.line;
+    for (let i = task.line + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim() === '') {
+        continue;
+      }
+      if (!this.isMetadataBlockLine(line)) {
+        break;
+      }
+      if (parseRepeatLogTotal(line) !== null) {
+        titleIdx = i;
+      }
+      lastMetaIdx = i;
+    }
+
+    const start = task.line + 1;
+    const endBefore = Math.max(start, lastMetaIdx + 1);
+
+    // Preserve the date/DESCRIPTION lines in order, dropping blank lines and the
+    // old log lines — the block is rebuilt with the refreshed log appended, so a
+    // blank line left inside the block is cleaned up automatically.
+    const metadata = lines
+      .slice(start, endBefore)
+      .filter((line) => line.trim() !== '' && !isRepeatLogLine(line));
+
+    const indent =
+      titleIdx >= 0 ? getLineIndent(lines[titleIdx]) : getDateLineIndent(task);
+
+    const entries: string[] = [];
+    if (titleIdx >= 0) {
+      for (let i = titleIdx + 1; i < endBefore; i++) {
+        if (REPEAT_LOG_ENTRY_RE.test(lines[i])) {
+          entries.push(lines[i]);
+        }
+      }
+    }
+
+    const combined = [
+      buildRepeatLogEntry(total, closedAt, occurrence, indent),
+      ...entries,
+    ].slice(0, limit);
+    const newRegion = [
+      ...metadata,
+      buildRepeatLogTitle(total, limit, indent),
+      ...combined,
+    ];
+
+    lines.splice(start, endBefore - start, ...newRegion);
+    return {
+      lineDelta: newRegion.length - (endBefore - start),
+      start,
+      endBefore,
+    };
+  }
+
+  /** Editor-API mirror of {@link applyRepeatLogToLines}. */
+  private updateRepeatLogInEditor(
+    editor: Editor,
+    task: Task,
+    total: number,
+    limit: number,
+    closedAt: Date,
+    occurrence: Date | null,
+  ): number {
+    const after = Array.from({ length: editor.lineCount() }, (_, i) =>
+      editor.getLine(i),
+    );
+    const { lineDelta, start, endBefore } = this.applyRepeatLogToLines(
+      after,
+      task,
+      total,
+      limit,
+      closedAt,
+      occurrence,
+    );
+    const endAfter = start + (endBefore - start) + lineDelta;
+    const region = after.slice(start, endAfter);
+    // `replaceRange` to {line: endBefore, ch: 0} consumes the newline that
+    // terminated the last replaced line. Re-add it when content follows, or the
+    // log swallows the blank line under it and pulls the rest of the note in.
+    const suffix = endBefore < editor.lineCount() ? '\n' : '';
+    editor.replaceRange(
+      `${region.join('\n')}${suffix}`,
+      { line: start, ch: 0 },
+      { line: endBefore, ch: 0 },
+    );
+    return lineDelta;
   }
 
   /** Whether a STARTED date should be written for a first active entry. */
@@ -1950,6 +2089,7 @@ export class TaskWriter {
     let lineDelta = 0;
 
     let newRawText: string | undefined;
+    let newRepeatCount: number | undefined;
 
     // Check if target is the active file in source mode
     const md = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -2030,6 +2170,29 @@ export class TaskWriter {
           totalDelta += delta;
         }
 
+        // A recurring completion records the completion in the [!repeats]
+        // callout instead of CLOSED (legacy CLOSED lines are removed).
+        if (this.isRepeatLogEnabled() && !task.isTableTask) {
+          totalDelta += this.updateDateLineInEditor(
+            editor,
+            task,
+            'CLOSED',
+            null,
+            taskIndent,
+          );
+          const occurrence = task.scheduledDate ?? task.deadlineDate;
+          const total = (task.repeatCount ?? 0) + 1;
+          totalDelta += this.updateRepeatLogInEditor(
+            editor,
+            task,
+            total,
+            this.repeatHistoryLimit(),
+            new Date(),
+            occurrence,
+          );
+          newRepeatCount = total;
+        }
+
         lineDelta = totalDelta;
       } else {
         // Vault API path for inactive files
@@ -2106,6 +2269,28 @@ export class TaskWriter {
             newRawText = generated.newLine;
           }
 
+          // A recurring completion records the completion in the [!repeats]
+          // callout instead of CLOSED (legacy CLOSED lines are removed).
+          if (this.isRepeatLogEnabled() && !task.isTableTask) {
+            totalDelta += this.removeDateLine(
+              lines,
+              task.line,
+              'CLOSED',
+              task,
+            ).lineDelta;
+            const occurrence = task.scheduledDate ?? task.deadlineDate;
+            const total = (task.repeatCount ?? 0) + 1;
+            totalDelta += this.applyRepeatLogToLines(
+              lines,
+              task,
+              total,
+              this.repeatHistoryLimit(),
+              new Date(),
+              occurrence,
+            ).lineDelta;
+            newRepeatCount = total;
+          }
+
           lineDelta = totalDelta;
           return lines.join('\n');
         });
@@ -2147,6 +2332,7 @@ export class TaskWriter {
         options.newDeadlineWarningPeriod !== undefined
           ? options.newDeadlineWarningPeriod
           : task.deadlineWarningPeriod,
+      repeatCount: newRepeatCount ?? task.repeatCount ?? null,
     };
     if (lineDelta !== 0) {
       result.lineDelta = lineDelta;

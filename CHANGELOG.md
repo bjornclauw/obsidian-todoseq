@@ -3,20 +3,20 @@
 ## Unreleased
 
 - Added a task editor to create or edit the task at the editor cursor. Open it from the ribbon button or the "Create or edit task" command; it supports state, priority, scheduled/deadline dates (with repeat and warning period), and a description, and writes everything through `TaskWriter`.
+- Recurring completions are now recorded in a collapsed `[!repeats]` callout at the end of the task, listing the iteration number, the closed time and the occurrence date, newest first. New settings `Track repeat history` (on by default) and `Repeat history limit` (default 50) control the log; the running total continues counting past the cap. Table-cell tasks skip the log, and the date picker now hides the repeat option for them because recurrence is not supported in cells.
 - Fixed the date picker losing changes when only the repeat, warning period, or time of an already-selected date was changed. (now more intuitive)
 - Date and time display (task list, tooltips, date picker and task editor) now follows a single locale source based on Obsidian's language, including localized relative labels and month/weekday names. English wording for near-future dates changed from "N days from now" to "In N days". Date text written into notes stays in the canonical org-mode format (`<YYYY-MM-DD Ddd>`, `[YYYY-MM-DD Ddd HH:mm]`) so notes remain portable across devices and locales.
 - Fixed date suggestions (`scheduled:`, `deadline:`, `closed:`, `started:`) being off by one day in timezones ahead of UTC; date literals are now derived from local date parts.
 - Reworked STARTED and CLOSED timestamp handling so it is consistent across every surface (editor checkbox, task list, reader, embedded lists, task editor and table cells):
-  - CLOSED is added when a task is marked completed, and removed when a non-recurring task is reactivated. It is kept when a task is archived, and kept on recurring tasks as the last-completion record.
-  - Completing a recurring task reopens it immediately (resets the state and advances its dates) and records the CLOSED date. The task editor now completes recurring tasks exactly like the other surfaces.
+  - CLOSED is added when a task is marked completed, and removed when a non-recurring task is reactivated. It is kept when a task is archived. Recurring completions no longer write CLOSED; the completion is recorded in the `[!repeats]` callout instead.
+  - Completing a recurring task reopens it immediately (resets the state and advances its dates).
   - STARTED is written once, the first time a task enters an active state — including tasks created already active and tasks in table cells. It is never removed.
   - In table cells, CLOSED and STARTED use the `[[YYYY-MM-DD Ddd HH:mm]]` wikilink form.
 - Adding or changing a repeating date on an already-completed task now advances the occurrence (previously it was silently inert). Archived tasks do not recur.
 - Cancelling a recurring task no longer rolls it forward: it stays in the cancelled state (and still records a CLOSED date).
 - Reactivating an archived task now keeps its SCHEDULED/DEADLINE/CLOSED/STARTED metadata, so a repeating task keeps recurring after it is un-archived.
 - Fixed `.+` (from-done) repeaters for day and week units to match Org mode: the next date is one interval from the completion day (preserving the original time-of-day), instead of returning the same day or snapping to the original weekday.
-- Editing an already-completed recurring task in the task editor no longer reopens it unless you complete it or change its schedule.
-- Kept the task editor modal above the mobile soft keyboard and scrolled the focused field into view.
+- Fixed stale date/status metadata when cycling a task's state right after editing its date lines in the note (e.g. deleting a `SCHEDULED` line and immediately cycling to DOING left the repeat status behind). State changes now re-read the task's date metadata from the live source (the open editor buffer, otherwise the file) instead of trusting the asynchronously updated state manager, so recurrence decisions and the saved state always match what the note shows.
 
 ## 0.20.0
 

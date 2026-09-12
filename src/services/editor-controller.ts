@@ -1852,7 +1852,10 @@ export class EditorController {
                     }
                   },
                 },
-                { weekStartsOn: this.plugin.settings.weekStartsOn },
+                {
+                  weekStartsOn: this.plugin.settings.weekStartsOn,
+                  allowRepeat: false,
+                },
               );
               datePicker
                 .show(

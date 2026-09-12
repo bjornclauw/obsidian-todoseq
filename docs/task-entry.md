@@ -462,8 +462,8 @@ The CLOSED date uses square brackets `[]` instead of angle brackets `<>` to dist
 #### CLOSED Date Behavior
 
 - **Automatic Addition**: When you mark a task as completed (e.g., transition from TODO to DONE), a CLOSED date is automatically added if the "Track closed date" setting is enabled.
-- **Automatic Removal**: When you reactivate a completed task (e.g., transition from DONE to TODO), the CLOSED date is automatically removed — except for archived tasks and recurring tasks (see below).
-- **Recurring Tasks**: When you complete a recurring task, it is immediately reopened (reset to the next inactive state) and its dates advance, while a CLOSED date recording that completion is added and **kept** as the last-completion record. The CLOSED date is also retained when the recurring task later moves between states. Each future completion updates the CLOSED date to the latest time.
+- **Automatic Removal**: When you reactivate a completed task (e.g., transition from DONE to TODO), the CLOSED date is automatically removed — except for archived tasks (see below).
+- **Recurring Tasks**: Completing a recurring task does **not** write a CLOSED date. The completion is recorded in a `[!repeats]` callout instead (see [Repeat History](#repeat-history)); a CLOSED date left by an older version is removed on the next completion. If "Track repeat history" is disabled, the previous behaviour applies and the completion is recorded with a CLOSED date.
 - **Archived Tasks**: Archiving a task that already has a CLOSED date keeps it, so the completion record survives archiving.
 - **Manual Editing**: You can manually add or remove CLOSED dates directly in your notes.
 
@@ -596,7 +596,7 @@ When you mark a task with a repeating date as completed (default completed state
 1. The date automatically advances to the next occurrence
 2. The new date is written back to the file
 3. The task is reset to an inactive state (default inactive state, i.e. TODO)
-4. A CLOSED date recording the completion is added and kept under the task (last-completion record) when "Track closed date" is enabled
+4. The completion is recorded in a `[!repeats]` callout at the end of the task (see [Repeat History](#repeat-history)) when "Track repeat history" is enabled; otherwise a CLOSED date is written when "Track closed date" is enabled
 
 The task is reopened immediately, so it never stays in the completed state.
 
@@ -604,7 +604,24 @@ If you add or change a repeating date on a task that is already completed (for e
 
 Tasks with repeating dates display a repeat icon in the task list to indicate they will advance when completed.
 
-> **Limitation:** Repeating dates are not supported on tasks defined in Markdown table cells; a repeater there is preserved but does not auto-advance.
+> **Limitation:** Repeating dates are not supported on tasks defined in Markdown table cells; a repeater there is preserved but does not auto-advance, and the date picker hides the repeat option for cell tasks.
+
+#### Repeat History
+
+Each recurring completion is logged in a collapsed callout at the end of the task, after all date lines:
+
+```markdown
+- [ ] Pay rent
+  SCHEDULED: <2026-04-01 Wed +1m>
+  > [!repeats]- Repeats: 2 (latest 50)
+  > - #2 · closed 2026-03-01 Sun 09:12 · due 2026-03-01 Sun
+  > - #1 · closed 2026-02-01 Sat 08:40 · due 2026-02-01 Sat
+```
+
+- Entries are written **newest first** and record the iteration, the completion time and the occurrence (the SCHEDULED, else DEADLINE, date that was just completed).
+- The callout title stores the **running total**, so iteration numbers continue counting even after older entries are dropped.
+- `Track repeat history` (Settings, on by default) enables the log; `Repeat history limit` (default 50) caps how many recent entries are kept.
+- The log is skipped for table-cell tasks. When `Track repeat history` is disabled, completed occurrences fall back to a CLOSED date.
 
 ### Warning Periods (Advance Notice / Delayed Notice)
 

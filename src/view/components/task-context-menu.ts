@@ -669,6 +669,7 @@ export class TaskContextMenu extends BaseDialog {
       },
       {
         weekStartsOn: this.config.weekStartsOn,
+        allowRepeat: !currentTask?.isTableTask,
       },
     );
 

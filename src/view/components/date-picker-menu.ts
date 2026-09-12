@@ -23,6 +23,11 @@ export type DatePickerCallbacks = {
  */
 export interface DatePickerConfig {
   weekStartsOn: 'Monday' | 'Sunday';
+  /**
+   * When false, the repeat section is hidden. Used for task types that do not
+   * support recurrence (e.g. markdown table cells).
+   */
+  allowRepeat?: boolean;
 }
 
 /**
@@ -219,11 +224,14 @@ export class DatePicker extends BaseDialog {
     // Time section
     this.buildTimeSection();
 
-    // Repeat section
-    this.buildRepeatSection();
+    // Repeat section (hidden for task types that don't support recurrence,
+    // e.g. markdown table cells)
+    if (this.config.allowRepeat !== false) {
+      this.buildRepeatSection();
 
-    // Separator
-    this.addSeparator();
+      // Separator
+      this.addSeparator();
+    }
 
     // Warning period section
     this.buildWarningPeriodSection();
@@ -439,6 +447,7 @@ export class DatePicker extends BaseDialog {
   }
 
   private buildRepeatSection(): void {
+    if (this.config.allowRepeat === false) return;
     if (!this.containerEl) return;
 
     this.repeatSection = this.containerEl.createDiv({

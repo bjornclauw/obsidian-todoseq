@@ -38,6 +38,7 @@ function openModal(
     initial?: Partial<TaskEditorInitialValues>;
     onSubmit?: jest.Mock;
     onCancel?: jest.Mock;
+    isTableTask?: boolean;
   } = {},
 ): {
   modal: TaskEditorModal;
@@ -51,6 +52,7 @@ function openModal(
     initial: makeInitial(overrides.initial),
     keywordManager: createTestKeywordManager(),
     weekStartsOn: 'Monday',
+    isTableTask: overrides.isTableTask,
     onSubmit,
     onCancel,
   });
@@ -144,6 +146,16 @@ describe('TaskEditorModal (native Modal)', () => {
     const desc = query<HTMLElement>('.todoseq-task-editor-description');
     expect(desc.tagName).toBe('INPUT');
     expect(desc.getAttribute('rows')).toBeNull();
+  });
+
+  it('hides the description field for table-cell tasks', () => {
+    openModal({ isTableTask: true });
+
+    expect(
+      document.querySelector('.todoseq-task-editor-description'),
+    ).toBeNull();
+    // The rest of the form still renders.
+    expect(document.querySelector('.todoseq-task-editor-text')).not.toBeNull();
   });
 
   it('does not submit on Enter or Shift+Enter in the description field', async () => {

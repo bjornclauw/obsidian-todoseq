@@ -668,6 +668,23 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
             desc: 'Add started: timestamp when tasks first enter an active state. Written once and never removed automatically.',
             control: { type: 'toggle', key: 'trackStartedDate' },
           },
+          {
+            name: 'Track repeat history',
+            desc: 'Log each recurring completion in a collapsed [!repeats] callout (keeps an iteration number, completion time and occurrence date) instead of writing a CLOSED date.',
+            control: { type: 'toggle', key: 'trackRepeatHistory' },
+          },
+          {
+            name: 'Repeat history limit',
+            desc: 'Maximum number of recent completions kept in each [!repeats] log. Iteration numbers continue counting past the limit.',
+            control: {
+              type: 'number',
+              key: 'repeatHistoryLimit',
+              min: 1,
+              max: 1000,
+              defaultValue: 50,
+              validate: () => undefined,
+            },
+          },
         ],
       },
       {

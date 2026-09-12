@@ -67,6 +67,11 @@ export interface TaskEditorModalOptions {
   keywordManager: KeywordManager;
   /** Controls the day the date picker's week starts on. */
   weekStartsOn: 'Monday' | 'Sunday';
+  /**
+   * True when editing a markdown table cell task. Such tasks cannot store a
+   * DESCRIPTION line and do not support recurrence, so those fields are hidden.
+   */
+  isTableTask?: boolean;
   /** Called with the composed fields when the user saves. */
   onSubmit: (fields: TaskComposeFields) => void | Promise<void>;
   /** Called when the user cancels or dismisses the modal. */
@@ -209,14 +214,18 @@ export class TaskEditorModal extends Modal {
     // Deadline date
     this.buildDateField(form, 'Deadline', 'deadline', () => this.deadlineDate);
 
-    // Description (single line - the plugin stores descriptions as one line)
-    const descGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
-    descGroup.createEl('label', { text: 'Description' });
-    const descInput = descGroup.createEl('input', {
-      cls: 'todoseq-task-editor-description',
-      attr: { type: 'text', placeholder: 'Optional notes' },
-    });
-    descInput.value = this.options.initial.description ?? '';
+    // Description (single line - the plugin stores descriptions as one line).
+    // Table-cell tasks cannot store a DESCRIPTION line, so the field is hidden.
+    let descInput: HTMLInputElement | null = null;
+    if (!this.options.isTableTask) {
+      const descGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
+      descGroup.createEl('label', { text: 'Description' });
+      descInput = descGroup.createEl('input', {
+        cls: 'todoseq-task-editor-description',
+        attr: { type: 'text', placeholder: 'Optional notes' },
+      });
+      descInput.value = this.options.initial.description ?? '';
+    }
 
     // Buttons (sticky at the bottom of the scroll container)
     const buttons = form.createDiv({
@@ -244,7 +253,7 @@ export class TaskEditorModal extends Modal {
       }
     });
 
-    descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    descInput?.addEventListener('keydown', (e: KeyboardEvent) => {
       // Descriptions are single-line, but Enter/Shift+Enter should not
       // submit the form from this field.
       if (e.key === 'Enter') {
@@ -274,7 +283,8 @@ export class TaskEditorModal extends Modal {
     }, FOCUS_DELAY_MS);
 
     if (Platform.isMobile) {
-      for (const field of [textInput, descInput]) {
+      const fields = descInput ? [textInput, descInput] : [textInput];
+      for (const field of fields) {
         field.addEventListener('focus', () => this.scrollFieldIntoView(field));
       }
       // Drive the keyboard allowance from an explicit class rather than
@@ -323,7 +333,7 @@ export class TaskEditorModal extends Modal {
   private async submit(
     textInput: HTMLTextAreaElement,
     stateSelect: HTMLSelectElement,
-    descInput: HTMLInputElement,
+    descInput: HTMLInputElement | null,
   ): Promise<void> {
     const text = textInput.value.trim();
     if (!text) {
@@ -342,7 +352,7 @@ export class TaskEditorModal extends Modal {
       deadlineDate: this.deadlineDate,
       deadlineRepeat: this.deadlineRepeat,
       deadlineWarningPeriod: this.deadlineWarningPeriod,
-      description: descInput.value.trim() || null,
+      description: descInput?.value.trim() || null,
     };
 
     this.submitted = true;
@@ -452,7 +462,10 @@ export class TaskEditorModal extends Modal {
             this.dateFieldRefresh?.();
           },
         },
-        { weekStartsOn: this.options.weekStartsOn },
+        {
+          weekStartsOn: this.options.weekStartsOn,
+          allowRepeat: !this.options.isTableTask,
+        },
       );
     }
 

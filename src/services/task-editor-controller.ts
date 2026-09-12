@@ -6,6 +6,7 @@ import {
   TaskEditorInitialValues,
   TaskEditorModal,
 } from '../view/components/task-editor-modal';
+import { isRepeatLogLine } from '../utils/repeat-log';
 
 /** A resolved target for the task editor: an existing task or a new-task line. */
 interface TaskEditorTarget {
@@ -84,6 +85,7 @@ export class TaskEditorController {
       initial,
       keywordManager,
       weekStartsOn: this.plugin.settings.weekStartsOn,
+      isTableTask: target.task?.isTableTask,
       onSubmit: (fields) => this.save(target, fields),
       onCancel: () => {
         this.modal = null;
@@ -153,10 +155,12 @@ export class TaskEditorController {
     return { path, line: cursorLine, task: null };
   }
 
-  /** True for DESCRIPTION/SCHEDULED/DEADLINE/CLOSED/STARTED lines. */
+  /** True for DESCRIPTION/SCHEDULED/DEADLINE/CLOSED/STARTED or log lines. */
   private isTaskMetadataLine(line: string): boolean {
-    return /^\s*(>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i.test(
-      line,
+    return (
+      /^\s*(>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i.test(
+        line,
+      ) || isRepeatLogLine(line)
     );
   }
 
