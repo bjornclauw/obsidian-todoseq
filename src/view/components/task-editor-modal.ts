@@ -168,12 +168,12 @@ export class TaskEditorModal {
     // Deadline date
     this.buildDateField(form, 'Deadline', 'deadline', () => this.deadlineDate);
 
-    // Description
+    // Description (single line - the plugin stores descriptions as one line)
     const descGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
     descGroup.createEl('label', { text: 'Description' });
-    const descInput = descGroup.createEl('textarea', {
+    const descInput = descGroup.createEl('input', {
       cls: 'todoseq-task-editor-description',
-      attr: { rows: '2', placeholder: 'Optional notes' },
+      attr: { type: 'text', placeholder: 'Optional notes' },
     });
     descInput.value = this.options.initial.description ?? '';
 
@@ -203,6 +203,13 @@ export class TaskEditorModal {
       }
     });
 
+    descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void this.submit(textInput, stateSelect, prioritySelect, descInput);
+      }
+    });
+
     this.modalEl.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -227,7 +234,7 @@ export class TaskEditorModal {
     textInput: HTMLTextAreaElement,
     stateSelect: HTMLSelectElement,
     prioritySelect: HTMLSelectElement,
-    descInput: HTMLTextAreaElement,
+    descInput: HTMLInputElement,
   ): Promise<void> {
     if (this.isClosed) return;
 

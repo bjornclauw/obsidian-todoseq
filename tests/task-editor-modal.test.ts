@@ -109,8 +109,35 @@ describe('TaskEditorModal', () => {
       query<HTMLSelectElement>('.todoseq-task-editor-priority').value,
     ).toBe('high');
     expect(
-      query<HTMLTextAreaElement>('.todoseq-task-editor-description').value,
+      query<HTMLInputElement>('.todoseq-task-editor-description').value,
     ).toBe('Existing notes');
+  });
+
+  it('renders the description as a single-line input', () => {
+    openModal();
+
+    const desc = query<HTMLElement>('.todoseq-task-editor-description');
+    expect(desc.tagName).toBe('INPUT');
+    expect(desc.getAttribute('rows')).toBeNull();
+  });
+
+  it('submits when Enter is pressed in the description field', async () => {
+    const { onSubmit } = openModal();
+
+    query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
+    const desc = query<HTMLInputElement>('.todoseq-task-editor-description');
+    desc.value = 'From the store';
+    desc.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Buy milk',
+        description: 'From the store',
+      }),
+    );
   });
 
   it('submits the composed fields and closes', async () => {
@@ -119,7 +146,7 @@ describe('TaskEditorModal', () => {
     query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
     query<HTMLSelectElement>('.todoseq-task-editor-state').value = 'DOING';
     query<HTMLSelectElement>('.todoseq-task-editor-priority').value = 'med';
-    query<HTMLTextAreaElement>('.todoseq-task-editor-description').value =
+    query<HTMLInputElement>('.todoseq-task-editor-description').value =
       'From the store';
 
     query<HTMLButtonElement>('.todoseq-task-editor-btn-save').click();
