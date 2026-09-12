@@ -5,64 +5,32 @@
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
 import { Task } from '../src/types/task';
-import {
-  createBaseTask,
-  createTestKeywordManager,
-  createBaseSettings,
-} from './helpers/test-helper';
+import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
-
-// Mock document for DOM operations
-global.document = {
-  querySelectorAll: jest.fn(() => []),
-} as any;
-(window as unknown as { activeDocument: Document }).activeDocument =
-  global.document as unknown as Document;
-
-// Mock Obsidian App
-const mockApp = {
-  vault: {
-    getAbstractFileByPath: jest.fn(),
-    process: jest.fn(),
-    read: jest.fn(),
-  },
-  workspace: {
-    getActiveViewOfType: jest.fn(),
-  },
-};
-
-// Mock TodoTracker plugin
-const mockPlugin = {
-  app: mockApp,
-  settings: createBaseSettings(),
-  isUserInitiatedUpdate: false,
-  taskEditor: {
-    updateTaskState: jest.fn(),
-    updateTaskScheduledDate: jest.fn(),
-    removeTaskScheduledDate: jest.fn(),
-    updateTaskDeadlineDate: jest.fn(),
-    removeTaskDeadlineDate: jest.fn(),
-    applyRecurrenceUpdate: jest.fn(),
-  },
-  taskStateManager: null as any,
-  embeddedTaskListProcessor: {
-    refreshAllEmbeddedTaskLists: jest.fn(),
-  },
-  refreshVisibleEditorDecorations: jest.fn(),
-  vaultScanner: {
-    processIncrementalChange: jest.fn(),
-    addSkipIncrementalChange: jest.fn(),
-  },
-};
+import {
+  createCoordinatorHarness,
+  CoordinatorHarness,
+} from './helpers/coordinator-harness';
 
 describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
   let taskUpdateCoordinator: TaskUpdateCoordinator;
   let taskStateManager: TaskStateManager;
   let keywordManager: any;
+  let mockApp: CoordinatorHarness['mockApp'];
+  let mockPlugin: CoordinatorHarness['mockPlugin'];
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+
+    const harness = createCoordinatorHarness({
+      settings: { additionalArchivedKeywords: ['ARCHIVED'] },
+    });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    taskUpdateCoordinator = harness.coordinator;
 
     // Create a mock file
     const mockTFile = new TFile();
@@ -75,115 +43,6 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
     });
     mockApp.vault.read.mockResolvedValue(
       'TODO Task text\n  SCHEDULED: <2026-03-10 Mon +1w>',
-    );
-
-    // Create settings
-    const settings = createBaseSettings({
-      additionalArchivedKeywords: ['ARCHIVED'],
-    });
-
-    // Add settings to mock plugin
-    mockPlugin.settings = settings;
-
-    // Create keyword manager
-    keywordManager = createTestKeywordManager(settings);
-
-    // Create task state manager
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    // Create task update coordinator
-    taskUpdateCoordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-    );
-
-    // Mock task editor methods to return task
-    mockPlugin.taskEditor.updateTaskState.mockImplementation(
-      async (task, newState) => {
-        return {
-          ...task,
-          state: newState,
-          rawText: task.rawText.replace(task.state, newState),
-        };
-      },
-    );
-
-    mockPlugin.taskEditor.updateTaskScheduledDate.mockImplementation(
-      async (task, newDate, repeat, warningPeriod) => {
-        return {
-          ...task,
-          scheduledDate: newDate,
-          scheduledDateRepeat: repeat,
-          scheduledWarningPeriod: warningPeriod,
-          lineDelta: 1,
-        };
-      },
-    );
-
-    mockPlugin.taskEditor.removeTaskScheduledDate.mockImplementation(
-      async (task) => {
-        return {
-          ...task,
-          scheduledDate: null,
-          scheduledDateRepeat: null,
-          lineDelta: -1,
-        };
-      },
-    );
-
-    mockPlugin.taskEditor.updateTaskDeadlineDate.mockImplementation(
-      async (task, newDate, repeat, warningPeriod) => {
-        return {
-          ...task,
-          deadlineDate: newDate,
-          deadlineDateRepeat: repeat,
-          deadlineWarningPeriod: warningPeriod,
-          lineDelta: 1,
-        };
-      },
-    );
-
-    mockPlugin.taskEditor.removeTaskDeadlineDate.mockImplementation(
-      async (task) => {
-        return {
-          ...task,
-          deadlineDate: null,
-          deadlineDateRepeat: null,
-          lineDelta: -1,
-        };
-      },
-    );
-
-    mockPlugin.taskEditor.applyRecurrenceUpdate.mockImplementation(
-      async (task, options) => {
-        const result = { ...task };
-        if (options.newScheduledDate !== undefined) {
-          result.scheduledDate = options.newScheduledDate;
-          result.scheduledDateRepeat =
-            options.newScheduledRepeat ?? task.scheduledDateRepeat;
-          result.scheduledWarningPeriod =
-            options.newScheduledWarningPeriod !== undefined
-              ? options.newScheduledWarningPeriod
-              : task.scheduledWarningPeriod;
-        }
-        if (options.newDeadlineDate !== undefined) {
-          result.deadlineDate = options.newDeadlineDate;
-          result.deadlineDateRepeat =
-            options.newDeadlineRepeat ?? task.deadlineDateRepeat;
-          result.deadlineWarningPeriod =
-            options.newDeadlineWarningPeriod !== undefined
-              ? options.newDeadlineWarningPeriod
-              : task.deadlineWarningPeriod;
-        }
-        if (options.newState !== undefined) {
-          result.state = options.newState;
-          result.completed = false;
-          result.rawText = task.rawText.replace(task.state, options.newState);
-        }
-        return result;
-      },
     );
   });
 

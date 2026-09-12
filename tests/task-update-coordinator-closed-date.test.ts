@@ -11,42 +11,13 @@ import {
   createBaseSettings,
 } from './helpers/test-helper';
 import { TFile } from 'obsidian';
+import {
+  createCoordinatorHarness,
+  CoordinatorHarness,
+} from './helpers/coordinator-harness';
 
-// Mock window.activeDocument for Obsidian API compatibility
-(window as any).activeDocument = document;
-
-// Mock the Obsidian App
-const mockApp = {
-  vault: {
-    getAbstractFileByPath: jest.fn(),
-    process: jest.fn(),
-    read: jest.fn(),
-  },
-  workspace: {
-    getActiveViewOfType: jest.fn(),
-  },
-};
-
-// Mock the TodoTracker plugin
-const mockPlugin = {
-  app: mockApp,
-  settings: createBaseSettings(),
-  isUserInitiatedUpdate: false,
-  taskEditor: {
-    updateTaskState: jest.fn(),
-    updateTaskClosedDate: jest.fn(),
-    removeTaskClosedDate: jest.fn(),
-  },
-  taskStateManager: null as any,
-  embeddedTaskListProcessor: {
-    refreshAllEmbeddedTaskLists: jest.fn(),
-  },
-  refreshVisibleEditorDecorations: jest.fn(),
-  vaultScanner: {
-    processIncrementalChange: jest.fn(),
-    addSkipIncrementalChange: jest.fn(),
-  },
-};
+let mockApp: CoordinatorHarness['mockApp'];
+let mockPlugin: CoordinatorHarness['mockPlugin'];
 
 describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
   let taskUpdateCoordinator: TaskUpdateCoordinator;
@@ -62,6 +33,18 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
     jest.useFakeTimers();
     originalTask = null;
 
+    const harness = createCoordinatorHarness({
+      settings: {
+        trackClosedDate: true,
+        additionalArchivedKeywords: ['ARCHIVED'],
+      },
+    });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    taskUpdateCoordinator = harness.coordinator;
+
     // Create a mock file
     const mockTFile = new TFile();
     mockTFile.path = 'test.md';
@@ -72,29 +55,6 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
       return callback(data);
     });
     mockApp.vault.read.mockResolvedValue('TODO Task text');
-
-    // Create settings with trackClosedDate enabled
-    const settings = createBaseSettings({
-      trackClosedDate: true,
-      additionalArchivedKeywords: ['ARCHIVED'],
-    });
-
-    // Add settings to mock plugin
-    mockPlugin.settings = settings;
-
-    // Create keyword manager
-    keywordManager = createTestKeywordManager(settings);
-
-    // Create task state manager
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    // Create task update coordinator
-    taskUpdateCoordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-    );
 
     // Mock the task editor methods to return the task
     // Track original task to determine if transition is completed->non-completed
@@ -465,21 +425,14 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
         taskUpdateCoordinator.destroy();
       }
 
-      const settings = createBaseSettings({
-        trackClosedDate: false,
+      const harness = createCoordinatorHarness({
+        settings: { trackClosedDate: false },
       });
-
-      mockPlugin.settings = settings;
-
-      keywordManager = createTestKeywordManager(settings);
-      taskStateManager = new TaskStateManager(keywordManager);
-      mockPlugin.taskStateManager = taskStateManager;
-
-      taskUpdateCoordinator = new TaskUpdateCoordinator(
-        mockPlugin as any,
-        taskStateManager,
-        keywordManager,
-      );
+      mockApp = harness.mockApp;
+      mockPlugin = harness.mockPlugin;
+      keywordManager = harness.keywordManager;
+      taskStateManager = harness.stateManager;
+      taskUpdateCoordinator = harness.coordinator;
 
       mockPlugin.taskEditor.updateTaskState.mockImplementation(
         async (task: Task, newState: string) => {

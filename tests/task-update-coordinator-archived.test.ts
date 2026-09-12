@@ -4,53 +4,15 @@
 
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
-import {
-  createBaseTask,
-  createTestKeywordManager,
-  createBaseSettings,
-} from './helpers/test-helper';
+import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
+import {
+  createCoordinatorHarness,
+  CoordinatorHarness,
+} from './helpers/coordinator-harness';
 
-// Mock window.activeDocument for Obsidian API compatibility
-(window as any).activeDocument = document;
-
-const mockApp = {
-  vault: {
-    getAbstractFileByPath: jest.fn(),
-    process: jest.fn(),
-    read: jest.fn(),
-  },
-  workspace: {
-    getActiveViewOfType: jest.fn(),
-  },
-};
-
-const mockPlugin = {
-  app: mockApp,
-  settings: createBaseSettings(),
-  isUserInitiatedUpdate: false,
-  taskEditor: {
-    updateTaskState: jest.fn(),
-    updateTaskScheduledDate: jest.fn(),
-    updateTaskDeadlineDate: jest.fn(),
-    updateTaskPriority: jest.fn(),
-    updateTaskRecurrence: jest.fn(),
-    removeTaskScheduledDate: jest.fn(),
-    removeTaskDeadlineDate: jest.fn(),
-    removeTaskPriority: jest.fn(),
-    applyRecurrenceUpdate: jest.fn(),
-  },
-  taskStateManager: null as any,
-  embeddedTaskListProcessor: {
-    refreshAllEmbeddedTaskLists: jest.fn(),
-  },
-  refreshVisibleEditorDecorations: jest.fn(),
-  vaultScanner: {
-    processIncrementalChange: jest.fn(),
-    addSkipIncrementalChange: jest.fn(),
-    getParser: jest.fn(),
-  },
-};
+let mockApp: CoordinatorHarness['mockApp'];
+let mockPlugin: CoordinatorHarness['mockPlugin'];
 
 describe('TaskUpdateCoordinator - Archived State Removal', () => {
   let taskUpdateCoordinator: TaskUpdateCoordinator;
@@ -61,6 +23,15 @@ describe('TaskUpdateCoordinator - Archived State Removal', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
+    const harness = createCoordinatorHarness({
+      settings: { additionalArchivedKeywords: ['ARCHIVED', 'OLD'] },
+    });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    taskUpdateCoordinator = harness.coordinator;
+
     const mockTFile = new TFile();
     mockTFile.path = 'test.md';
     mockTFile.name = 'test.md';
@@ -70,22 +41,6 @@ describe('TaskUpdateCoordinator - Archived State Removal', () => {
       return callback(data);
     });
     mockApp.vault.read.mockResolvedValue('TODO Task text');
-
-    const settings = createBaseSettings({
-      additionalArchivedKeywords: ['ARCHIVED', 'OLD'],
-    });
-
-    mockPlugin.settings = settings;
-    keywordManager = createTestKeywordManager(settings);
-
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    taskUpdateCoordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-    );
 
     mockPlugin.taskEditor.updateTaskState.mockImplementation(
       async (task, newState) => ({
@@ -294,27 +249,20 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
+    const harness = createCoordinatorHarness({
+      settings: { additionalArchivedKeywords: ['ARCHIVED', 'OLD'] },
+    });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    taskUpdateCoordinator = harness.coordinator;
+
     const mockTFile = new TFile();
     mockTFile.path = 'test.md';
     mockTFile.name = 'test.md';
     mockApp.vault.getAbstractFileByPath.mockReturnValue(mockTFile);
     mockApp.vault.read.mockResolvedValue('TODO Task text');
-
-    const settings = createBaseSettings({
-      additionalArchivedKeywords: ['ARCHIVED', 'OLD'],
-    });
-
-    mockPlugin.settings = settings;
-    keywordManager = createTestKeywordManager(settings);
-
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    taskUpdateCoordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-    );
   });
 
   it('should re-add task when transitioning from archived to non-archived state', async () => {

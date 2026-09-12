@@ -16,52 +16,15 @@
 
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
-import {
-  createBaseTask,
-  createTestKeywordManager,
-  createBaseSettings,
-} from './helpers/test-helper';
+import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
+import {
+  createCoordinatorHarness,
+  CoordinatorHarness,
+} from './helpers/coordinator-harness';
 
-// Mock window.activeDocument for Obsidian API compatibility
-(window as any).activeDocument = document;
-
-const mockApp = {
-  vault: {
-    getAbstractFileByPath: jest.fn(),
-    process: jest.fn(),
-    read: jest.fn(),
-  },
-  workspace: {
-    getActiveViewOfType: jest.fn(),
-  },
-};
-
-const mockPlugin = {
-  app: mockApp,
-  settings: createBaseSettings(),
-  isUserInitiatedUpdate: false,
-  taskEditor: {
-    updateTaskState: jest.fn(),
-    updateTaskScheduledDate: jest.fn(),
-    updateTaskDeadlineDate: jest.fn(),
-    updateTaskPriority: jest.fn(),
-    updateTaskRecurrence: jest.fn(),
-    removeTaskScheduledDate: jest.fn(),
-    removeTaskDeadlineDate: jest.fn(),
-    removeTaskPriority: jest.fn(),
-  },
-  taskStateManager: null as any,
-  embeddedTaskListProcessor: {
-    refreshAllEmbeddedTaskLists: jest.fn(),
-  },
-  refreshVisibleEditorDecorations: jest.fn(),
-  vaultScanner: {
-    processIncrementalChange: jest.fn(),
-    addSkipIncrementalChange: jest.fn(),
-    getParser: jest.fn(),
-  },
-};
+let mockApp: CoordinatorHarness['mockApp'];
+let mockPlugin: CoordinatorHarness['mockPlugin'];
 
 describe('TaskUpdateCoordinator - rejection recovery in queues', () => {
   let coordinator: TaskUpdateCoordinator;
@@ -72,23 +35,18 @@ describe('TaskUpdateCoordinator - rejection recovery in queues', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    const harness = createCoordinatorHarness();
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    coordinator = harness.coordinator;
+
     const mockTFile = new TFile();
     mockTFile.path = 'file.md';
     mockTFile.name = 'file.md';
     mockApp.vault.getAbstractFileByPath.mockReturnValue(mockTFile);
     mockApp.vault.read.mockResolvedValue('TODO Task text');
-
-    const settings = createBaseSettings();
-    mockPlugin.settings = settings;
-    keywordManager = createTestKeywordManager(settings);
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    coordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-    );
 
     // Succeed at file write so the inner try/catch does NOT swallow our error
     mockPlugin.taskEditor.updateTaskState.mockImplementation(

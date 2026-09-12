@@ -11,48 +11,15 @@ beforeAll(() => {
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
 import { Task } from '../src/types/task';
-import {
-  createBaseTask,
-  createTestKeywordManager,
-  createBaseSettings,
-} from './helpers/test-helper';
+import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
+import {
+  createCoordinatorHarness,
+  CoordinatorHarness,
+} from './helpers/coordinator-harness';
 
-const mockApp = {
-  vault: {
-    getAbstractFileByPath: jest.fn(),
-    process: jest.fn(),
-    read: jest.fn(),
-  },
-  workspace: {
-    getActiveViewOfType: jest.fn(),
-  },
-};
-
-const mockPlugin = {
-  app: mockApp,
-  settings: createBaseSettings(),
-  isUserInitiatedUpdate: false,
-  taskEditor: {
-    updateTaskState: jest.fn(),
-    updateTaskScheduledDate: jest.fn(),
-    removeTaskScheduledDate: jest.fn(),
-    updateTaskDeadlineDate: jest.fn(),
-    removeTaskDeadlineDate: jest.fn(),
-    updateTaskPriority: jest.fn(),
-    removeTaskPriority: jest.fn(),
-  },
-  taskStateManager: null as any,
-  embeddedTaskListProcessor: {
-    refreshAllEmbeddedTaskLists: jest.fn(),
-  },
-  refreshVisibleEditorDecorations: jest.fn(),
-  vaultScanner: {
-    processIncrementalChange: jest.fn(),
-    addSkipIncrementalChange: jest.fn(),
-    getParser: jest.fn(),
-  },
-};
+let mockApp: CoordinatorHarness['mockApp'];
+let mockPlugin: CoordinatorHarness['mockPlugin'];
 
 describe('TaskUpdateCoordinator - embed keyword update', () => {
   let coordinator: TaskUpdateCoordinator;
@@ -63,8 +30,12 @@ describe('TaskUpdateCoordinator - embed keyword update', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
-    const settings = createBaseSettings();
-    mockPlugin.settings = settings;
+    const harness = createCoordinatorHarness({ changeTracker: {} });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    coordinator = harness.coordinator;
 
     const mockTFile = new TFile();
     mockTFile.path = 'note.md';
@@ -84,17 +55,6 @@ describe('TaskUpdateCoordinator - embed keyword update', () => {
         state: newState,
         rawText: task.rawText.replace(task.state, newState),
       }),
-    );
-
-    keywordManager = createTestKeywordManager(settings);
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    coordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-      {} as any,
     );
   });
 
@@ -454,8 +414,12 @@ describe('TaskUpdateCoordinator - editor checkbox update', () => {
       return 0;
     });
 
-    const settings = createBaseSettings();
-    mockPlugin.settings = settings;
+    const harness = createCoordinatorHarness({ changeTracker: {} });
+    mockApp = harness.mockApp;
+    mockPlugin = harness.mockPlugin;
+    keywordManager = harness.keywordManager;
+    taskStateManager = harness.stateManager;
+    coordinator = harness.coordinator;
 
     const mockTFile = new TFile();
     mockTFile.path = 'note.md';
@@ -475,17 +439,6 @@ describe('TaskUpdateCoordinator - editor checkbox update', () => {
         state: newState,
         rawText: task.rawText.replace(task.state, newState),
       }),
-    );
-
-    keywordManager = createTestKeywordManager(settings);
-    taskStateManager = new TaskStateManager(keywordManager);
-    mockPlugin.taskStateManager = taskStateManager;
-
-    coordinator = new TaskUpdateCoordinator(
-      mockPlugin as any,
-      taskStateManager,
-      keywordManager,
-      {} as any,
     );
   });
 
