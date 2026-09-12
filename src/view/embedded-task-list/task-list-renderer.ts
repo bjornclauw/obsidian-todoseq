@@ -331,11 +331,12 @@ export class EmbeddedTaskListRenderer {
         return;
       }
 
-      // Full render needed - clear and rebuild
-      container.empty();
+      // Full render needed. Build detached and swap in one mutation so the
+      // block never collapses to zero height mid-update.
+      const staging = createDiv();
 
       // Create task list container
-      const newContainer = container.createDiv({
+      const newContainer = staging.createDiv({
         cls: 'todoseq-embedded-task-list-container',
       });
 
@@ -400,6 +401,8 @@ export class EmbeddedTaskListRenderer {
           );
         }
       }
+
+      container.replaceChildren(...Array.from(staging.childNodes));
     } else {
       // Fast path: when the same tasks are shown in the same order, update the
       // changed rows in place instead of rebuilding the list. This avoids the
@@ -421,11 +424,11 @@ export class EmbeddedTaskListRenderer {
         return;
       }
 
-      // Standard non-collapsible rendering - always full render
-      container.empty();
-
-      // Create task list container
-      const taskListContainer = container.createDiv({
+      // Standard non-collapsible rendering. Build the new content detached
+      // first, then swap it in with a single DOM mutation, so the block never
+      // collapses to zero height mid-update (which nudges the editor).
+      const staging = createDiv();
+      const taskListContainer = staging.createDiv({
         cls: 'todoseq-embedded-task-list-container',
       });
 
@@ -435,6 +438,8 @@ export class EmbeddedTaskListRenderer {
         params,
         totalTasksCount,
       );
+
+      container.replaceChildren(...Array.from(staging.childNodes));
 
       this.renderedLists.set(container, {
         paramsSignature,

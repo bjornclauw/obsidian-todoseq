@@ -501,7 +501,7 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
       expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
         task,
         'CANCELED',
-        { recordCompletion: false },
+        { recordCompletion: false, forceVaultApi: false },
       );
       expect(spy).not.toHaveBeenCalled();
     });
@@ -558,7 +558,7 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
       expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
         task,
         'CANCELLED',
-        { recordCompletion: false },
+        { recordCompletion: false, forceVaultApi: false },
       );
       expect(spy).not.toHaveBeenCalled();
     });

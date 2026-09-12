@@ -347,7 +347,7 @@ Click the checkbox next to a task to toggle its state between TODO and DONE. The
 
 ### Change Task State
 
-Click the task keyword to advance it to the next state — the same quick action as the dedicated Task List. Right-click the keyword (or long-press it on mobile) to choose a specific state from the menu. The task will be updated in the original file, and the embedded list will refresh automatically.
+Click the task keyword to advance it to the next state (desktop), matching the dedicated Task List. Right-click the keyword — or long-press it on mobile — to choose a specific state from the menu. On mobile a simple tap does nothing. The task will be updated in the original file, and the embedded list will refresh automatically.
 
 ### Task Context Menu
 

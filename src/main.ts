@@ -396,29 +396,23 @@ export default class TodoTracker extends Plugin {
     for (const leaf of leaves) {
       const view = leaf.view;
       if (view instanceof MarkdownView && view.editor) {
-        // Force the editor to refresh its decorations by triggering a viewport change
-        const editorView = (view.editor as { cm?: EditorView })?.cm;
-        if (editorView && typeof editorView.requestMeasure === 'function') {
-          // Request a measurement update which will trigger decoration refresh
-          editorView.requestMeasure();
-          refreshed = true;
-        }
+      // Force the editor to refresh its decorations by re-measuring. Avoid
+      // dispatching a dummy selection transaction: CodeMirror scrolls to the
+      // dispatched selection, which nudges the editor's scroll position on
+      // every update.
+      const editorView = (view.editor as { cm?: EditorView })?.cm;
+      if (editorView && typeof editorView.requestMeasure === 'function') {
+        // Request a measurement update which will trigger decoration refresh
+        editorView.requestMeasure();
+        refreshed = true;
 
-        // Additional force refresh: trigger a viewport change to ensure decorations are re-evaluated
-        if (editorView && typeof editorView.dispatch === 'function') {
-          // Dispatch a dummy transaction to force re-render and clear any stacked decorations
-          editorView.dispatch({
-            selection: editorView.state.selection,
-          });
-
-          // Force a second update to ensure decorations are properly applied/removed
-          window.setTimeout(() => {
-            if (editorView && typeof editorView.requestMeasure === 'function') {
-              editorView.requestMeasure();
-            }
-          }, 0);
-          refreshed = true;
-        }
+        // Force a second update to ensure decorations are properly applied/removed
+        window.setTimeout(() => {
+          if (typeof editorView.requestMeasure === 'function') {
+            editorView.requestMeasure();
+          }
+        }, 0);
+      }
       }
     }
 

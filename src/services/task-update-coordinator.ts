@@ -552,8 +552,6 @@ export class TaskUpdateCoordinator {
     if (context.type === 'state') {
       this.performDirectEmbedDOMUpdate(context.task, context.newState);
     }
-
-    this.refreshVisibleEditorDecorations();
   }
 
   /**
@@ -897,6 +895,11 @@ export class TaskUpdateCoordinator {
       case 'state':
         return taskEditor.updateTaskState(task, context.newState, {
           recordCompletion: context.recordCompletion,
+          // Only the editor's own commands should edit the live editor buffer.
+          // Updates coming from the Task List, embedded code blocks or the
+          // reader go through the vault so they do not move the cursor/scroll
+          // of an open note (Obsidian re-renders the file for us).
+          forceVaultApi: context.source !== 'editor',
         });
 
       case 'scheduled-date':
@@ -1264,15 +1267,6 @@ export class TaskUpdateCoordinator {
         // This is a visual enhancement, not critical functionality
       }
     });
-  }
-
-  /**
-   * Refresh visible editor decorations.
-   */
-  private refreshVisibleEditorDecorations(): void {
-    if (this.plugin.refreshVisibleEditorDecorations) {
-      this.plugin.refreshVisibleEditorDecorations();
-    }
   }
 
   /**

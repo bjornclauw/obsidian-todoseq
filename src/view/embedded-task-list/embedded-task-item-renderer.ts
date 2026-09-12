@@ -535,9 +535,11 @@ export class EmbeddedTaskItemRenderer {
       openStateMenuOnceAtMouseEvent(evt);
     });
 
-    // Left-click / tap advances to the next state — the same quick action as
-    // the dedicated Task List. Right-click and long-press keep opening the
-    // state-selection menu; ignore a click synthesised right after one opens.
+    // Desktop: a left-click advances to the next state, like the dedicated
+    // Task List. Mobile: a tap is inert — long-press opens the state picker.
+    // Either way the event is stopped so it never reaches the row's navigate
+    // handler. Right-click / long-press / F10 / Shift+F10 / ContextMenu open
+    // the state menu.
     const advanceState = async (): Promise<void> => {
       const freshTask = this.plugin.taskStateManager.findTaskByPathAndLine(
         task.path,
@@ -558,13 +560,15 @@ export class EmbeddedTaskItemRenderer {
     };
 
     stateSpan.addEventListener('click', (evt: MouseEvent) => {
-      if (Date.now() - lastStateMenuOpenTs < STATE_MENU_DEBOUNCE_MS) {
-        evt.preventDefault();
-        evt.stopPropagation();
-        return;
-      }
       evt.preventDefault();
       evt.stopPropagation();
+      if (Platform.isMobile) {
+        return;
+      }
+      // Ignore a click synthesised right after the state menu was dismissed.
+      if (Date.now() - lastStateMenuOpenTs < STATE_MENU_DEBOUNCE_MS) {
+        return;
+      }
       void advanceState();
     });
 
@@ -573,7 +577,9 @@ export class EmbeddedTaskItemRenderer {
       if (key === 'Enter' || key === ' ') {
         evt.preventDefault();
         evt.stopPropagation();
-        void advanceState();
+        if (!Platform.isMobile) {
+          void advanceState();
+        }
       } else if ((key === 'F10' && evt.shiftKey) || key === 'ContextMenu') {
         evt.preventDefault();
         evt.stopPropagation();
@@ -713,7 +719,7 @@ export class EmbeddedTaskItemRenderer {
         target instanceof HTMLElement &&
         target.closest('.todoseq-embedded-task-state')
       ) {
-        // The state keyword has its own click action (advance to next state).
+        // The state keyword is inert on left-click; never navigate from it.
         return;
       }
       this.navigateToTask(task, e);

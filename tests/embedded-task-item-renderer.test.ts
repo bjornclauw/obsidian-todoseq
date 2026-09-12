@@ -3,6 +3,7 @@
  */
 
 import { EmbeddedTaskItemRenderer } from '../src/view/embedded-task-list/embedded-task-item-renderer';
+import { Platform } from 'obsidian';
 import { createBaseTask } from './helpers/test-helper';
 import { installObsidianDomMocks } from './helpers/obsidian-dom-mock';
 
@@ -1077,7 +1078,7 @@ describe('EmbeddedTaskItemRenderer', () => {
   });
 
   describe('state keyword click behaviour', () => {
-    it('advances to the next state and does not navigate on keyword click', async () => {
+    it('advances to the next state on desktop and does not navigate', async () => {
       const getNextState = jest.fn().mockReturnValue('DOING');
       const updateTaskByPath = jest.fn().mockResolvedValue(undefined);
       renderer.plugin.taskUpdateCoordinator = {
@@ -1110,6 +1111,41 @@ describe('EmbeddedTaskItemRenderer', () => {
       );
       expect(navigateSpy).not.toHaveBeenCalled();
       navigateSpy.mockRestore();
+    });
+
+    it('does nothing on mobile and does not navigate', async () => {
+      const originalIsMobile = Platform.isMobile;
+      Platform.isMobile = true;
+      try {
+        const getNextState = jest.fn().mockReturnValue('DOING');
+        const updateTaskByPath = jest.fn().mockResolvedValue(undefined);
+        renderer.plugin.taskUpdateCoordinator = {
+          stateTransitionManager: { getNextState },
+          updateTaskByPath,
+        };
+        renderer.plugin.taskStateManager.findTaskByPathAndLine.mockReturnValue(
+          undefined,
+        );
+        const navigateSpy = jest
+          .spyOn(renderer, 'navigateToTask')
+          .mockImplementation(() => {});
+
+        const task = createBaseTask({ state: 'TODO', text: 'Test task' });
+        const li = renderer.createTaskListItem(task, 0, {});
+        const stateSpan = li.querySelector('.todoseq-embedded-task-state');
+
+        stateSpan!.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(getNextState).not.toHaveBeenCalled();
+        expect(updateTaskByPath).not.toHaveBeenCalled();
+        expect(navigateSpy).not.toHaveBeenCalled();
+        navigateSpy.mockRestore();
+      } finally {
+        Platform.isMobile = originalIsMobile;
+      }
     });
 
     it('navigates when clicking elsewhere on the row', () => {
