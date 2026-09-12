@@ -318,6 +318,53 @@ describe('TaskUpdateCoordinator - CLOSED Date Behavior', () => {
     });
   });
 
+  describe('recurring completion records CLOSED', () => {
+    it('resets state and passes recordCompletion for a recurring completion', async () => {
+      const task = createBaseTask({
+        state: 'TODO' as Task['state'],
+        scheduledDate: new Date('2026-03-09'),
+        scheduledDateRepeat: {
+          type: '+',
+          unit: 'd',
+          value: 1,
+          raw: '+1d',
+        } satisfies DateRepeatInfo,
+      });
+      taskStateManager.addTask(task);
+      originalTask = task;
+
+      await taskUpdateCoordinator.updateTaskState(task, 'DONE');
+
+      // State is reset to the default inactive state, and recordCompletion is
+      // set so the writer stamps a CLOSED date for the completion.
+      expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
+        task,
+        'TODO',
+        false,
+        true,
+      );
+    });
+
+    it('does not pass recordCompletion for a non-recurring completion', async () => {
+      const task = createBaseTask({
+        state: 'TODO' as Task['state'],
+        scheduledDate: null,
+        scheduledDateRepeat: null,
+      });
+      taskStateManager.addTask(task);
+      originalTask = task;
+
+      await taskUpdateCoordinator.updateTaskState(task, 'DONE');
+
+      expect(mockPlugin.taskEditor.updateTaskState).toHaveBeenCalledWith(
+        task,
+        'DONE',
+        false,
+        false,
+      );
+    });
+  });
+
   describe('DONE -> ARCHIVED transition', () => {
     it('should NOT update or remove CLOSED date when transitioning to ARCHIVED', async () => {
       const task = createBaseTask({

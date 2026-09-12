@@ -434,6 +434,62 @@ describe('TaskWriter Instance Methods', () => {
 
       expect(result.lineDelta).toBeUndefined();
     });
+
+    it('records and keeps CLOSED when recordCompletion is true for an inactive write', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'TODO',
+        completed: false,
+        closedDate: new Date('2026-03-09'),
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn('TODO Task text\nCLOSED: [2026-03-09 Mon]');
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(
+        task,
+        'TODO',
+        true,
+        false,
+        true,
+      );
+
+      expect(processed).toContain('CLOSED:');
+      expect(result.closedDate).not.toBeNull();
+    });
+
+    it('removes CLOSED when an inactive write is not recording a completion', async () => {
+      mockPlugin.settings.trackClosedDate = true;
+      const task: Task = createBaseTask({
+        state: 'DONE',
+        completed: true,
+        closedDate: new Date('2026-03-09'),
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn('TODO Task text\nCLOSED: [2026-03-09 Mon]');
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'TODO');
+
+      expect(processed).not.toContain('CLOSED:');
+      expect(result.closedDate).toBeNull();
+    });
   });
 
   describe('updateKeywordManager', () => {
@@ -475,6 +531,7 @@ describe('TaskWriter Instance Methods', () => {
         'DOING',
         true,
         false,
+        false,
       );
     });
 
@@ -498,6 +555,7 @@ describe('TaskWriter Instance Methods', () => {
         'DOING',
         true,
         false,
+        false,
       );
     });
 
@@ -519,6 +577,7 @@ describe('TaskWriter Instance Methods', () => {
         task,
         'LATER',
         true,
+        false,
         false,
       );
     });
@@ -2646,6 +2705,30 @@ describe('TaskWriter Instance Methods', () => {
       expect(content).toContain('TODO Task text');
       expect(content).toContain('SCHEDULED: <2026-03-17 Tue +1w>');
       expect(content).toContain('DEADLINE: <2026-03-17 Tue +1w>');
+    });
+
+    it('should preserve an existing CLOSED line through recurrence (A1)', async () => {
+      const task = createBaseTask({
+        rawText: 'DONE Task text',
+        state: 'DONE',
+        completed: true,
+        closedDate: new Date('2026-03-09'),
+        scheduledDate: new Date(2026, 2, 10),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+      });
+
+      const getContent = setupVaultProcess(
+        'DONE Task text\n  CLOSED: [2026-03-09 Mon]\n  SCHEDULED: <2026-03-10 Tue +1w>',
+      );
+
+      const result = await taskWriter.applyRecurrenceUpdate(task, {
+        newScheduledDate: new Date(2026, 2, 17),
+        newState: 'TODO',
+      });
+
+      // CLOSED is retained as the last-completion record
+      expect(getContent()).toContain('CLOSED: [2026-03-09 Mon]');
+      expect(result.closedDate).not.toBeNull();
     });
 
     it('should preserve regular warning period (-Nd) through recurrence', async () => {

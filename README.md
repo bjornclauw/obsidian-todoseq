@@ -30,9 +30,9 @@ Most task managers force you into a separate system. TODOseq meets you where you
 
 **Subtasks** — Break down complex tasks with indented checkbox items. The Task List shows subtask progress as `[1/3]` indicating completed and total subtasks.
 
-**Repeating Tasks** — Automatically advance scheduled and deadline dates when completed. Use natural language like "every day" or Org-mode repeaters like `.+1d`, `++1w`, or `+1m` to create recurring tasks.
+**Repeating Tasks** — Automatically advance scheduled and deadline dates when completed. Use natural language like "every day" or Org-mode repeaters like `.+1d`, `++1w`, or `+1m` to create recurring tasks. A recurring task reopens immediately on completion and keeps a CLOSED date recording that occurrence.
 
-**Closed Date Tracking** — Optional CLOSED date on completed tasks, following Org-mode syntax. Records when tasks were marked as done and automatically manages the date when tasks are reactivated.
+**Closed Date Tracking** — Optional CLOSED date on completed tasks, following Org-mode syntax. Records when tasks were marked as done and automatically manages the date when tasks are reactivated. Recurring tasks keep their CLOSED date as the last-completion record.
 
 **Logseq Compatible** — Use the same task format across both tools. Existing Logseq tasks work without modification. Dual-use your vault or migrate at your own pace.
 

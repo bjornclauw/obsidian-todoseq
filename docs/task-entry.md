@@ -463,7 +463,7 @@ The CLOSED date uses square brackets `[]` instead of angle brackets `<>` to dist
 
 - **Automatic Addition**: When you mark a task as completed (e.g., transition from TODO to DONE), a CLOSED date is automatically added if the "Track closed date" setting is enabled.
 - **Automatic Removal**: When you reactivate a completed task (e.g., transition from DONE to TODO), the CLOSED date is automatically removed.
-- **Recurring Tasks**: CLOSED dates are not removed from recurring tasks when they are reactivated, as they preserve a record of when the task was last completed.
+- **Recurring Tasks**: When you complete a recurring task, it is immediately reopened (reset to the next inactive state) and its dates advance, while a CLOSED date recording that completion is added and **kept** as the last-completion record. Each future completion updates the CLOSED date to the latest time.
 - **Manual Editing**: You can manually add or remove CLOSED dates directly in your notes.
 
 ### STARTED Date
@@ -593,6 +593,9 @@ When you mark a task with a repeating date as completed (default completed state
 1. The date automatically advances to the next occurrence
 2. The new date is written back to the file
 3. The task is reset to an inactive state (default inactive state, i.e. TODO)
+4. A CLOSED date recording the completion is added and kept under the task (last-completion record) when "Track closed date" is enabled
+
+The task is reopened immediately, so it never stays in the completed state.
 
 Tasks with repeating dates display a repeat icon in the task list to indicate they will advance when completed.
 

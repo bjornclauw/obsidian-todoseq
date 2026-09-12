@@ -165,6 +165,22 @@ describe('TaskWriter.createTaskAtLine', () => {
     );
   });
 
+  it('writes a CLOSED line when recordCompletion is set', async () => {
+    const { writer, mockApp, mockPlugin } = createWriter();
+    mockPlugin.settings.trackClosedDate = true;
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    await writer.createTaskAtLine('test.md', 0, makeFields(), {
+      recordCompletion: true,
+    });
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toContain('CLOSED:');
+  });
+
   it('returns null when the target file cannot be resolved', async () => {
     const { writer, mockApp } = createWriter();
     mockApp.vault.getAbstractFileByPath = jest.fn().mockReturnValue(null);
@@ -342,6 +358,32 @@ describe('TaskWriter.updateTaskFields', () => {
 
     expect(mockEditor.replaceRange).toHaveBeenCalled();
     expect(mockApp.vault.process).not.toHaveBeenCalled();
+  });
+
+  it('records a CLOSED date when recordCompletion is set for an inactive write', async () => {
+    const { writer, mockApp, mockPlugin } = createWriter();
+    mockPlugin.settings.trackClosedDate = true;
+    let content = 'TODO Task text\n';
+    mockApp.vault.process = jest.fn(
+      (_file, updateFn: (data: string) => string) => {
+        content = updateFn(content);
+        return Promise.resolve(content);
+      },
+    );
+
+    const task = createBaseTask({
+      rawText: 'TODO Task text',
+      text: 'Task text',
+      state: 'TODO',
+    });
+    const result = await writer.updateTaskFields(
+      task,
+      makeFields({ state: 'TODO' }),
+      { recordCompletion: true },
+    );
+
+    expect(content).toContain('CLOSED:');
+    expect(result?.task.closedDate).not.toBeNull();
   });
 
   it('returns null when the task file cannot be resolved', async () => {

@@ -170,11 +170,41 @@ export class TaskEditorController {
       return;
     }
 
+    const keywordManager = this.plugin.taskStateManager.getKeywordManager();
+    const willBeCompleted = keywordManager.isCompleted(fields.state);
+    const hasRepeatingDates =
+      (fields.scheduledRepeat != null && fields.scheduledDate != null) ||
+      (fields.deadlineRepeat != null && fields.deadlineDate != null);
+    // Completing a recurring task resets it to the default inactive state and
+    // records a CLOSED date, then schedules the delayed roll-forward — exactly
+    // like every other completion surface.
+    const recordCompletion = willBeCompleted && hasRepeatingDates;
+    const writeFields: TaskComposeFields = recordCompletion
+      ? { ...fields, state: keywordManager.getDefaultInactive() }
+      : fields;
+
     try {
       if (target.task) {
-        await writer.updateTaskFields(target.task, fields);
+        const result = await writer.updateTaskFields(target.task, writeFields, {
+          recordCompletion,
+        });
+        if (recordCompletion && result) {
+          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceForCompletedTask(
+            result.task,
+          );
+        }
       } else {
-        await writer.createTaskAtLine(target.path, target.line, fields);
+        const result = await writer.createTaskAtLine(
+          target.path,
+          target.line,
+          writeFields,
+          { recordCompletion },
+        );
+        if (recordCompletion && result) {
+          this.plugin.taskUpdateCoordinator?.scheduleRecurrenceForCompletedTask(
+            result.task,
+          );
+        }
       }
     } catch (error) {
       console.error('Failed to save task', error);

@@ -114,6 +114,8 @@ interface ProcessingContext {
   newDeadlineWarningPeriod?: WarningPeriodInfo | null;
   /** New state for recurrence (for 'recurrence' type updates) */
   newStateForRecurrence?: string;
+  /** Whether the write should stamp a CLOSED date for a completion (recurring roll-forward) */
+  recordCompletion?: boolean;
   filePath: string;
   fileLine: number;
 }
@@ -343,6 +345,22 @@ export class TaskUpdateCoordinator {
   }
 
   /**
+   * Schedule the standard delayed recurrence roll-forward for a task that was
+   * just completed outside of `updateTask` (e.g. by the Task Editor modal).
+   * The caller is responsible for having already written the RESET state and,
+   * where applicable, a CLOSED date.
+   */
+  scheduleRecurrenceForCompletedTask(task: Task): void {
+    const hasRepeatingDates =
+      (task.scheduledDateRepeat != null && task.scheduledDate != null) ||
+      (task.deadlineDateRepeat != null && task.deadlineDate != null);
+    if (!hasRepeatingDates) {
+      return;
+    }
+    this.recurrenceCoordinator.scheduleRecurrence(task);
+  }
+
+  /**
    * Convenience method: Update task state by path and line.
    * If the task is not found (e.g., was archived), re-parse it from the file
    * if the new state is non-archived.
@@ -434,6 +452,7 @@ export class TaskUpdateCoordinator {
     let newState = context.newState ?? '';
     // Preserve the original requested state for recurrence checking
     const originalNewState = context.newState ?? '';
+    let recordCompletion = false;
 
     if (context.type === 'state' && context.newState) {
       const isOriginalStateCompleted = this.keywordManager.isCompleted(
@@ -445,11 +464,14 @@ export class TaskUpdateCoordinator {
         (context.task.deadlineDateRepeat != null &&
           context.task.deadlineDate != null);
 
-      // For recurring tasks being marked complete, calculate the next inactive state
-      // but preserve originalNewState to track that user completed the task
+      // For recurring tasks being marked complete, the state is reset to the
+      // next inactive state immediately (instant reopen) while still stamping
+      // a CLOSED date so the completion is recorded. The delayed recurrence
+      // update then advances the dates and preserves the CLOSED line.
       if (isOriginalStateCompleted && hasRepeatingDates) {
         // Use cached state transition manager instead of creating new instance
         newState = this.stateTransitionManager.getNextState(context.newState);
+        recordCompletion = true;
       }
     }
 
@@ -470,6 +492,7 @@ export class TaskUpdateCoordinator {
       newScheduledWarningPeriod: context.newScheduledWarningPeriod,
       newDeadlineWarningPeriod: context.newDeadlineWarningPeriod,
       newStateForRecurrence: context.newStateForRecurrence,
+      recordCompletion,
       filePath: context.task.path,
       fileLine: context.task.line,
     };
@@ -671,7 +694,12 @@ export class TaskUpdateCoordinator {
   ): Promise<Task> {
     switch (context.type) {
       case 'state':
-        return taskEditor.updateTaskState(task, context.newState);
+        return taskEditor.updateTaskState(
+          task,
+          context.newState,
+          false,
+          context.recordCompletion,
+        );
 
       case 'scheduled-date':
         if (!context.newDate) {

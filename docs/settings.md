@@ -402,7 +402,8 @@ FIXME Handle edge cases
 - Adds a CLOSED date when tasks are marked as completed
 - CLOSED date uses Org-mode syntax with square brackets: `CLOSED: [2025-01-18 Fri 14:30]`
 - Records the date and time when the task was completed
-- Removes CLOSED date when completed tasks are reactivated
+- Removes CLOSED date when a non-recurring completed task is reactivated
+- Recurring tasks keep their CLOSED date: completing one reopens it (resets the state and advances the dates) and the CLOSED date is retained as the last-completion record
 
 **When Disabled:**
 

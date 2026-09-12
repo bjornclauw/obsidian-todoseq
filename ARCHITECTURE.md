@@ -286,7 +286,7 @@ graph TB
 - **Inline Date-Line Helpers**: SCHEDULED/DEADLINE/CLOSED line insertion/removal is inlined as private methods on `TaskWriter` (`updateOrInsertDateLine`, `removeDateLine`, `calcDateLineInsertIndex`, `getEffectiveDateLineIndent`, `getExistingDateLineIndent` — formerly a separate `DateLineOperator` module). Insertion rules: SCHEDULED before DEADLINE; DEADLINE after SCHEDULED; CLOSED after both. Both Editor-API and Vault-API paths route through these shared helpers for consistent indent preservation.
 - **Editor Awareness**: Uses Editor API (`editor.replaceRange()`) for active files in source mode to preserve cursor/selection/folds; falls back to Vault API for inactive files or preview mode
 - **Multiple Line Writes**: `writeLines()` method for writing multiple lines while maintaining editor awareness
-- **Atomic CLOSED Date Handling**: For non-source mode, CLOSED date is handled atomically with task line update in a single `vault.process()` operation
+- **Atomic CLOSED Date Handling**: For non-source mode, CLOSED date is handled atomically with task line update in a single `vault.process()` operation. `applyLineUpdate()` accepts a `recordCompletion` flag used for recurring completion: the task is written in its reset (inactive) state while still stamping a CLOSED date, which the subsequent recurrence write preserves.
 - **Line Delta Returns**: Date update methods (`updateTaskScheduledDate()`, `removeTaskScheduledDate()`, `updateTaskDeadlineDate()`, `removeTaskDeadlineDate()`) return `Task & { lineDelta?: number }` for line index adjustments
 - **Checkbox Preservation**: Preserves list marker character (`-`, `*`, `+`) and checkbox state when changing to archived states
 
@@ -1061,7 +1061,7 @@ graph LR
 - **Delayed Updates**: Recurring tasks use 50ms delay via `RecurrenceCoordinator` before advancing dates (scheduled by `TaskUpdateCoordinator`)
 - **Vault-Based Reads**: `RecurrenceCoordinator.getFileContent()` always reads from vault (not editor buffer) to ensure latest content
 - **File Write Consistency**: `TaskWriter.writeLines()` ensures all file writes are editor-aware
-- **Atomic CLOSED Date**: For non-source mode, CLOSED date is handled atomically with task line update in a single `vault.process()` operation
+- **Atomic CLOSED Date**: For non-source mode, CLOSED date is handled atomically with task line update in a single `vault.process()` operation. A `recordCompletion` flag lets a recurring completion write the reset state while keeping/adding a CLOSED date.
 - **Line Delta Tracking**: Date update methods return `Task & { lineDelta?: number }` to allow `TaskUpdateCoordinator` to adjust subsequent task indices
 - **Recovery Processing**: `VaultScanner` identifies completed recurring tasks on vault reload and coordinates with `RecurrenceCoordinator` to prevent duplicate updates
 - **Date Repeater Logic**: Supports three types: `+` (plain), `.+` (delay from now), `++` (catch-up) with units h, d, w, m, y

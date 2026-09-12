@@ -1,5 +1,13 @@
 # Change Log
 
+## Unreleased
+
+- Added a task editor to create or edit the task at the editor cursor. Open it from the ribbon button or the "Create or edit task" command; it supports state, priority, scheduled/deadline dates (with repeat and warning period), and a description, and writes everything through `TaskWriter`.
+- Fixed the date picker losing changes when only the repeat, warning period, or time of an already-selected date was changed. (now more intuitive)
+- Recurring tasks now record a CLOSED date when completed: the task reopens immediately with its dates advanced and keeps the CLOSED date as the last-completion record.
+- The task editor completes recurring tasks the same way as the checkbox, task list, reader and embedded list surfaces.
+- Kept the task editor modal above the mobile soft keyboard and scrolled the focused field into view.
+
 ## 0.20.0
 
 - Added new option to track STARTED date when a task enters an active state.

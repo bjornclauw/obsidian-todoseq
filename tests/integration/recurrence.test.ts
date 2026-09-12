@@ -20,6 +20,11 @@ test.describe('Recurrence', () => {
   });
 
   test('completing recurring task via keyword click advances date', async () => {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (app as any).plugins.plugins.todoseq.settings.trackClosedDate = true;
+    });
+
     await openFileInEditor(page, 'recurrence');
 
     // Read initial date.
@@ -50,10 +55,11 @@ test.describe('Recurrence', () => {
     expect(line1).not.toMatch(/\bTODO\b/);
 
     // Click 2: DOING → getNextState('DOING') = 'DONE'
-    // → buildProcessingContext rewrites DONE→TODO
-    // → performFileWrite writes TODO
+    // → buildProcessingContext rewrites DONE→TODO and marks recordCompletion
+    // → performFileWrite writes TODO + records a CLOSED date
     // → handleRecurrence fires (originalNewState='DONE' + hasRepeatingDates)
-    // → scheduleRecurrence(50ms) → performRecurrenceUpdate → date advances
+    // → scheduleRecurrence(50ms) → performRecurrenceUpdate → date advances,
+    //   preserving the CLOSED line
     const keyword2 = page
       .locator('.workspace-leaf.mod-active .todoseq-keyword-formatted')
       .first();
@@ -89,6 +95,8 @@ test.describe('Recurrence', () => {
     expect(updatedContent).toContain('Recurring daily task');
     expect(updatedContent).toMatch(/\+1d>/);
     expect(updatedContent).toMatch(/\bTODO\b/);
+    // A1: the completion is recorded and kept as the last-completion record.
+    expect(updatedContent).toMatch(/CLOSED:/);
 
     const updatedMatch = updatedContent!.match(
       /SCHEDULED: <(\d{4}-\d{2}-\d{2})/,

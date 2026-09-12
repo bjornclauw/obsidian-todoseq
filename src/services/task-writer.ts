@@ -224,10 +224,16 @@ export class TaskWriter {
     newState: string,
     keepPriority = true,
     forceVaultApi = false,
+    recordCompletion = false,
   ): Promise<Task> {
     // Table tasks use vault.process for cell-level writes
     if (task.isTableTask && task.tableCell) {
-      return this.applyTableCellUpdate(task, newState, keepPriority);
+      return this.applyTableCellUpdate(
+        task,
+        newState,
+        keepPriority,
+        recordCompletion,
+      );
     }
 
     const settings = this.settings;
@@ -237,6 +243,13 @@ export class TaskWriter {
       keepPriority,
       this.keywordManager,
     );
+
+    // A recordCompletion write persists the inactive state (recurring
+    // roll-forward) but still stamps a CLOSED date for the completion that
+    // just happened. On such a write CLOSED is added/kept, never removed.
+    const shouldWriteClosed =
+      !!settings?.trackClosedDate && (completed || recordCompletion);
+    const shouldRemoveClosed = !shouldWriteClosed && !!task.closedDate;
 
     // STARTED tracking: trigger on first entry into an active state.
     // Idempotent and one-way — never removed on reactivation (first-ever-start).
@@ -304,11 +317,9 @@ export class TaskWriter {
       } else {
         // Not in source mode (preview/reader mode) or not active or forceVaultApi: use atomic background edit
         // Include CLOSED date handling atomically in the same operation for consistency
-        const dateStr =
-          completed && settings?.trackClosedDate
-            ? DateUtils.formatClosedDate(new Date())
-            : null;
-        const shouldRemoveClosed = !completed && task.closedDate;
+        const dateStr = shouldWriteClosed
+          ? DateUtils.formatClosedDate(new Date())
+          : null;
 
         await this.app.vault.process(file, (data) => {
           const lines = data.split('\n');
@@ -357,7 +368,7 @@ export class TaskWriter {
     // insertion/removal requires its own editor operations
     // Line delta and date accumulators were declared above (before vault.process)
     if (isSourceMode && !forceVaultApi) {
-      if (completed && settings?.trackClosedDate) {
+      if (shouldWriteClosed) {
         const closedResult = await this.updateTaskClosedDate(
           task,
           new Date(),
@@ -365,7 +376,7 @@ export class TaskWriter {
         );
         lineDelta += closedResult.lineDelta;
         updatedClosedDate = closedResult.task.closedDate;
-      } else if (!completed && task.closedDate) {
+      } else if (shouldRemoveClosed) {
         const closedResult = await this.removeTaskClosedDate(task, false);
         lineDelta += closedResult.lineDelta;
         updatedClosedDate = closedResult.task.closedDate;
@@ -385,10 +396,10 @@ export class TaskWriter {
       }
     } else if (!isSourceMode || forceVaultApi) {
       // For non-source mode, CLOSED date was handled atomically above
-      if (completed && settings?.trackClosedDate) {
+      if (shouldWriteClosed) {
         lineDelta = task.closedDate ? 0 : 1;
         updatedClosedDate = new Date();
-      } else if (!completed && task.closedDate) {
+      } else if (shouldRemoveClosed) {
         lineDelta = -1;
         updatedClosedDate = null;
       }
@@ -486,6 +497,7 @@ export class TaskWriter {
     task: Task,
     newState: string,
     keepPriority: boolean,
+    recordCompletion = false,
   ): Promise<Task> {
     const { newLine, completed } = TaskWriter.generateTaskLine(
       task,
@@ -493,6 +505,10 @@ export class TaskWriter {
       keepPriority,
       this.keywordManager,
     );
+
+    const shouldWriteClosed =
+      !!this.settings?.trackClosedDate && (completed || recordCompletion);
+    const shouldRemoveClosed = !shouldWriteClosed;
 
     // Extract just the keyword + text part (strip indent + listMarker)
     let cellContent = newLine;
@@ -510,7 +526,7 @@ export class TaskWriter {
       let dateSuffix = brIdx >= 0 ? origCell.substring(brIdx) : '';
 
       // Add or update CLOSED date when trackClosedDate is enabled
-      if (completed && this.settings?.trackClosedDate) {
+      if (shouldWriteClosed) {
         const closedDateStr = DateUtils.formatClosedDate(new Date());
         // CLOSED dates in cells use [[...]] wikilink format.
         // Support both old [date] and new [[date]] formats for migration
@@ -521,7 +537,7 @@ export class TaskWriter {
         } else {
           dateSuffix = `${dateSuffix}${closedTag}`;
         }
-      } else if (!completed) {
+      } else if (shouldRemoveClosed) {
         // Remove CLOSED date when un-completing, regardless of whether
         // task.closedDate is set. For table cells, task.closedDate is
         // parsed only from the first <br> segment (before the CLOSED tag),
@@ -538,8 +554,8 @@ export class TaskWriter {
     });
 
     let closedDate = task.closedDate;
-    if (completed && this.settings?.trackClosedDate) closedDate = new Date();
-    else if (!completed && task.closedDate) closedDate = null;
+    if (shouldWriteClosed) closedDate = new Date();
+    else if (shouldRemoveClosed) closedDate = null;
 
     return {
       ...task,
@@ -651,6 +667,7 @@ export class TaskWriter {
     task: Task,
     nextState: string | null = null,
     forceVaultApi = false,
+    recordCompletion = false,
   ): Promise<Task> {
     let state: string;
     if (nextState == null) {
@@ -663,7 +680,13 @@ export class TaskWriter {
     } else {
       state = nextState;
     }
-    return await this.applyLineUpdate(task, state, true, forceVaultApi);
+    return await this.applyLineUpdate(
+      task,
+      state,
+      true,
+      forceVaultApi,
+      recordCompletion,
+    );
   }
 
   // Cycles a task to its next state using TaskStateTransitionManager.getCycleState() and persists change
@@ -1124,13 +1147,17 @@ export class TaskWriter {
     path: string,
     line: number,
     fields: TaskComposeFields,
+    options: { recordCompletion?: boolean } = {},
   ): Promise<TaskComposeResult | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       return null;
     }
 
-    const block = this.buildNewTaskBlock(fields);
+    const block = this.buildNewTaskBlock(
+      fields,
+      options.recordCompletion ?? false,
+    );
     const editor = this.getSourceModeEditorForPath(path);
 
     if (editor) {
@@ -1158,7 +1185,13 @@ export class TaskWriter {
     }
 
     return {
-      task: this.buildComposedTask(path, line, fields, block[0]),
+      task: this.buildComposedTask(
+        path,
+        line,
+        fields,
+        block[0],
+        options.recordCompletion ?? false,
+      ),
       lineDelta: 0,
     };
   }
@@ -1174,6 +1207,7 @@ export class TaskWriter {
   async updateTaskFields(
     task: Task,
     fields: TaskComposeFields,
+    options: { recordCompletion?: boolean } = {},
   ): Promise<TaskComposeResult | null> {
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (!(file instanceof TFile)) {
@@ -1191,11 +1225,15 @@ export class TaskWriter {
 
     let lineDelta = 0;
 
-    // Task line + state (handles CLOSED/STARTED via the existing pipeline)
+    // Task line + state (handles CLOSED/STARTED via the existing pipeline).
+    // recordCompletion stamps a CLOSED date even when writing an inactive
+    // state (recurring roll-forward).
     const afterState = await this.applyLineUpdate(
       updatedTask,
       fields.state,
       true,
+      false,
+      options.recordCompletion ?? false,
     );
 
     // DESCRIPTION (always directly below the task line).
@@ -1254,9 +1292,18 @@ export class TaskWriter {
    * Build the full line block for a new task: task line, DESCRIPTION,
    * SCHEDULED, and DEADLINE (in that order).
    */
-  private buildNewTaskBlock(fields: TaskComposeFields): string[] {
+  private buildNewTaskBlock(
+    fields: TaskComposeFields,
+    recordCompletion = false,
+  ): string[] {
     const taskLine = TaskWriter.buildNewTaskLine(fields, this.keywordManager);
-    const synthetic = this.buildComposedTask('', 0, fields, taskLine);
+    const synthetic = this.buildComposedTask(
+      '',
+      0,
+      fields,
+      taskLine,
+      recordCompletion,
+    );
     const indent = getDateLineIndent(synthetic);
     const lines = [taskLine];
 
@@ -1282,6 +1329,12 @@ export class TaskWriter {
         )}`,
       );
     }
+    const shouldWriteClosed =
+      !!this.settings?.trackClosedDate &&
+      (this.keywordManager.isCompleted(fields.state) || recordCompletion);
+    if (shouldWriteClosed) {
+      lines.push(`${indent}CLOSED: ${DateUtils.formatClosedDate(new Date())}`);
+    }
     return lines;
   }
 
@@ -1293,7 +1346,11 @@ export class TaskWriter {
     line: number,
     fields: TaskComposeFields,
     rawText: string,
+    recordCompletion = false,
   ): Task {
+    const shouldWriteClosed =
+      !!this.settings?.trackClosedDate &&
+      (this.keywordManager.isCompleted(fields.state) || recordCompletion);
     return {
       path,
       line,
@@ -1309,7 +1366,7 @@ export class TaskWriter {
       scheduledDateRepeat: fields.scheduledRepeat,
       deadlineDate: fields.deadlineDate,
       deadlineDateRepeat: fields.deadlineRepeat,
-      closedDate: null,
+      closedDate: shouldWriteClosed ? new Date() : null,
       startedDate: null,
       scheduledWarningPeriod: fields.scheduledWarningPeriod,
       deadlineWarningPeriod: fields.deadlineWarningPeriod,
