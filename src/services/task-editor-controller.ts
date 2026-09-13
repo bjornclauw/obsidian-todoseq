@@ -6,7 +6,7 @@ import {
   TaskEditorInitialValues,
   TaskEditorModal,
 } from '../view/components/task-editor-modal';
-import { isRepeatLogLine } from '../utils/repeat-log';
+import { isTaskMetadataLine } from '../utils/task-metadata';
 
 /** A resolved target for the task editor: an existing task or a new-task line. */
 interface TaskEditorTarget {
@@ -132,7 +132,7 @@ export class TaskEditorController {
 
       // Cursor may be on a metadata line (DESCRIPTION/SCHEDULED/...): walk up
       // to the task that owns it so editing works from anywhere in the block.
-      if (line !== undefined && this.isTaskMetadataLine(line)) {
+      if (line !== undefined && isTaskMetadataLine(line)) {
         for (let i = cursorLine - 1; i >= Math.max(0, cursorLine - 9); i--) {
           const candidate = editor.getLine(i);
           if (candidate === undefined) break;
@@ -145,7 +145,7 @@ export class TaskEditorController {
                 parser.parseLineAsTask(candidate, i, path),
             };
           }
-          if (candidate.trim() !== '' && !this.isTaskMetadataLine(candidate)) {
+          if (candidate.trim() !== '' && !isTaskMetadataLine(candidate)) {
             break;
           }
         }
@@ -153,15 +153,6 @@ export class TaskEditorController {
     }
 
     return { path, line: cursorLine, task: null };
-  }
-
-  /** True for DESCRIPTION/SCHEDULED/DEADLINE/CLOSED/STARTED or log lines. */
-  private isTaskMetadataLine(line: string): boolean {
-    return (
-      /^\s*(>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i.test(
-        line,
-      ) || isRepeatLogLine(line)
-    );
   }
 
   /** Whether the modal changed the task's scheduled/deadline dates or repeats. */
@@ -229,6 +220,7 @@ export class TaskEditorController {
         if (recordCompletion && result) {
           this.plugin.taskUpdateCoordinator?.scheduleRecurrenceIfRecurring(
             result.task,
+            'editor',
           );
         }
       } else {
@@ -241,19 +233,28 @@ export class TaskEditorController {
         if (recordCompletion && result) {
           this.plugin.taskUpdateCoordinator?.scheduleRecurrenceIfRecurring(
             result.task,
+            'editor',
           );
         }
       }
     } catch (error) {
-      console.error('Failed to save task', error);
+      // Report once here and let the modal keep itself open for a retry.
+      console.debug('Failed to save task', error);
       new Notice('Failed to save task');
-      return;
+      throw error;
     }
 
-    const file = this.plugin.app.vault.getAbstractFileByPath(target.path);
-    if (file instanceof TFile && this.plugin.vaultScanner) {
-      await this.plugin.vaultScanner.processIncrementalChange(file);
+    // Refresh views after a successful write. A failure here must not keep the
+    // modal open — the task is already saved, and retrying would duplicate it.
+    // Only write failures keep the modal open.
+    try {
+      const file = this.plugin.app.vault.getAbstractFileByPath(target.path);
+      if (file instanceof TFile && this.plugin.vaultScanner) {
+        await this.plugin.vaultScanner.processIncrementalChange(file);
+      }
+      this.plugin.refreshAllTaskListViews();
+    } catch (error) {
+      console.debug('Failed to refresh views after saving task', error);
     }
-    this.plugin.refreshAllTaskListViews();
   }
 }

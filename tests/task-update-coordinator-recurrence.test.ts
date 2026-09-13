@@ -4,11 +4,13 @@
 
 import { TaskUpdateCoordinator } from '../src/services/task-update-coordinator';
 import { TaskStateManager } from '../src/services/task-state-manager';
+import { TaskParser } from '../src/parser/task-parser';
 import { Task } from '../src/types/task';
 import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
 import {
   createCoordinatorHarness,
+  createMarkdownViewStub,
   CoordinatorHarness,
 } from './helpers/coordinator-harness';
 
@@ -637,6 +639,203 @@ describe('TaskUpdateCoordinator - Recurrence Update Behavior', () => {
       await taskUpdateCoordinator.updateTaskState(stored as Task, 'DONE');
 
       expect(spy).toHaveBeenCalled();
+    });
+
+    it('keeps repeatCount when resolving a recurring task from the editor', async () => {
+      const parser = TaskParser.create(keywordManager, null);
+      mockPlugin.vaultScanner.getParser.mockReturnValue(parser);
+
+      const editorLines = [
+        '- [ ] TODO Pay rent',
+        '  SCHEDULED: <2026-03-10 Tue +1w>',
+        '  > [!repeats]- Repeats: 5 (latest 50)',
+        '  > - #5 · closed 2026-03-10 Tue 09:12',
+      ];
+      const editor = {
+        getLine: (i: number) => editorLines[i],
+        lineCount: () => editorLines.length,
+      };
+      mockApp.workspace.getLeavesOfType.mockReturnValue([
+        { view: createMarkdownViewStub('test.md', editor) },
+      ]);
+
+      const task: Task = {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        rawText: editorLines[0],
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+        repeatCount: null,
+      };
+      taskStateManager.addTask(task);
+
+      const spy = recurrenceSpy();
+      await taskUpdateCoordinator.updateTask({
+        type: 'state',
+        task,
+        newState: 'DONE',
+        source: 'editor',
+      });
+
+      expect(spy).toHaveBeenCalled();
+      expect(spy.mock.calls[0][0].repeatCount).toBe(5);
+    });
+  });
+
+  describe('recurrence roll-forward write routing and state gating', () => {
+    /**
+     * performRecurrenceUpdate resolves its parser via app.plugins, which the
+     * harness mockApp does not carry by default. Provide a minimal parser so
+     * the roll-forward actually reaches the write.
+     */
+    function enableRecurrenceFire(): void {
+      (mockApp as unknown as { plugins: unknown }).plugins = {
+        getPlugin: () => ({
+          vaultScanner: {
+            getParser: () => ({
+              getDateLineType: (line: string) =>
+                line.includes('SCHEDULED') ? 'scheduled' : null,
+            }),
+          },
+        }),
+      };
+    }
+
+    function recurringTask(overrides: Partial<Task> = {}): Task {
+      return {
+        ...createBaseTask(),
+        path: 'test.md',
+        line: 0,
+        state: 'TODO',
+        completed: false,
+        scheduledDate: new Date('2026-03-10'),
+        scheduledDateRepeat: { type: '+', unit: 'w', value: 1, raw: '+1w' },
+        ...overrides,
+      };
+    }
+
+    function performRecurrence(
+      task: Task,
+      source: 'editor' | 'task-list',
+    ): Promise<unknown> {
+      return (
+        taskUpdateCoordinator as unknown as {
+          recurrenceCoordinator: {
+            performRecurrenceUpdate: (
+              task: Task,
+              source: 'editor' | 'task-list',
+            ) => Promise<unknown>;
+          };
+        }
+      ).recurrenceCoordinator.performRecurrenceUpdate(task, source);
+    }
+
+    function recurrenceScheduleSpy(): jest.SpyInstance {
+      return jest.spyOn(
+        (
+          taskUpdateCoordinator as unknown as {
+            recurrenceCoordinator: { scheduleRecurrence: () => void };
+          }
+        ).recurrenceCoordinator,
+        'scheduleRecurrence',
+      );
+    }
+
+    it('schedules the roll-forward with the triggering update source', async () => {
+      const task = recurringTask();
+      taskStateManager.addTask(task);
+      const spy = recurrenceScheduleSpy();
+
+      await taskUpdateCoordinator.updateTaskState(task, 'DONE');
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'editor',
+      );
+
+      spy.mockClear();
+      await taskUpdateCoordinator.updateTaskByPath(
+        'test.md',
+        0,
+        'DONE',
+        'task-list',
+      );
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'task-list',
+      );
+    });
+
+    it('rolls forward through the editor write path for an editor-source update', async () => {
+      enableRecurrenceFire();
+      const task = recurringTask();
+      taskStateManager.addTask(task);
+
+      await performRecurrence(task, 'editor');
+
+      expect(mockPlugin.taskEditor.applyRecurrenceUpdate).toHaveBeenCalled();
+      expect(
+        mockPlugin.taskEditor.applyRecurrenceUpdate.mock.calls[0][1]
+          .forceVaultApi,
+      ).toBe(false);
+    });
+
+    it('rolls forward through the vault write path for a task-list-source update', async () => {
+      enableRecurrenceFire();
+      const task = recurringTask();
+      taskStateManager.addTask(task);
+
+      await performRecurrence(task, 'task-list');
+
+      expect(mockPlugin.taskEditor.applyRecurrenceUpdate).toHaveBeenCalled();
+      expect(
+        mockPlugin.taskEditor.applyRecurrenceUpdate.mock.calls[0][1]
+          .forceVaultApi,
+      ).toBe(true);
+    });
+
+    it('does not reset the state when the task is no longer completed at fire time', async () => {
+      enableRecurrenceFire();
+      const task = recurringTask({
+        state: 'DOING',
+        completed: false,
+        rawText: 'DOING Task text',
+      });
+      taskStateManager.addTask(task);
+
+      await performRecurrence(task, 'task-list');
+
+      expect(mockPlugin.taskEditor.applyRecurrenceUpdate).toHaveBeenCalled();
+      expect(
+        mockPlugin.taskEditor.applyRecurrenceUpdate.mock.calls[0][1].newState,
+      ).toBeUndefined();
+      expect(taskStateManager.findTaskByPathAndLine('test.md', 0)?.state).toBe(
+        'DOING',
+      );
+    });
+
+    it('still resets the state when the task is completed at fire time', async () => {
+      enableRecurrenceFire();
+      const task = recurringTask({
+        state: 'DONE',
+        completed: true,
+        rawText: 'DONE Task text',
+      });
+      taskStateManager.addTask(task);
+
+      await performRecurrence(task, 'task-list');
+
+      expect(mockPlugin.taskEditor.applyRecurrenceUpdate).toHaveBeenCalled();
+      expect(
+        mockPlugin.taskEditor.applyRecurrenceUpdate.mock.calls[0][1].newState,
+      ).toBe('TODO');
+      expect(taskStateManager.findTaskByPathAndLine('test.md', 0)?.state).toBe(
+        'TODO',
+      );
     });
   });
 

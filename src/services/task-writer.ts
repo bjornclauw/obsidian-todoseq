@@ -3,21 +3,25 @@ import { Task, DateRepeatInfo, WarningPeriodInfo } from '../types/task';
 import { CHECKBOX_DETECTION_REGEX } from '../utils/patterns';
 import { KeywordManager } from '../utils/keyword-manager';
 import { DateUtils } from '../utils/date-utils';
-import { buildWarningPeriodString, hasRepeater } from '../utils/date-repeater';
+import {
+  buildWarningPeriodString,
+  hasRepeatingDates,
+} from '../utils/date-repeater';
 import {
   REPEAT_LOG_ENTRY_RE,
   buildRepeatLogEntry,
   buildRepeatLogTitle,
   getLineIndent,
-  isRepeatLogLine,
   parseRepeatLogTotal,
 } from '../utils/repeat-log';
 import {
   findDateLine,
   findDescriptionLine,
+  findDescriptionLineIn,
   getTaskIndent,
   getDateLineIndent,
 } from '../utils/task-line-utils';
+import { isTaskMetadataLine } from '../utils/task-metadata';
 import TodoTracker from '../main';
 import { getStateTransitionManager } from './task-update-coordinator';
 
@@ -51,6 +55,15 @@ export interface TaskComposeFields {
 export interface TaskComposeResult {
   task: Task;
   lineDelta: number;
+}
+
+/** Result of scanning a task's metadata block for repeat-log handling. */
+interface ScannedRepeatLogBlock {
+  metadata: string[];
+  entries: string[];
+  titleLine: string | null;
+  start: number;
+  endBefore: number;
 }
 
 /**
@@ -98,7 +111,7 @@ export class TaskWriter {
 
   /** Whether an existing CLOSED date must be kept (archived or recurring task). */
   private preservesClosed(task: Task, newState: string): boolean {
-    return this.keywordManager.isArchived(newState) || hasRepeater(task);
+    return this.keywordManager.isArchived(newState) || hasRepeatingDates(task);
   }
 
   /** Whether recurring completions are logged in a `[!repeats]` callout. */
@@ -112,13 +125,79 @@ export class TaskWriter {
     return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   }
 
-  /** True for a line that belongs to a task's contiguous metadata block. */
-  private isMetadataBlockLine(line: string): boolean {
-    return (
-      /^\s*(?:>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i.test(
-        line,
-      ) || isRepeatLogLine(line)
-    );
+  /**
+   * Scan a task's metadata block for the date/DESCRIPTION lines and any
+   * existing `[!repeats]` log. Works over a line accessor so the editor path can
+   * scan only the block instead of materialising the whole buffer.
+   *
+   * Blank lines are skipped (matching the parser) so a stray blank left where a
+   * date line was removed does not cause a duplicate log to be created.
+   */
+  private scanRepeatLogBlock(
+    getLine: (index: number) => string | undefined,
+    lineCount: number,
+    taskLine: number,
+  ): ScannedRepeatLogBlock {
+    const start = taskLine + 1;
+    let titleLine: string | null = null;
+    let lastMetaIdx = taskLine;
+    const metadata: string[] = [];
+    let entries: string[] = [];
+
+    for (let i = start; i < lineCount; i++) {
+      const line = getLine(i);
+      if (line === undefined || line.trim() === '') {
+        continue;
+      }
+      if (!isTaskMetadataLine(line)) {
+        break;
+      }
+      if (parseRepeatLogTotal(line) !== null) {
+        titleLine = line;
+        // Entries only ever belong to the most recent title.
+        entries = [];
+      } else if (REPEAT_LOG_ENTRY_RE.test(line)) {
+        entries.push(line);
+      } else {
+        metadata.push(line);
+      }
+      lastMetaIdx = i;
+    }
+
+    return {
+      metadata,
+      entries,
+      titleLine,
+      start,
+      endBefore: Math.max(start, lastMetaIdx + 1),
+    };
+  }
+
+  /** Build the refreshed metadata + `[!repeats]` region for a scanned block. */
+  private buildRepeatLogRegion(
+    scanned: ScannedRepeatLogBlock,
+    task: Task,
+    total: number,
+    limit: number,
+    closedAt: Date,
+    occurrence: Date | null,
+  ): { region: string[]; lineDelta: number } {
+    const { metadata, entries, titleLine, start, endBefore } = scanned;
+    const indent = titleLine
+      ? getLineIndent(titleLine)
+      : getDateLineIndent(task);
+
+    const combined = [
+      buildRepeatLogEntry(total, closedAt, occurrence, indent),
+      ...entries,
+    ].slice(0, limit);
+    const region = [
+      ...metadata,
+      buildRepeatLogTitle(total, limit, indent),
+      ...combined,
+    ];
+
+    return { region, lineDelta: region.length - (endBefore - start) };
   }
 
   /**
@@ -134,64 +213,22 @@ export class TaskWriter {
     closedAt: Date,
     occurrence: Date | null,
   ): { lineDelta: number; start: number; endBefore: number } {
-    // Scan the task's metadata block, skipping blank lines, to find any existing
-    // log. Tolerating blanks means a stray blank line (e.g. left where a date
-    // line was removed) does not cause a duplicate log to be created, matching
-    // the parser which also skips blanks when reading date lines.
-    let titleIdx = -1;
-    let lastMetaIdx = task.line;
-    for (let i = task.line + 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.trim() === '') {
-        continue;
-      }
-      if (!this.isMetadataBlockLine(line)) {
-        break;
-      }
-      if (parseRepeatLogTotal(line) !== null) {
-        titleIdx = i;
-      }
-      lastMetaIdx = i;
-    }
+    const scanned = this.scanRepeatLogBlock(
+      (i) => lines[i],
+      lines.length,
+      task.line,
+    );
+    const { region, lineDelta } = this.buildRepeatLogRegion(
+      scanned,
+      task,
+      total,
+      limit,
+      closedAt,
+      occurrence,
+    );
 
-    const start = task.line + 1;
-    const endBefore = Math.max(start, lastMetaIdx + 1);
-
-    // Preserve the date/DESCRIPTION lines in order, dropping blank lines and the
-    // old log lines — the block is rebuilt with the refreshed log appended, so a
-    // blank line left inside the block is cleaned up automatically.
-    const metadata = lines
-      .slice(start, endBefore)
-      .filter((line) => line.trim() !== '' && !isRepeatLogLine(line));
-
-    const indent =
-      titleIdx >= 0 ? getLineIndent(lines[titleIdx]) : getDateLineIndent(task);
-
-    const entries: string[] = [];
-    if (titleIdx >= 0) {
-      for (let i = titleIdx + 1; i < endBefore; i++) {
-        if (REPEAT_LOG_ENTRY_RE.test(lines[i])) {
-          entries.push(lines[i]);
-        }
-      }
-    }
-
-    const combined = [
-      buildRepeatLogEntry(total, closedAt, occurrence, indent),
-      ...entries,
-    ].slice(0, limit);
-    const newRegion = [
-      ...metadata,
-      buildRepeatLogTitle(total, limit, indent),
-      ...combined,
-    ];
-
-    lines.splice(start, endBefore - start, ...newRegion);
-    return {
-      lineDelta: newRegion.length - (endBefore - start),
-      start,
-      endBefore,
-    };
+    lines.splice(scanned.start, scanned.endBefore - scanned.start, ...region);
+    return { lineDelta, start: scanned.start, endBefore: scanned.endBefore };
   }
 
   /**
@@ -219,19 +256,23 @@ export class TaskWriter {
     closedAt: Date,
     occurrence: Date | null,
   ): number {
-    const after = Array.from({ length: editor.lineCount() }, (_, i) =>
-      editor.getLine(i),
+    // Scan only the task's metadata block rather than snapshotting the whole
+    // buffer (which is O(file) on large notes).
+    const scanned = this.scanRepeatLogBlock(
+      (i) => editor.getLine(i),
+      editor.lineCount(),
+      task.line,
     );
-    const { lineDelta, start, endBefore } = this.applyRepeatLogToLines(
-      after,
+    const { region, lineDelta } = this.buildRepeatLogRegion(
+      scanned,
       task,
       total,
       limit,
       closedAt,
       occurrence,
     );
-    const endAfter = start + (endBefore - start) + lineDelta;
-    const region = after.slice(start, endAfter);
+
+    const { start, endBefore } = scanned;
     // `replaceRange` to {line: endBefore, ch: 0} consumes the newline that
     // terminated the last replaced line. Re-add it when content follows, or the
     // log swallows the blank line under it and pulls the rest of the note in.
@@ -423,13 +464,11 @@ export class TaskWriter {
 
     // Table tasks use vault.process for cell-level writes
     if (task.isTableTask && task.tableCell) {
-      return this.applyTableCellUpdate(
-        task,
-        newState,
+      return this.applyTableCellUpdate(task, newState, {
         keepPriority,
         recordCompletion,
         forceVaultApi,
-      );
+      });
     }
 
     const settings = this.settings;
@@ -702,10 +741,16 @@ export class TaskWriter {
   private async applyTableCellUpdate(
     task: Task,
     newState: string,
-    keepPriority: boolean,
-    recordCompletion = false,
-    forceVaultApi = false,
+    options: {
+      keepPriority?: boolean;
+      recordCompletion?: boolean;
+      forceVaultApi?: boolean;
+    } = {},
   ): Promise<Task> {
+    const keepPriority = options.keepPriority ?? true;
+    const recordCompletion = options.recordCompletion ?? false;
+    const forceVaultApi = options.forceVaultApi ?? false;
+
     const { newLine, completed } = TaskWriter.generateTaskLine(
       task,
       newState,
@@ -1442,11 +1487,13 @@ export class TaskWriter {
       options.recordCompletion ?? false,
     );
     const editor = this.getSourceModeEditorForPath(path);
+    let lineDelta: number;
 
     if (editor) {
       const currentLine = editor.getLine(line) ?? '';
+      const replacingBlank = currentLine.trim() === '';
       const from: EditorPosition = { line, ch: 0 };
-      if (currentLine.trim() === '') {
+      if (replacingBlank) {
         editor.replaceRange(block.join('\n'), from, {
           line,
           ch: currentLine.length,
@@ -1454,15 +1501,21 @@ export class TaskWriter {
       } else {
         editor.replaceRange(`${block.join('\n')}\n`, from, from);
       }
+      // Replacing a blank line consumes one line; inserting adds them all.
+      lineDelta = replacingBlank ? block.length - 1 : block.length;
     } else {
+      lineDelta = 0;
       await this.app.vault.process(file, (data) => {
         const lines = data.split('\n');
         const index = Math.max(0, Math.min(line, lines.length));
-        if (lines[index] !== undefined && lines[index].trim() === '') {
+        const replacingBlank =
+          lines[index] !== undefined && lines[index].trim() === '';
+        if (replacingBlank) {
           lines.splice(index, 1, ...block);
         } else {
           lines.splice(index, 0, ...block);
         }
+        lineDelta = replacingBlank ? block.length - 1 : block.length;
         return lines.join('\n');
       });
     }
@@ -1475,7 +1528,7 @@ export class TaskWriter {
         block[0],
         options.recordCompletion ?? false,
       ),
-      lineDelta: 0,
+      lineDelta,
     };
   }
 
@@ -1700,14 +1753,17 @@ export class TaskWriter {
     task: Task,
     description: string | null,
   ): number {
-    const lines = Array.from({ length: editor.lineCount() }, (_, i) =>
-      editor.getLine(i),
-    );
     const taskIndent = getTaskIndent(task);
-    const existingIdx = findDescriptionLine(lines, task.line + 1, taskIndent);
+    // Scan only the task block instead of materialising the whole buffer.
+    const existingIdx = findDescriptionLineIn(
+      (i) => editor.getLine(i),
+      editor.lineCount(),
+      task.line + 1,
+      taskIndent,
+    );
     const indent =
       existingIdx >= 0
-        ? this.getExistingDateLineIndent(lines[existingIdx])
+        ? this.getExistingDateLineIndent(editor.getLine(existingIdx))
         : getDateLineIndent(task);
 
     if (description === null) {

@@ -184,22 +184,48 @@ export function findDescriptionLine(
   startIndex: number,
   taskIndent: string,
 ): number {
-  return findKeywordLine(lines, startIndex, 'DESCRIPTION:', taskIndent);
+  return findKeywordLine(
+    (index) => lines[index],
+    lines.length,
+    startIndex,
+    'DESCRIPTION:',
+    taskIndent,
+  );
+}
+
+/**
+ * Accessor-based variant of {@link findDescriptionLine} so callers (e.g. the
+ * active editor) can scan a block without materialising the whole buffer.
+ */
+export function findDescriptionLineIn(
+  getLine: (index: number) => string | undefined,
+  lineCount: number,
+  startIndex: number,
+  taskIndent: string,
+): number {
+  return findKeywordLine(
+    getLine,
+    lineCount,
+    startIndex,
+    'DESCRIPTION:',
+    taskIndent,
+  );
 }
 
 /**
  * Find a keyword line after a task line, handling quoted lines.
  */
 function findKeywordLine(
-  lines: string[],
+  getLine: (index: number) => string | undefined,
+  lineCount: number,
   startIndex: number,
   keyword: string,
   taskIndent: string,
 ): number {
-  const maxLines = Math.min(startIndex + 9, lines.length);
+  const maxLines = Math.min(startIndex + 9, lineCount);
 
   for (let i = startIndex; i < maxLines; i++) {
-    const line = lines[i];
+    const line = getLine(i) ?? '';
     const trimmedLine = line.trimStart();
 
     if (lineStartsWithKeyword(line, keyword, taskIndent)) {
@@ -218,6 +244,11 @@ function findKeywordLine(
 /**
  * Check if a line is a date keyword line (SCHEDULED:, DEADLINE:, CLOSED:, STARTED:, DESCRIPTION:).
  * Handles both bare and quoted (>, > >) forms.
+ *
+ * Intentionally separate from `isTaskMetadataLine` in `task-metadata.ts`: this
+ * runs in the vault-scan hot path and keeps a `startsWith` fast path. The shared
+ * helper additionally recognises `[!repeats]` log lines, which this predicate
+ * does not need to.
  */
 function isDateKeywordLine(line: string): boolean {
   const trimmed = line.trimStart();

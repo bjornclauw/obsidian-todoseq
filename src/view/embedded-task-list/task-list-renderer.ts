@@ -17,8 +17,7 @@ import { EmbeddedTaskItemRenderer } from './embedded-task-item-renderer';
 import {
   groupTasks,
   getNaturalGroupDirection,
-  buildStateRank,
-  STATE_RANK_GROUPS,
+  StateRankCache,
 } from '../../utils/task-group';
 
 /**
@@ -41,10 +40,7 @@ export class EmbeddedTaskListRenderer {
   private taskContextMenu: TaskContextMenu;
   private itemRenderer: EmbeddedTaskItemRenderer;
   private renderedLists = new WeakMap<HTMLElement, RenderedListSnapshot>();
-  private stateRankCache: {
-    key: string;
-    rank: (state: string) => number;
-  } | null = null;
+  private stateRankCache = new StateRankCache();
 
   constructor(plugin: TodoTracker) {
     this.plugin = plugin;
@@ -779,18 +775,7 @@ export class EmbeddedTaskListRenderer {
    * until the keyword order changes.
    */
   private getStateRank(): (state: string) => number {
-    const keywordManager = this.plugin.keywordManager;
-    const order = STATE_RANK_GROUPS.flatMap((group) =>
-      keywordManager.getKeywordsForGroup(group),
-    );
-    const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
-    if (this.stateRankCache?.key === key) {
-      return this.stateRankCache.rank;
-    }
-
-    const rank = buildStateRank(keywordManager);
-    this.stateRankCache = { key, rank };
-    return rank;
+    return this.stateRankCache.get(this.plugin.keywordManager);
   }
 
   /**

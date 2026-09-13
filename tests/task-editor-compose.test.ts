@@ -123,6 +123,8 @@ describe('TaskWriter.createTaskAtLine', () => {
     expect(updateFn(content)).toBe('line 0\n- [ ] TODO Task text\nline 2');
     expect(result?.task.rawText).toBe('- [ ] TODO Task text');
     expect(result?.task.state).toBe('TODO');
+    // The blank line is consumed by the single-line block.
+    expect(result?.lineDelta).toBe(0);
   });
 
   it('inserts the task block before non-blank content', async () => {
@@ -132,12 +134,14 @@ describe('TaskWriter.createTaskAtLine', () => {
       Promise.resolve(updateFn(content)),
     );
 
-    await writer.createTaskAtLine('test.md', 1, makeFields());
+    const result = await writer.createTaskAtLine('test.md', 1, makeFields());
 
     const updateFn = mockApp.vault.process.mock.calls[0][1];
     expect(updateFn(content)).toBe(
       'line 0\n- [ ] TODO Task text\nexisting\nline 2',
     );
+    // Inserting above existing content pushes it down by the block size.
+    expect(result?.lineDelta).toBe(1);
   });
 
   it('writes description, scheduled and deadline lines in order', async () => {
@@ -152,7 +156,7 @@ describe('TaskWriter.createTaskAtLine', () => {
       scheduledDate: new Date(2026, 2, 10),
       deadlineDate: new Date(2026, 2, 12),
     });
-    await writer.createTaskAtLine('test.md', 0, fields);
+    const result = await writer.createTaskAtLine('test.md', 0, fields);
 
     const updateFn = mockApp.vault.process.mock.calls[0][1];
     expect(updateFn(content)).toBe(
@@ -163,6 +167,8 @@ describe('TaskWriter.createTaskAtLine', () => {
         '  DEADLINE: <2026-03-12 Thu>',
       ].join('\n'),
     );
+    // Four-line block replacing the single blank line adds three lines.
+    expect(result?.lineDelta).toBe(3);
   });
 
   it('writes a CLOSED line when recordCompletion is set', async () => {
@@ -206,6 +212,8 @@ describe('TaskWriter.createTaskAtLine', () => {
       written.indexOf('SCHEDULED:'),
     );
     expect(result?.task.startedDate).not.toBeNull();
+    // Task + STARTED + SCHEDULED replacing the blank line adds two lines.
+    expect(result?.lineDelta).toBe(2);
   });
 
   it('returns null when the target file cannot be resolved', async () => {

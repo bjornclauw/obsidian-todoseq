@@ -1,3 +1,4 @@
+import { MarkdownView } from 'obsidian';
 import { TaskUpdateCoordinator } from '../../src/services/task-update-coordinator';
 import { TaskStateManager } from '../../src/services/task-state-manager';
 import { KeywordManager } from '../../src/utils/keyword-manager';
@@ -29,7 +30,10 @@ export interface CoordinatorHarness {
       process: jest.Mock;
       read: jest.Mock;
     };
-    workspace: { getActiveViewOfType: jest.Mock };
+    workspace: {
+      getActiveViewOfType: jest.Mock;
+      getLeavesOfType: jest.Mock;
+    };
   };
   mockPlugin: {
     app: CoordinatorHarness['mockApp'];
@@ -49,6 +53,22 @@ export interface CoordinatorHarness {
   stateManager: TaskStateManager;
   coordinator: TaskUpdateCoordinator;
   taskEditor: CoordinatorTaskEditorMock;
+}
+
+/**
+ * A minimal MarkdownView that satisfies `instanceof MarkdownView`, used by the
+ * coordinator's live-editor path tests (`leaf.view` is narrowed with
+ * `instanceof MarkdownView`).
+ */
+export function createMarkdownViewStub(
+  path: string,
+  editor: unknown,
+): MarkdownView {
+  const view = Object.create(MarkdownView.prototype) as MarkdownView;
+  const record = view as unknown as Record<string, unknown>;
+  record.file = { path };
+  record.editor = editor;
+  return view;
 }
 
 /**
@@ -95,6 +115,7 @@ export function createCoordinatorHarness(
     },
     workspace: {
       getActiveViewOfType: jest.fn(),
+      getLeavesOfType: jest.fn(() => []),
     },
   };
 

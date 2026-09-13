@@ -20,6 +20,7 @@ import { Task, DateRepeatInfo, WarningPeriodInfo } from '../types/task';
 import { KeywordManager } from '../utils/keyword-manager';
 import { getTaskKey } from '../utils/task-utils';
 import { hasRepeatingDates } from '../utils/date-repeater';
+import { isTaskMetadataLine } from '../utils/task-metadata';
 import TodoTracker from '../main';
 import { TaskStateManager } from './task-state-manager';
 import { TaskWriter } from './task-writer';
@@ -347,6 +348,10 @@ export class TaskUpdateCoordinator {
   /**
    * Convenience method for updating task recurrence.
    * Updates scheduled date, deadline date, and state for recurring tasks.
+   *
+   * `source` must match the interaction that scheduled the roll-forward so the
+   * write uses the same API (editor vs vault) as the completion that triggered
+   * it — mixing the two on the same file races with Obsidian's auto-save.
    */
   async updateTaskRecurrence(
     task: Task,
@@ -358,13 +363,15 @@ export class TaskUpdateCoordinator {
       newScheduledWarningPeriod?: WarningPeriodInfo | null;
       newDeadlineWarningPeriod?: WarningPeriodInfo | null;
       newStateForRecurrence?: string;
+      source?: UpdateSource;
     },
   ): Promise<void> {
+    const { source = 'task-list', ...rest } = options;
     return this.updateTask({
       task,
       type: 'recurrence',
-      source: 'task-list',
-      ...options,
+      source,
+      ...rest,
     });
   }
 
@@ -373,13 +380,17 @@ export class TaskUpdateCoordinator {
    * dates that was completed outside of `updateTask` (e.g. by the Task Editor
    * modal). No-op when the task has no repeating dates. The caller is
    * responsible for having already written the RESET state and, where
-   * applicable, a CLOSED date.
+   * applicable, a CLOSED date. `source` routes the roll-forward through the
+   * same write API as the completion.
    */
-  scheduleRecurrenceIfRecurring(task: Task): void {
+  scheduleRecurrenceIfRecurring(
+    task: Task,
+    source: UpdateSource = 'task-list',
+  ): void {
     if (!hasRepeatingDates(task)) {
       return;
     }
-    this.recurrenceCoordinator.scheduleRecurrence(task);
+    this.recurrenceCoordinator.scheduleRecurrence(task, undefined, source);
   }
 
   /**
@@ -724,18 +735,10 @@ export class TaskUpdateCoordinator {
 
   /** Find an open Markdown editor showing `path`, if any. */
   private findEditorForPath(path: string): Editor | null {
-    const workspace = this.plugin.app.workspace as unknown as {
-      getLeavesOfType?: (type: string) => Array<{
-        view?: {
-          file?: { path?: string } | null;
-          editor?: Editor;
-        };
-      }>;
-    };
-    const leaves = workspace.getLeavesOfType?.('markdown') ?? [];
+    const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
     for (const leaf of leaves) {
       const view = leaf.view;
-      if (view?.file?.path === path && view.editor) {
+      if (view instanceof MarkdownView && view.file?.path === path) {
         return view.editor;
       }
     }
@@ -782,11 +785,17 @@ export class TaskUpdateCoordinator {
     block.length = index + 1;
     block[index] = editor.getLine(index);
 
-    const metadataRe =
-      /^\s*(>\s*)*(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/i;
+    // Include the whole contiguous metadata block, including `[!repeats]` log
+    // lines, so the re-parsed task keeps its repeatCount. Blank lines are
+    // included rather than breaking, matching the parser (which skips blanks
+    // and would otherwise hit an `undefined` hole in this sparse array).
     for (let i = index + 1; i < editor.lineCount(); i++) {
       const line = editor.getLine(i);
-      if (line.trim() === '' || !metadataRe.test(line)) {
+      if (line.trim() === '') {
+        block[i] = line;
+        continue;
+      }
+      if (!isTaskMetadataLine(line)) {
         break;
       }
       block[i] = line;
@@ -864,7 +873,7 @@ export class TaskUpdateCoordinator {
         // Adding or changing a schedule/repeat on a task that is already
         // completed now rolls the occurrence forward (previously this was
         // silently inert). Archived tasks are intentionally excluded.
-        this.handleRecurrenceForCompletedTask(updatedTask);
+        this.handleRecurrenceForCompletedTask(updatedTask, context.source);
       }
     };
 
@@ -1136,6 +1145,7 @@ export class TaskUpdateCoordinator {
       this.recurrenceCoordinator.scheduleRecurrence(
         updatedTask,
         RECURRENCE_DELAY_MS,
+        context.source,
       );
     }
   }
@@ -1145,7 +1155,10 @@ export class TaskUpdateCoordinator {
    * repeat was added/changed (e.g. the date picker applied a repeat to a DONE
    * task). Archived tasks are skipped: archiving is terminal.
    */
-  private handleRecurrenceForCompletedTask(updatedTask: Task): void {
+  private handleRecurrenceForCompletedTask(
+    updatedTask: Task,
+    source: UpdateSource,
+  ): void {
     if (
       !this.keywordManager.isCompleted(updatedTask.state) ||
       this.keywordManager.isCanceled(updatedTask.state)
@@ -1157,6 +1170,7 @@ export class TaskUpdateCoordinator {
       this.recurrenceCoordinator.scheduleRecurrence(
         updatedTask,
         RECURRENCE_DELAY_MS,
+        source,
       );
     }
   }

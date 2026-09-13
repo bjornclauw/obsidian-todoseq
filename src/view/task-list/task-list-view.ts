@@ -58,12 +58,15 @@ import {
   modifyLinesForMigration,
   readTaskBlockFromVault,
 } from '../../utils/task-sub-bullets';
-import { SortDirection, getNaturalDirection } from '../../utils/task-sort';
+import {
+  SortDirection,
+  getNaturalDirection,
+  isSortMethod,
+} from '../../utils/task-sort';
 import {
   groupTasks,
   getNaturalGroupDirection,
-  buildStateRank,
-  STATE_RANK_GROUPS,
+  StateRankCache,
   GroupByField,
   TaskGroup,
 } from '../../utils/task-group';
@@ -85,21 +88,6 @@ const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
   { value: 'started', label: 'Started' },
   { value: 'tag', label: 'Tag' },
 ];
-
-/** Narrow an unknown value to a valid task-list sort method. */
-function isSortMethod(value: unknown): value is SortMethod {
-  return (
-    value === 'default' ||
-    value === 'sortByScheduled' ||
-    value === 'sortByDeadline' ||
-    value === 'sortByClosedDate' ||
-    value === 'sortByStarted' ||
-    value === 'sortByPriority' ||
-    value === 'sortByUrgency' ||
-    value === 'sortByKeyword' ||
-    value === 'sortByTag'
-  );
-}
 
 /**
  * A single rendered entry in the (optionally grouped) list: either a group
@@ -137,10 +125,7 @@ export class TaskListView extends ItemView {
   private cachedRenderItems: TaskListRenderItem[] | null = null;
   /** Collapsed group ids (`groupBy\u0000groupKey`) for collapsible headers. */
   private collapsedGroupKeys = new Set<string>();
-  private stateRankCache: {
-    key: string;
-    rank: (state: string) => number;
-  } | null = null;
+  private stateRankCache = new StateRankCache();
   private wasPanelVisible = false;
   private resizeObserver: ResizeObserver | null = null;
 
@@ -524,17 +509,7 @@ export class TaskListView extends ItemView {
 
   /** Cached state ranker for `status` grouping. */
   private getStateRank(): (state: string) => number {
-    const keywordManager = this.keywordManager;
-    const order = STATE_RANK_GROUPS.flatMap((group) =>
-      keywordManager.getKeywordsForGroup(group),
-    );
-    const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
-    if (this.stateRankCache?.key === key) {
-      return this.stateRankCache.rank;
-    }
-    const rank = buildStateRank(keywordManager);
-    this.stateRankCache = { key, rank };
-    return rank;
+    return this.stateRankCache.get(this.keywordManager);
   }
 
   /** Build the ordered header/task plan for grouped rendering. */

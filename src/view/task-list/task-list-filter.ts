@@ -5,6 +5,7 @@ import {
   SortMethod,
   SortDirection,
   getNaturalDirection,
+  isSortMethod,
 } from '../../utils/task-sort';
 import { Task } from '../../types/task';
 import TodoTracker from '../../main';
@@ -51,33 +52,8 @@ export class TaskListFilter {
     defaultSortMethod: SortMethod,
   ): SortMethod {
     const attr = contentEl.getAttr('data-sort-method');
-    if (typeof attr === 'string') {
-      if (
-        attr === 'default' ||
-        attr === 'sortByScheduled' ||
-        attr === 'sortByDeadline' ||
-        attr === 'sortByPriority' ||
-        attr === 'sortByUrgency' ||
-        attr === 'sortByKeyword' ||
-        attr === 'sortByClosedDate' ||
-        attr === 'sortByStarted' ||
-        attr === 'sortByTag'
-      )
-        return attr;
-    }
-    if (
-      defaultSortMethod === 'default' ||
-      defaultSortMethod === 'sortByScheduled' ||
-      defaultSortMethod === 'sortByDeadline' ||
-      defaultSortMethod === 'sortByPriority' ||
-      defaultSortMethod === 'sortByUrgency' ||
-      defaultSortMethod === 'sortByKeyword' ||
-      defaultSortMethod === 'sortByClosedDate' ||
-      defaultSortMethod === 'sortByStarted' ||
-      defaultSortMethod === 'sortByTag'
-    ) {
-      return defaultSortMethod;
-    }
+    if (isSortMethod(attr)) return attr;
+    if (isSortMethod(defaultSortMethod)) return defaultSortMethod;
     return 'default';
   }
 

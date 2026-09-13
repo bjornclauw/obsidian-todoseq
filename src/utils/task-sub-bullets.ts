@@ -1,7 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { Task } from '../types/task';
 import { CHECKBOX_DETECTION_REGEX, BULLET_LIST_PATTERN } from './patterns';
-import { isRepeatLogLine } from './repeat-log';
+import { isTaskMetadataLine } from './task-metadata';
 
 export function taskHasCheckbox(task: Task): boolean {
   return CHECKBOX_DETECTION_REGEX.test(task.rawText);
@@ -10,18 +10,6 @@ export function taskHasCheckbox(task: Task): boolean {
 /** Leading whitespace plus quote (`> `) prefixes of a line. */
 function leadingPrefixLength(line: string): number {
   return line.match(/^\s*(?:>\s*)*/)?.[0].length ?? 0;
-}
-
-/**
- * True for a task's own metadata lines: DESCRIPTION/STARTED/SCHEDULED/DEADLINE/
- * CLOSED and the `[!repeats]` log. Quote prefixes are ignored.
- */
-function isTaskMetadataLine(line: string): boolean {
-  const content = line.replace(/^\s*(?:>\s*)*/, '');
-  return (
-    /^(DESCRIPTION|STARTED|SCHEDULED|DEADLINE|CLOSED):/i.test(content) ||
-    isRepeatLogLine(line)
-  );
 }
 
 export function buildRemovalRange(

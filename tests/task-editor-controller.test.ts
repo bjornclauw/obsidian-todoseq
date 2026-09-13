@@ -219,6 +219,22 @@ describe('TaskEditorController', () => {
       expect(plugin.refreshAllTaskListViews).toHaveBeenCalled();
     });
 
+    it('rethrows a save failure so the modal can stay open', async () => {
+      const { controller, plugin, vaultScanner } = createHarness(['']);
+      plugin.taskEditor.createTaskAtLine.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        save(
+          controller,
+          { path: 'test.md', line: 0, task: null },
+          makeFields(),
+        ),
+      ).rejects.toThrow('boom');
+
+      expect(vaultScanner.processIncrementalChange).not.toHaveBeenCalled();
+      expect(plugin.refreshAllTaskListViews).not.toHaveBeenCalled();
+    });
+
     it('updates an existing task', async () => {
       const { controller, plugin } = createHarness(['TODO Task text']);
       const task = createBaseTask({ line: 0 });
@@ -267,7 +283,7 @@ describe('TaskEditorController', () => {
       );
       expect(
         plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
-      ).toHaveBeenCalledWith(updated);
+      ).toHaveBeenCalledWith(updated, 'editor');
     });
 
     it('does not schedule recurrence when completing a non-recurring task', async () => {
@@ -369,7 +385,7 @@ describe('TaskEditorController', () => {
       );
       expect(
         plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
-      ).toHaveBeenCalledWith(updated);
+      ).toHaveBeenCalledWith(updated, 'editor');
     });
 
     it('rolls a completed recurring task forward when its date changes', async () => {
@@ -565,7 +581,7 @@ describe('TaskEditorController', () => {
       );
       expect(
         plugin.taskUpdateCoordinator.scheduleRecurrenceIfRecurring,
-      ).toHaveBeenCalledWith(updated);
+      ).toHaveBeenCalledWith(updated, 'editor');
     });
 
     it('does not throw when the coordinator is unavailable', async () => {

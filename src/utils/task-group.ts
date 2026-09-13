@@ -1,6 +1,7 @@
 import { Task } from '../types/task';
 import { getFilename } from './task-utils';
-import { SortDirection } from './task-sort';
+import { PRIORITY_RANK, SortDirection } from './task-sort';
+import { DateUtils } from './date-utils';
 import { LocaleUtils } from './locale-utils';
 import type { KeywordManager } from './keyword-manager';
 
@@ -77,6 +78,29 @@ export function buildStateRank(
   return (state) => ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
 }
 
+/**
+ * Caches the `status` group ranker until the effective keyword order changes.
+ * Shared by the task-list and embedded-list views.
+ */
+export class StateRankCache {
+  private key: string | null = null;
+  private rank: ((state: string) => number) | null = null;
+
+  get(keywordManager: KeywordManager): (state: string) => number {
+    const order = STATE_RANK_GROUPS.flatMap((group) =>
+      keywordManager.getKeywordsForGroup(group),
+    );
+    const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
+    if (this.key === key && this.rank) {
+      return this.rank;
+    }
+    const rank = buildStateRank(keywordManager);
+    this.key = key;
+    this.rank = rank;
+    return rank;
+  }
+}
+
 const NO_HEADING_LABEL = '(No heading)';
 const NO_PRIORITY_LABEL = 'No priority';
 const NO_TAG_LABEL = 'No tag';
@@ -85,12 +109,6 @@ const PRIORITY_LABELS: Record<'high' | 'med' | 'low', string> = {
   high: 'High',
   med: 'Medium',
   low: 'Low',
-};
-
-const PRIORITY_RANK: Record<'high' | 'med' | 'low', number> = {
-  high: 3,
-  med: 2,
-  low: 1,
 };
 
 const MISSING_DATE_LABELS: Partial<Record<GroupByField, string>> = {
@@ -136,14 +154,6 @@ function getDateForField(field: GroupByField, task: Task): Date | null {
   }
 }
 
-/** Local calendar day key (YYYY-MM-DD, timezone-safe). */
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function getGroupLabel(field: GroupByField, task: Task): string {
   if (DATE_FIELDS.has(field)) {
     const date = getDateForField(field, task);
@@ -177,7 +187,7 @@ function getGroupLabel(field: GroupByField, task: Task): string {
 function getGroupKey(field: GroupByField, task: Task): string {
   if (DATE_FIELDS.has(field)) {
     const date = getDateForField(field, task);
-    return date ? localDateKey(date) : '';
+    return date ? DateUtils.formatIsoDate(date) : '';
   }
   switch (field) {
     case 'folder':

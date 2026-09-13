@@ -38,18 +38,30 @@ export interface KeywordSortConfig {
 }
 
 /**
- * Sorting method types
+ * Sorting method types. The runtime array is the single source of truth so the
+ * union type and the validation guard cannot drift apart.
  */
-export type SortMethod =
-  | 'default'
-  | 'sortByScheduled'
-  | 'sortByDeadline'
-  | 'sortByClosedDate'
-  | 'sortByStarted'
-  | 'sortByPriority'
-  | 'sortByUrgency'
-  | 'sortByKeyword'
-  | 'sortByTag';
+export const SORT_METHODS = [
+  'default',
+  'sortByScheduled',
+  'sortByDeadline',
+  'sortByClosedDate',
+  'sortByStarted',
+  'sortByPriority',
+  'sortByUrgency',
+  'sortByKeyword',
+  'sortByTag',
+] as const;
+
+export type SortMethod = (typeof SORT_METHODS)[number];
+
+/** Narrow an unknown value to a valid task-list sort method. */
+export function isSortMethod(value: unknown): value is SortMethod {
+  return (
+    typeof value === 'string' &&
+    (SORT_METHODS as readonly string[]).includes(value)
+  );
+}
 
 /**
  * Future task display options
@@ -97,7 +109,8 @@ function getFirstTag(task: Task): string | null {
   return first;
 }
 
-const PRIORITY_RANK: Record<'high' | 'med' | 'low', number> = {
+/** Rank for a task priority, shared by sorting and grouping. */
+export const PRIORITY_RANK: Record<'high' | 'med' | 'low', number> = {
   high: 3,
   med: 2,
   low: 1,

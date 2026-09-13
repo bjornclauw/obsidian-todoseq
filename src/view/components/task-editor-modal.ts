@@ -358,10 +358,10 @@ export class TaskEditorModal extends Modal {
     this.submitted = true;
     try {
       await this.options.onSubmit(fields);
-    } catch (error) {
-      // Keep the modal open so the user can retry; the caller reports the error.
+    } catch {
+      // The caller has already reported the failure; keep the modal open so the
+      // user can retry without re-entering their changes.
       this.submitted = false;
-      console.error('Failed to save task', error);
       return;
     }
     this.close();

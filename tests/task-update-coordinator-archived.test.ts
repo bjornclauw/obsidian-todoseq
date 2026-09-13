@@ -9,6 +9,7 @@ import { createBaseTask } from './helpers/test-helper';
 import { TFile } from 'obsidian';
 import {
   createCoordinatorHarness,
+  createMarkdownViewStub,
   CoordinatorHarness,
 } from './helpers/coordinator-harness';
 
@@ -358,7 +359,7 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
     (mockApp.workspace as unknown as Record<string, unknown>).getLeavesOfType =
       jest
         .fn()
-        .mockReturnValue([{ view: { file: { path: 'test.md' }, editor } }]);
+        .mockReturnValue([{ view: createMarkdownViewStub('test.md', editor) }]);
 
     await taskUpdateCoordinator.updateTaskByPath(
       'test.md',
@@ -393,7 +394,7 @@ describe('TaskUpdateCoordinator - Re-adding Tasks from Archived', () => {
     (mockApp.workspace as unknown as Record<string, unknown>).getLeavesOfType =
       jest
         .fn()
-        .mockReturnValue([{ view: { file: { path: 'test.md' }, editor } }]);
+        .mockReturnValue([{ view: createMarkdownViewStub('test.md', editor) }]);
 
     await taskUpdateCoordinator.updateTaskByPath(
       'test.md',
