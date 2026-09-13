@@ -36,9 +36,11 @@ export interface TodoTrackerSettings {
   taskListViewMode: 'showAll' | 'sortCompletedLast' | 'hideCompleted'; // controls view transformation in the task view
   futureTaskSorting: 'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture'; // controls how future tasks are handled
   defaultSortMethod: SortMethod; // default sort method for task list view
+  taskListSortMethod?: SortMethod; // last-used sort method for the task list view
   taskListGroupBy: GroupByField | 'none'; // last-used grouping for the task list view
   taskListSortDirection: 'natural' | 'asc' | 'desc'; // last-used sort direction for the task list view
   taskListGroupDirection: 'natural' | 'asc' | 'desc'; // last-used group direction for the task list view
+  taskListCollapsedGroups?: string[]; // persisted collapsed group ids for the task list view
   languageCommentSupport: boolean; // language-specific comment support settings
   weekStartsOn: 'Monday' | 'Sunday'; // controls which day the week starts on for date filtering
   formatTaskKeywords: boolean; // format task keywords in editor

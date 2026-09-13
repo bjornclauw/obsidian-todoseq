@@ -86,6 +86,21 @@ const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
   { value: 'tag', label: 'Tag' },
 ];
 
+/** Narrow an unknown value to a valid task-list sort method. */
+function isSortMethod(value: unknown): value is SortMethod {
+  return (
+    value === 'default' ||
+    value === 'sortByScheduled' ||
+    value === 'sortByDeadline' ||
+    value === 'sortByClosedDate' ||
+    value === 'sortByStarted' ||
+    value === 'sortByPriority' ||
+    value === 'sortByUrgency' ||
+    value === 'sortByKeyword' ||
+    value === 'sortByTag'
+  );
+}
+
 /**
  * A single rendered entry in the (optionally grouped) list: either a group
  * header or a task row. `itemKey` disambiguates a task that appears in more
@@ -109,6 +124,7 @@ export class TaskListView extends ItemView {
   private sortDirectionEl: HTMLElement | null = null;
   private groupByEl: HTMLSelectElement | null = null;
   private groupDirectionEl: HTMLElement | null = null;
+  private collapseAllBtn: HTMLElement | null = null;
   private _searchKeyHandler: ((e: KeyboardEvent) => void) | undefined;
   private isCaseSensitive = false;
   private searchError: string | null = null;
@@ -280,6 +296,10 @@ export class TaskListView extends ItemView {
     this.taskListFilter = new TaskListFilter(plugin, this.keywordManager);
     this.renderQueue = new ChunkedRenderQueue();
     this.plugin = plugin;
+    // Restore the last-used collapsed groups for this session.
+    this.collapsedGroupKeys = new Set(
+      plugin.settings.taskListCollapsedGroups ?? [],
+    );
 
     // Subscribe to task changes from the centralized state manager
     // Uses interrupt pattern: new update cancels pending work and processes immediately
@@ -408,34 +428,11 @@ export class TaskListView extends ItemView {
 
   private getSortMethod(): SortMethod {
     const attr = this.contentEl.getAttr('data-sort-method');
-    if (typeof attr === 'string') {
-      if (
-        attr === 'default' ||
-        attr === 'sortByScheduled' ||
-        attr === 'sortByDeadline' ||
-        attr === 'sortByClosedDate' ||
-        attr === 'sortByStarted' ||
-        attr === 'sortByPriority' ||
-        attr === 'sortByUrgency' ||
-        attr === 'sortByKeyword' ||
-        attr === 'sortByTag'
-      )
-        return attr;
-    }
-    // Fallback to current plugin setting from constructor if attribute not set
-    if (
-      this.defaultSortMethod === 'default' ||
-      this.defaultSortMethod === 'sortByScheduled' ||
-      this.defaultSortMethod === 'sortByDeadline' ||
-      this.defaultSortMethod === 'sortByClosedDate' ||
-      this.defaultSortMethod === 'sortByStarted' ||
-      this.defaultSortMethod === 'sortByPriority' ||
-      this.defaultSortMethod === 'sortByUrgency' ||
-      this.defaultSortMethod === 'sortByKeyword' ||
-      this.defaultSortMethod === 'sortByTag'
-    ) {
-      return this.defaultSortMethod;
-    }
+    if (isSortMethod(attr)) return attr;
+    // Fall back to the last-used task-list sort, then the configured default.
+    const persisted = this.plugin.settings.taskListSortMethod;
+    if (isSortMethod(persisted)) return persisted;
+    if (isSortMethod(this.defaultSortMethod)) return this.defaultSortMethod;
     // Final safety fallback
     return 'default';
   }
@@ -637,6 +634,8 @@ export class TaskListView extends ItemView {
     // Collapsing shortens the list; load more if that left it too short to
     // scroll, otherwise the remaining groups would never lazy-load.
     this.maybeLoadMore();
+    this.persistCollapsedGroups();
+    this.updateCollapseAllButton();
   }
 
   /** Apply the header's collapsed chrome (rows are added/removed separately). */
@@ -685,6 +684,75 @@ export class TaskListView extends ItemView {
       fragment.appendChild(this.buildRenderItemElement(item));
     }
     headerEl.after(fragment);
+  }
+
+  /** Persist the current collapsed-group ids so they survive a restart. */
+  private persistCollapsedGroups(): void {
+    this.plugin.settings.taskListCollapsedGroups = [...this.collapsedGroupKeys];
+    this.debouncedSaveSettings();
+  }
+
+  /** Group keys currently present in the rendered plan. */
+  private currentGroupKeys(): string[] {
+    const items = this.cachedRenderItems;
+    if (!items) return [];
+    const keys: string[] = [];
+    for (const item of items) {
+      if (item.kind === 'header') keys.push(item.group.key);
+    }
+    return keys;
+  }
+
+  /** True when every group currently in the plan is collapsed. */
+  private areAllGroupsCollapsed(): boolean {
+    const keys = this.currentGroupKeys();
+    return keys.length > 0 && keys.every((key) => this.isGroupCollapsed(key));
+  }
+
+  /** Show/refresh the collapse-all button to match the current grouping state. */
+  private updateCollapseAllButton(): void {
+    const btn = this.collapseAllBtn;
+    if (!btn) return;
+    if (this.getGroupBy() === 'none' || this.currentGroupKeys().length === 0) {
+      btn.addClass('todoseq-hidden');
+      return;
+    }
+    btn.removeClass('todoseq-hidden');
+    const allCollapsed = this.areAllGroupsCollapsed();
+    setIcon(btn, allCollapsed ? 'chevrons-up-down' : 'chevrons-down-up');
+    const label = allCollapsed ? 'Expand all' : 'Collapse all';
+    setTooltip(btn, label);
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-expanded', String(!allCollapsed));
+  }
+
+  /** Collapse every group, or expand every group when they are all collapsed. */
+  private toggleAllGroups(): void {
+    const keys = this.currentGroupKeys();
+    if (keys.length === 0) return;
+    const collapse = !this.areAllGroupsCollapsed();
+
+    for (const key of keys) {
+      this.setGroupCollapsed(key, collapse);
+    }
+
+    const list = this.taskListContainer?.querySelector('ul.todoseq-task-list');
+    list
+      ?.querySelectorAll<HTMLElement>('li.todoseq-task-group-header')
+      .forEach((header) => {
+        const key = header.getAttribute('data-group-key');
+        if (key === null) return;
+        this.applyGroupCollapsedState(header, collapse);
+        if (collapse) {
+          this.removeGroupRows(header);
+        } else {
+          this.insertGroupRows(header, key);
+        }
+      });
+
+    this.persistCollapsedGroups();
+    this.updateCollapseAllButton();
+    this.maybeLoadMore();
   }
 
   /** Build a group-header list item matching the embedded group chrome. */
@@ -902,6 +970,20 @@ export class TaskListView extends ItemView {
     settingsBtn.setAttr('aria-expanded', String(false));
     settingsBtn.setAttr('tabindex', '0');
     setIcon(settingsBtn, 'lucide-sliders-horizontal');
+
+    // Collapse-all / expand-all for grouped lists, right of the settings button.
+    this.collapseAllBtn = firstRow.createDiv({
+      cls: 'clickable-icon todoseq-collapse-all-btn',
+      attr: { role: 'button', tabindex: '0' },
+    });
+    this.collapseAllBtn.addEventListener('click', () => this.toggleAllGroups());
+    this.collapseAllBtn.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.toggleAllGroups();
+      }
+    });
+    this.updateCollapseAllButton();
 
     // Create expandable settings section below the first row
     const settingsSection = toolbar.createDiv({ cls: 'search-params' });
@@ -1210,6 +1292,7 @@ export class TaskListView extends ItemView {
 
       // Update the sort method (keep the current view mode)
       this.setSortMethod(sortMethod);
+      this.plugin.settings.taskListSortMethod = sortMethod;
 
       // Changing the sort resets direction to the new method's natural default
       this.setSortDirection('natural');
@@ -1272,9 +1355,15 @@ export class TaskListView extends ItemView {
       // Changing the grouping resets direction to the new field's natural default
       this.setGroupDirection('natural');
       this.plugin.settings.taskListGroupDirection = 'natural';
+      if (value === 'none') {
+        // No groups to collapse: reset to show everything.
+        this.collapsedGroupKeys.clear();
+        this.plugin.settings.taskListCollapsedGroups = [];
+      }
       this.debouncedSaveSettings();
       groupBySelect.value = value;
       this.updateGroupDirectionIcon();
+      this.updateCollapseAllButton();
       // Reset to top since the layout changes fundamentally
       void this.refreshVisibleList(true);
     });
@@ -2785,6 +2874,7 @@ export class TaskListView extends ItemView {
 
     // Cache visible tasks
     this.cachedVisibleTasks = visible;
+    this.updateCollapseAllButton();
 
     // Restore scroll position (unless reset was requested)
     if (!resetScroll && scrollContainer) {
@@ -3317,10 +3407,11 @@ export class TaskListView extends ItemView {
       this.taskRefreshTimeout = null;
     }
 
-    // Cleanup settings save debounce timer
+    // Flush any pending settings save so a just-changed preference is not lost.
     if (this.settingsDebounceTimer) {
       window.clearTimeout(this.settingsDebounceTimer);
       this.settingsDebounceTimer = null;
+      void this.plugin.saveSettings();
     }
 
     // Cleanup suggestion dropdowns

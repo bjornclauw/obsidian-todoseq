@@ -78,7 +78,9 @@ When the list is grouped, each section header can be collapsed to hide its tasks
 
 - Click the header, or focus it and press Enter or Space, to toggle the section.
 - The header shows the task count and a chevron that points down when expanded and right when collapsed.
-- The collapsed state is kept while the list refreshes, for example after a search or a task change.
+- A toolbar button next to the Task List settings button collapses or expands every group at once. It shows "Collapse all" while any group is expanded and "Expand all" once every group is collapsed.
+- The collapsed state is remembered across sessions and while the list refreshes, for example after a search or a task change.
+- The button is hidden when grouping is off.
 
 ### Right-Click Context Menu
 

@@ -303,6 +303,15 @@ describe('TaskListView', () => {
       view['defaultSortMethod'] = 'sortByDeadline' as SortMethod;
       expect(view['getSortMethod']()).toBe('sortByDeadline');
     });
+
+    it('should fall back to the persisted task-list sort method first', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['defaultSortMethod'] = 'sortByDeadline' as SortMethod;
+      (pluginMock.settings as any).taskListSortMethod = 'sortByUrgency';
+      expect(view['getSortMethod']()).toBe('sortByUrgency');
+    });
   });
 
   describe('sort direction accessors', () => {
@@ -631,6 +640,93 @@ describe('TaskListView', () => {
       view['maybeLoadMore'] = maybeLoadMore;
       view['toggleGroupCollapsed'](header);
       expect(maybeLoadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('should persist collapsed groups and restore them in a new view', () => {
+      view['setGroupBy']('folder');
+      const container = activeDocument.createElement('div');
+      const list = activeDocument.createElement('ul');
+      list.classList.add('todoseq-task-list');
+      container.appendChild(list);
+      view['taskListContainer'] = container;
+
+      const items = view['buildRenderItems']([
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+      ]);
+      view['cachedRenderItems'] = items;
+      view['loadedTaskCount'] = items.length;
+      const header = view['buildRenderItemElement'](items[0]);
+      list.appendChild(header);
+
+      view['toggleGroupCollapsed'](header);
+      expect((pluginMock.settings as any).taskListCollapsedGroups).toContain(
+        'folder\u0000a',
+      );
+
+      const restored = new TaskListView(
+        {} as any,
+        taskStateManagerMock as any,
+        'showAll',
+        pluginMock as any,
+        {} as any,
+      );
+      restored['setGroupBy']('folder');
+      expect(restored['isGroupCollapsed']('a')).toBe(true);
+    });
+
+    it('should collapse and expand every group', () => {
+      view['setGroupBy']('folder');
+      const container = activeDocument.createElement('div');
+      const list = activeDocument.createElement('ul');
+      list.classList.add('todoseq-task-list');
+      container.appendChild(list);
+      view['taskListContainer'] = container;
+
+      const items = view['buildRenderItems']([
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'b/two.md', line: 0, text: 'B' }),
+      ]);
+      view['cachedRenderItems'] = items;
+      view['loadedTaskCount'] = items.length;
+      for (const item of items) {
+        list.appendChild(view['buildRenderItemElement'](item));
+      }
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(2);
+
+      view['toggleAllGroups']();
+      expect(view['areAllGroupsCollapsed']()).toBe(true);
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(0);
+      expect((pluginMock.settings as any).taskListCollapsedGroups).toEqual(
+        expect.arrayContaining(['folder\u0000a', 'folder\u0000b']),
+      );
+
+      view['toggleAllGroups']();
+      expect(view['areAllGroupsCollapsed']()).toBe(false);
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(2);
+    });
+
+    it('should hide the collapse-all button when grouping is off', () => {
+      const btn = activeDocument.createElement('div');
+      view['collapseAllBtn'] = btn;
+      view['setGroupBy']('none');
+      view['cachedRenderItems'] = null;
+      view['updateCollapseAllButton']();
+      expect(btn.classList.contains('todoseq-hidden')).toBe(true);
+    });
+
+    it('should label the collapse-all button from the current state', () => {
+      const btn = activeDocument.createElement('div');
+      view['collapseAllBtn'] = btn;
+      view['setGroupBy']('folder');
+      view['cachedRenderItems'] = view['buildRenderItems']([
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+      ]);
+      view['updateCollapseAllButton']();
+      expect(btn.classList.contains('todoseq-hidden')).toBe(false);
+      expect(btn.getAttribute('aria-label')).toBe('Collapse all');
+
+      view['toggleAllGroups']();
+      expect(btn.getAttribute('aria-label')).toBe('Expand all');
     });
   });
 
