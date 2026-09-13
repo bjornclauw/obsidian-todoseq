@@ -1240,7 +1240,6 @@ export class TaskListView extends ItemView {
       },
     };
     this.optionsDropdown.setSavedSearchCallbacks(savedSearchCallbacks);
-    console.debug('[TODOseq] search dropdowns ready');
   }
 
   private handleSearchInputForSuggestions(): void {

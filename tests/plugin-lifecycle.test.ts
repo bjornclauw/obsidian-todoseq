@@ -343,7 +343,7 @@ describe('PluginLifecycleManager', () => {
   });
 
   describe('onunload', () => {
-    it('should detach all task list leaves', async () => {
+    it('should not detach task list leaves (Obsidian owns view teardown)', async () => {
       const leafMock = { detach: jest.fn() };
       (pluginMock.app as any).workspace.getLeavesOfType = jest
         .fn()
@@ -351,7 +351,7 @@ describe('PluginLifecycleManager', () => {
 
       await lifecycleManager.onunload();
 
-      expect(leafMock.detach).toHaveBeenCalled();
+      expect(leafMock.detach).not.toHaveBeenCalled();
     });
 
     it('should cleanup embedded task list processor', async () => {

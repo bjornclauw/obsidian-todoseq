@@ -566,8 +566,9 @@ export class PluginLifecycleManager {
           console.error('Error opening task list:', error);
         });
       } else if (isReload) {
-        // Plugin was just reloaded (hot reload or update) — leaves were detached
-        // in onunload, so recreate the panel without stealing focus
+        // Plugin was just reloaded (hot reload or update). Obsidian recreates the
+        // view for the persisted leaf, so just reveal the panel without stealing
+        // focus.
         (window as unknown as Record<string, unknown>)[
           TODOSEQ_HOT_RELOAD_FLAG
         ] = false;
@@ -595,14 +596,6 @@ export class PluginLifecycleManager {
     // Checked in onLayoutReady to recreate the task list on reload.
     (window as unknown as Record<string, unknown>)[TODOSEQ_HOT_RELOAD_FLAG] =
       true;
-
-    // Close all task list leaves to prevent orphaned views during hot reload
-    const leaves = this.plugin.app.workspace.getLeavesOfType(
-      TaskListView.viewType,
-    );
-    for (const leaf of leaves) {
-      leaf.detach();
-    }
 
     // Clean up embedded task list processor
     if (this.plugin.embeddedTaskListProcessor) {
