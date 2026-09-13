@@ -144,6 +144,20 @@ const MIGRATIONS: SettingsMigrations[] = [
       return { ...settings, savedSearches };
     },
   },
+  {
+    version: 10,
+    migrate: (settings: Record<string, unknown>) => {
+      // v10: added trackCreatedDate setting (opt-in, default false). New tasks
+      // composed by TODOseq receive a CREATED line when enabled.
+      if (!('trackCreatedDate' in settings)) {
+        return {
+          ...settings,
+          trackCreatedDate: false,
+        };
+      }
+      return { ...settings };
+    },
+  },
 ];
 
 export function migrateSettings(

@@ -16,6 +16,8 @@ import {
 } from '../parser/natural-date-parser';
 import { Task } from '../types/task';
 import { formatOrgDate } from '../utils/task-format';
+import { DateUtils } from '../utils/date-utils';
+import { planCreatedDateInsertion } from '../utils/created-date';
 import {
   getDateLineIndent,
   parseTableCells,
@@ -57,6 +59,8 @@ export class SmartDateProcessor {
     { line: number; timestamp: number; text: string }
   > = new Map();
   private isProcessing: Map<string, boolean> = new Map();
+  /** Guards against re-inserting CREATED while a dispatch is in flight. */
+  private createdProcessing: Set<string> = new Set();
 
   constructor(private plugin: TodoTracker) {}
 
@@ -134,6 +138,101 @@ export class SmartDateProcessor {
       true,
       hasNaturalDate, // forceReprocess when line has natural date
       'cursorLeave',
+    );
+  }
+
+  /**
+   * Insert a CREATED timestamp when the cursor leaves a task line that does not
+   * already have one. This is what gives hand-typed tasks a CREATED date, in the
+   * same "user finished the line" moment smart dates are converted.
+   *
+   * The write is deferred to a requestAnimationFrame and re-planned against the
+   * live document, so it never dispatches during an active editor update and
+   * never fires twice for the same line.
+   */
+  handleCreatedDate(view: EditorView, previousLineNumber: number): void {
+    if (!this.plugin.settings.trackCreatedDate) return;
+
+    const mdView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!mdView?.file) return;
+    const file = mdView.file;
+
+    if (previousLineNumber < 1 || previousLineNumber > view.state.doc.lines) {
+      return;
+    }
+
+    const parser = this.plugin.getVaultScanner()?.getParser();
+    if (!parser) return;
+
+    const taskLineText = view.state.doc.line(previousLineNumber).text;
+    if (!parser.isTaskLine(taskLineText)) return;
+
+    const task = parser.parseLineAsTask(
+      taskLineText,
+      previousLineNumber - 1,
+      file.path,
+    );
+    if (!task) return;
+
+    const createdLine = `${getDateLineIndent(task)}CREATED: ${DateUtils.formatCreatedDate(new Date())}`;
+
+    const key = `${file.path}:${previousLineNumber}`;
+    if (this.createdProcessing.has(key)) return;
+    if (this.planCreatedDate(view, previousLineNumber) === null) return;
+
+    this.createdProcessing.add(key);
+    try {
+      window.requestAnimationFrame(() => {
+        try {
+          // The document may have changed since the cursor-leave event; only
+          // dispatch if the line is still a task line and still lacks CREATED.
+          if (
+            previousLineNumber < 1 ||
+            previousLineNumber > view.state.doc.lines
+          ) {
+            return;
+          }
+          if (
+            !parser.isTaskLine(view.state.doc.line(previousLineNumber).text)
+          ) {
+            return;
+          }
+          const plan = this.planCreatedDate(view, previousLineNumber);
+          if (plan === null) return;
+
+          const doc = view.state.doc;
+          if (plan.insertAtLine <= doc.lines) {
+            const at = doc.line(plan.insertAtLine).from;
+            view.dispatch({
+              changes: { from: at, insert: `${createdLine}\n` },
+            });
+          } else {
+            // Task is the last line with no trailing newline.
+            view.dispatch({
+              changes: { from: doc.length, insert: `\n${createdLine}` },
+            });
+          }
+        } finally {
+          this.createdProcessing.delete(key);
+        }
+      });
+    } catch {
+      this.createdProcessing.delete(key);
+    }
+  }
+
+  private planCreatedDate(
+    view: EditorView,
+    taskLineNumber: number,
+  ): { insertAtLine: number } | null {
+    const doc = view.state.doc;
+    return planCreatedDateInsertion(
+      (lineNumber) =>
+        lineNumber >= 1 && lineNumber <= doc.lines
+          ? doc.line(lineNumber).text
+          : undefined,
+      doc.lines,
+      taskLineNumber,
     );
   }
 
@@ -660,5 +759,6 @@ export class SmartDateProcessor {
     this.clearAllTimers();
     this.lastProcessedLines.clear();
     this.isProcessing.clear();
+    this.createdProcessing.clear();
   }
 }

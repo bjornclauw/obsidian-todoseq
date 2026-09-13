@@ -712,10 +712,10 @@ export class TaskKeywordDecorator {
       return;
     }
 
-    // Check if this line contains SCHEDULED:, DEADLINE:, CLOSED:, STARTED:, or DESCRIPTION:
+    // Check if this line contains SCHEDULED:, DEADLINE:, CLOSED:, STARTED:, CREATED:, or DESCRIPTION:
     const trimmedLine = lineText.trim();
-    let dateLineType: 'scheduled' | 'deadline' | 'closed' | 'started' | null =
-      null;
+    let dateLineType:
+      'scheduled' | 'deadline' | 'closed' | 'started' | 'created' | null = null;
     let isDescriptionLine = false;
 
     // Handle callout blocks (lines starting with >)
@@ -729,6 +729,8 @@ export class TaskKeywordDecorator {
         dateLineType = 'closed';
       } else if (contentAfterArrow.startsWith('STARTED:')) {
         dateLineType = 'started';
+      } else if (contentAfterArrow.startsWith('CREATED:')) {
+        dateLineType = 'created';
       } else if (contentAfterArrow.startsWith('DESCRIPTION:')) {
         isDescriptionLine = true;
       }
@@ -740,6 +742,8 @@ export class TaskKeywordDecorator {
       dateLineType = 'closed';
     } else if (trimmedLine.startsWith('STARTED:')) {
       dateLineType = 'started';
+    } else if (trimmedLine.startsWith('CREATED:')) {
+      dateLineType = 'created';
     } else if (trimmedLine.startsWith('DESCRIPTION:')) {
       isDescriptionLine = true;
     }
@@ -768,7 +772,9 @@ export class TaskKeywordDecorator {
               ? 'todoseq-deadline-line'
               : dateLineType === 'started'
                 ? 'todoseq-started-line'
-                : 'todoseq-closed-line';
+                : dateLineType === 'created'
+                  ? 'todoseq-created-line'
+                  : 'todoseq-closed-line';
         const keywordClass =
           dateLineType === 'scheduled'
             ? 'todoseq-scheduled-keyword'
@@ -776,7 +782,9 @@ export class TaskKeywordDecorator {
               ? 'todoseq-deadline-keyword'
               : dateLineType === 'started'
                 ? 'todoseq-started-keyword'
-                : 'todoseq-closed-keyword';
+                : dateLineType === 'created'
+                  ? 'todoseq-created-keyword'
+                  : 'todoseq-closed-keyword';
 
         // Apply decoration to the entire line
         builder.add(
@@ -800,7 +808,9 @@ export class TaskKeywordDecorator {
               ? 'DEADLINE:'
               : dateLineType === 'started'
                 ? 'STARTED:'
-                : 'CLOSED:';
+                : dateLineType === 'created'
+                  ? 'CREATED:'
+                  : 'CLOSED:';
         const keywordStart = trimmedLine.indexOf(keyword);
         // const keywordEnd = keywordStart + keyword.length;
         const keywordStartPos =

@@ -12,12 +12,13 @@ import { TFile } from 'obsidian';
  * Tests for STARTED timestamp tracking (plans/003-started-timestamps.md).
  *
  * Semantics under test:
- * - STARTED line inserted on first entry into an active state when
- *   trackStartedDate is enabled (opt-in, default false).
- * - Insertion is IDEMPOTENT: an existing STARTED line is never duplicated
- *   or overwritten.
- * - STARTED is NEVER removed by state transitions (first-ever-start).
- * - STARTED sorts FIRST among date lines (before SCHEDULED/DEADLINE/CLOSED).
+ * - STARTED line inserted on entry into an active state when trackStartedDate
+ *   is enabled (opt-in, default false).
+ * - RESTART semantics: re-entering an active state OVERWRITES the existing
+ *   STARTED line with the new timestamp (never duplicated).
+ * - Saving an already-active task does not reset STARTED.
+ * - STARTED is NEVER removed by state transitions.
+ * - STARTED sorts after CREATED but before SCHEDULED/DEADLINE/CLOSED.
  */
 describe('TaskWriter - STARTED date handling', () => {
   let mockApp: any;
@@ -150,19 +151,41 @@ describe('TaskWriter - STARTED date handling', () => {
       expect(startedLines).toHaveLength(0);
     });
 
-    it('preserves existing STARTED line (idempotent - no duplicate)', async () => {
-      lines = ['- [ ] TODO Task text', '  STARTED: [2026-01-10 Sat 08:00]'];
+    it('overwrites an existing STARTED line when re-entering an active state', async () => {
+      lines = ['- [x] DONE Task text', '  STARTED: [2026-01-10 Sat 08:00]'];
 
-      const task = makeTask();
+      const task = makeTask({
+        rawText: '- [x] DONE Task text',
+        state: 'DONE',
+        completed: true,
+      });
       const result = await taskWriter.applyLineUpdate(task, 'DOING');
 
       const startedLines = lines.filter((l) => l.includes('STARTED:'));
       expect(startedLines).toHaveLength(1);
-      // Original timestamp retained, NOT overwritten with today's
-      expect(startedLines[0]).toContain('2026-01-10 Sat 08:00');
-      expect(startedLines[0]).not.toContain('2026-01-16');
-      // No new line inserted (lineDelta only set when non-zero)
+      // New restart timestamp replaces the old one.
+      expect(startedLines[0]).toContain('2026-01-16 Fri 09:30');
+      expect(startedLines[0]).not.toContain('2026-01-10');
+      expect(result.startedDate).toBeTruthy();
+      // Overwrite in place: no extra line inserted.
       expect(result.lineDelta ?? 0).toBe(0);
+    });
+
+    it('does NOT reset STARTED when an already-active task is saved again', async () => {
+      lines = ['- [ ] DOING Task text', '  STARTED: [2026-01-10 Sat 08:00]'];
+      const task = makeTask({
+        rawText: '- [ ] DOING Task text',
+        state: 'DOING',
+        startedDate: new Date(2026, 0, 10, 8, 0, 0),
+      });
+      const result = await taskWriter.applyLineUpdate(task, 'DOING');
+
+      const startedLines = lines.filter((l) => l.includes('STARTED:'));
+      expect(startedLines).toHaveLength(1);
+      expect(startedLines[0]).toContain('2026-01-10 Sat 08:00');
+      expect(result.startedDate?.getTime()).toBe(
+        new Date(2026, 0, 10, 8, 0, 0).getTime(),
+      );
     });
 
     it('retains STARTED line on DOING -> DONE', async () => {
@@ -192,33 +215,34 @@ describe('TaskWriter - STARTED date handling', () => {
       expect(startedLines[0]).toContain('2026-01-10 Sat 08:00');
     });
 
-    it('retains original STARTED through DOING -> WAIT -> DOING cycle', async () => {
+    it('updates STARTED on every re-entry through DOING -> WAIT -> DOING', async () => {
       // First activation: STARTED gets inserted
       const task1 = makeTask();
       await taskWriter.applyLineUpdate(task1, 'DOING');
       expect(lines.filter((l) => l.includes('STARTED:'))).toHaveLength(1);
       const original = lines.find((l) => l.includes('STARTED:'))!;
 
-      // DOING -> WAIT (inactive transition: no change to STARTED)
+      // DOING -> WAIT (not an active entry: STARTED retained unchanged)
       const task2 = makeTask({
         rawText: '- [ ] DOING Task text',
         state: 'DOING',
         startedDate: new Date(2026, 0, 16, 9, 30, 0),
       });
-      const afterWait = await taskWriter.applyLineUpdate(task2, 'WAIT');
+      await taskWriter.applyLineUpdate(task2, 'WAIT');
       expect(lines.filter((l) => l.includes('STARTED:'))).toHaveLength(1);
       expect(lines.find((l) => l.includes('STARTED:'))).toBe(original);
 
-      // WAIT -> DOING: task now has startedDate set, so no re-insertion.
-      // Even if startedDate were lost from state, file-level idempotency holds.
+      // WAIT -> DOING: re-entry overwrites the original timestamp.
+      jest.setSystemTime(new Date(2026, 1, 1, 10, 0, 0)); // Sun Feb 01 2026 10:00
       const task3 = makeTask({
         rawText: '- [ ] WAIT Task text',
         state: 'WAIT',
-        startedDate: afterWait.startedDate,
+        startedDate: task2.startedDate,
       });
       const reactivated = await taskWriter.applyLineUpdate(task3, 'DOING');
-      expect(lines.filter((l) => l.includes('STARTED:'))).toHaveLength(1);
-      expect(lines.find((l) => l.includes('STARTED:'))).toBe(original);
+      const startedLines = lines.filter((l) => l.includes('STARTED:'));
+      expect(startedLines).toHaveLength(1);
+      expect(startedLines[0]).toContain('2026-02-01 Sun 10:00');
       expect(reactivated.startedDate).toBeTruthy();
     });
   });
@@ -235,7 +259,7 @@ describe('TaskWriter - STARTED date handling', () => {
       expect(result.lineDelta).toBe(1);
     });
 
-    it('is a no-op when a STARTED line already exists', async () => {
+    it('updates the timestamp when a STARTED line already exists', async () => {
       lines = ['- [ ] TODO Task text', '  STARTED: [2026-01-10 Sat 08:00]'];
       const task = makeTask();
       const result = await taskWriter.updateTaskStartedDate(
@@ -243,10 +267,10 @@ describe('TaskWriter - STARTED date handling', () => {
         new Date(2026, 0, 16, 9, 30, 0),
       );
 
-      expect(lines.filter((l) => l.includes('STARTED:'))).toHaveLength(1);
-      expect(lines.find((l) => l.includes('STARTED:'))).toContain(
-        '2026-01-10 Sat 08:00',
-      );
+      const startedLines = lines.filter((l) => l.includes('STARTED:'));
+      expect(startedLines).toHaveLength(1);
+      expect(startedLines[0]).toContain('2026-01-16 Fri 09:30');
+      expect(startedLines[0]).not.toContain('2026-01-10');
       expect(result.lineDelta).toBe(0);
     });
 

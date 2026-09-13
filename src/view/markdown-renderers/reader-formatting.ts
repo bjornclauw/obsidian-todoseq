@@ -399,6 +399,7 @@ export class ReaderViewFormatter {
       .replace(/\s*SCHEDULED:.*$/im, '')
       .replace(/\s*DEADLINE:.*$/im, '')
       .replace(/\s*STARTED:.*$/im, '')
+      .replace(/\s*CREATED:.*$/im, '')
       .trim();
 
     // Find the line that matches this task
@@ -1977,7 +1978,8 @@ export class ReaderViewFormatter {
         !text.includes('SCHEDULED:') &&
         !text.includes('DEADLINE:') &&
         !text.includes('CLOSED:') &&
-        !text.includes('STARTED:')
+        !text.includes('STARTED:') &&
+        !text.includes('CREATED:')
       ) {
         continue;
       }
@@ -2022,7 +2024,8 @@ export class ReaderViewFormatter {
         !text.includes('SCHEDULED:') &&
         !text.includes('DEADLINE:') &&
         !text.includes('CLOSED:') &&
-        !text.includes('STARTED:')
+        !text.includes('STARTED:') &&
+        !text.includes('CREATED:')
       ) {
         return;
       }
@@ -2040,7 +2043,8 @@ export class ReaderViewFormatter {
         !text.includes('SCHEDULED:') &&
         !text.includes('DEADLINE:') &&
         !text.includes('CLOSED:') &&
-        !text.includes('STARTED:')
+        !text.includes('STARTED:') &&
+        !text.includes('CREATED:')
       ) {
         return;
       }
@@ -2078,7 +2082,8 @@ export class ReaderViewFormatter {
         text.includes('SCHEDULED:') ||
         text.includes('DEADLINE:') ||
         text.includes('CLOSED:') ||
-        text.includes('STARTED:');
+        text.includes('STARTED:') ||
+        text.includes('CREATED:');
 
       if (
         !isMetadataBlock &&
@@ -2537,6 +2542,7 @@ export class ReaderViewFormatter {
       { keyword: 'DEADLINE:', type: 'deadline' as const },
       { keyword: 'CLOSED:', type: 'closed' as const },
       { keyword: 'STARTED:', type: 'started' as const },
+      { keyword: 'CREATED:', type: 'created' as const },
     ];
 
     const text = paragraph.textContent || '';
@@ -2589,6 +2595,7 @@ export class ReaderViewFormatter {
       { keyword: 'DEADLINE:', type: 'deadline' as const },
       { keyword: 'CLOSED:', type: 'closed' as const },
       { keyword: 'STARTED:', type: 'started' as const },
+      { keyword: 'CREATED:', type: 'created' as const },
     ];
 
     const text = element.textContent || '';
@@ -2638,7 +2645,7 @@ export class ReaderViewFormatter {
     keywordNode: Text,
     keywordIndex: number,
     keyword: string,
-    type: 'scheduled' | 'deadline' | 'closed' | 'started',
+    type: 'scheduled' | 'deadline' | 'closed' | 'started' | 'created',
   ): void {
     // Split the text node into before, keyword, and after parts
     const nodeText = keywordNode.textContent || '';
@@ -2686,8 +2693,9 @@ export class ReaderViewFormatter {
     const di = text.indexOf('DEADLINE:');
     const ci = text.indexOf('CLOSED:');
     const sti = text.indexOf('STARTED:');
+    const cri = text.indexOf('CREATED:');
     const dsi = text.indexOf('DESCRIPTION:');
-    const indices = [si, di, ci, sti, dsi].filter((i) => i >= 0);
+    const indices = [si, di, ci, sti, cri, dsi].filter((i) => i >= 0);
     return indices.length > 0 ? Math.min(...indices) : -1;
   }
 
@@ -3074,6 +3082,7 @@ export class ReaderViewFormatter {
           deadlineDateRepeat: null,
           closedDate: null,
           startedDate: null,
+          createdDate: null,
           scheduledWarningPeriod: null,
           deadlineWarningPeriod: null,
           urgency: null,

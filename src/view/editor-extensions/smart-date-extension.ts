@@ -193,8 +193,7 @@ export const smartDatePlugin = (
       }
 
       update(update: ViewUpdate) {
-        if (!settings.enableSmartDateRecognition) return;
-
+        const smartDateEnabled = settings.enableSmartDateRecognition;
         const currentCursorLine = this.getCursorLine(update.view);
 
         if (update.docChanged) {
@@ -218,8 +217,15 @@ export const smartDatePlugin = (
               update.view,
               previousCursorLine,
             );
+            // CREATED tracking is independent of the smart-date setting.
+            smartDateProcessor.handleCreatedDate(
+              update.view,
+              previousCursorLine,
+            );
           }
-          smartDateProcessor.handleEditorUpdate(update.view, update);
+          if (smartDateEnabled) {
+            smartDateProcessor.handleEditorUpdate(update.view, update);
+          }
         } else if (
           currentCursorLine !== this.lastCursorLine &&
           this.lastCursorLine >= 1
@@ -229,6 +235,7 @@ export const smartDatePlugin = (
           const previousCursorLine = this.lastCursorLine;
           this.lastCursorLine = currentCursorLine;
           smartDateProcessor.handleCursorLeave(update.view, previousCursorLine);
+          smartDateProcessor.handleCreatedDate(update.view, previousCursorLine);
         }
       }
 

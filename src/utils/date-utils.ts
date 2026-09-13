@@ -909,6 +909,17 @@ export class DateUtils {
   static formatStartedDate(date: Date): string {
     return this.formatClosedDate(date);
   }
+
+  /**
+   * Format a date for the CREATED timestamp in Org-inspired inactive format:
+   * [YYYY-MM-DD DOW HH:mm]. Identical to CLOSED/STARTED — CREATED is a record,
+   * not a planning signal, so it uses the same inactive bracket convention.
+   * @param date The date to format
+   * @returns Formatted date string
+   */
+  static formatCreatedDate(date: Date): string {
+    return this.formatClosedDate(date);
+  }
 }
 
 /**

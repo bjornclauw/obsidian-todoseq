@@ -467,27 +467,54 @@ The CLOSED date uses square brackets `[]` instead of angle brackets `<>` to dist
 - **Archived Tasks**: Archiving a task that already has a CLOSED date keeps it, so the completion record survives archiving.
 - **Manual Editing**: You can manually add or remove CLOSED dates directly in your notes.
 
-### STARTED Date
+### CREATED Date
 
-TODOseq supports a STARTED date that records when a task *first* entered an active state (e.g., TODO → DOING), completing the task lifecycle: SCHEDULED → STARTED → CLOSED.
+TODOseq can add a CREATED date that records when a task was created by the plugin, completing the task lifecycle: CREATED → STARTED → CLOSED.
 
-#### STARTED Date Format
+#### CREATED Date Format
 
 ```markdown
 TODO Write documentation
+CREATED: [2025-01-15 Wed 08:00]
 STARTED: [2025-01-18 Fri 09:00]
 SCHEDULED: <2025-01-15>
 DEADLINE: <2025-01-20>
 CLOSED: [2025-01-19 Sat 14:30]
 ```
 
-The STARTED date uses square brackets `[]` (the same inactive-timestamp convention as CLOSED) to distinguish it from planning dates. It includes the date, day of week, and time when work on the task first began. Among the date lines, STARTED is written first (immediately below the task, before SCHEDULED/DEADLINE/CLOSED).
+The CREATED date uses square brackets `[]` (the same inactive-timestamp convention as CLOSED/STARTED). Among the date lines, CREATED is written first (immediately below the task/DESCRIPTION, before STARTED/SCHEDULED/DEADLINE/CLOSED).
+
+#### CREATED Date Behavior
+
+- **Automatic Addition**: When the "Track created date" setting is enabled, a CREATED date is added when TODOseq creates a task (through the task editor / `TaskWriter`), and when you finish typing a task line by hand (when the cursor leaves a task line that has no CREATED date).
+- **Written once**: CREATED is never updated, duplicated, or removed by the plugin. Manual editing is the only way to change it.
+- **Not retroactive**: Existing tasks are not scanned and rewritten; a hand-typed or older task receives its CREATED date the first time you finish editing its line.
+- **Travels with the task**: CREATED is part of the task's metadata block, so Copy/Move/Migrate to today carries it along.
+- **Manual Editing**: You can manually add, change, or remove CREATED dates directly in your notes.
+
+### STARTED Date
+
+TODOseq supports a STARTED date that records when a task *most recently* entered an active state (e.g., TODO → DOING), completing the task lifecycle: CREATED → STARTED → CLOSED.
+
+#### STARTED Date Format
+
+```markdown
+TODO Write documentation
+CREATED: [2025-01-15 Wed 08:00]
+STARTED: [2025-01-18 Fri 09:00]
+SCHEDULED: <2025-01-15>
+DEADLINE: <2025-01-20>
+CLOSED: [2025-01-19 Sat 14:30]
+```
+
+The STARTED date uses square brackets `[]` (the same inactive-timestamp convention as CLOSED) to distinguish it from planning dates. It includes the date, day of week, and time when work on the task most recently began. Among the date lines, STARTED is written after CREATED and before SCHEDULED/DEADLINE/CLOSED.
 
 #### STARTED Date Behavior
 
 - **Automatic Addition**: When a task transitions into an active state (e.g., TODO → DOING), a STARTED date is automatically added if the "Track started date" setting is enabled. This also applies to tasks created already in an active state and to tasks defined in table cells.
-- **Idempotent**: The STARTED date is written once. It is never updated, duplicated, or removed by later state changes.
-- **First-ever semantics**: STARTED records when a task first became active. If you pause (DOING → WAIT), reactivate, or resume a task, the original STARTED date is retained — it spans the task's whole life, across multiple work sessions.
+- **Updated on restart**: Every time a task (re)enters an active state — for example after being closed or paused and then reopened a year later — STARTED is overwritten with the new start time. It records when the *current* work stretch began.
+- **Idempotent per save**: Saving an already-active task (for example editing its text) does not reset STARTED.
+- **Never removed**: STARTED is not removed by state changes (unlike CLOSED). It spans the task's active stretches until you restart it; only manual editing can remove the line.
 - **Duration**: Together with the CLOSED date, STARTED enables duration calculation (STARTED to CLOSED) and "what did I start today?" queries via the `started:` search filter.
 - **Manual Editing**: You can manually add or remove STARTED dates directly in your notes.
 
@@ -495,8 +522,8 @@ The STARTED date uses square brackets `[]` (the same inactive-timestamp conventi
 
 1. **Placement**: Date lines must be immediately after the task line
 2. **Indentation**: Must match or be more indented than the task
-3. **Format**: Must use angle brackets `<>` for SCHEDULED/DEADLINE or square brackets `[]` for CLOSED and STARTED
-4. **Limit**: Only first occurrence of each type (SCHEDULED/DEADLINE/CLOSED/STARTED) is recognized
+3. **Format**: Must use angle brackets `<>` for SCHEDULED/DEADLINE or square brackets `[]` for CLOSED, STARTED and CREATED
+4. **Limit**: Only first occurrence of each type (SCHEDULED/DEADLINE/CLOSED/STARTED/CREATED) is recognized
 
 > **Localized display:** Dates shown in the app (task list, tooltips, date picker, task editor) follow Obsidian's language setting. The dates written into your notes always use the canonical format above (`<YYYY-MM-DD Ddd>`, `[YYYY-MM-DD Ddd HH:mm]`), so notes stay portable between devices and languages.
 

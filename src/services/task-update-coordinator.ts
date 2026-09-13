@@ -1032,6 +1032,7 @@ export class TaskUpdateCoordinator {
             deadlineWarningPeriod: updatedTask.deadlineWarningPeriod,
             closedDate: updatedTask.closedDate,
             startedDate: updatedTask.startedDate,
+            createdDate: updatedTask.createdDate,
             urgency,
           },
           cellIndex,

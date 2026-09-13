@@ -42,7 +42,7 @@ export function getIndentLength(indent: string): number {
 export function findDateLine(
   lines: string[],
   startIndex: number,
-  dateType: 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED',
+  dateType: 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED' | 'CREATED',
   taskIndent: string,
   keywordManager: KeywordManager,
 ): number {
@@ -130,14 +130,14 @@ function isTaskLine(line: string, keywordManager: KeywordManager): boolean {
 export function findDateLineWithParser(
   lines: string[],
   startIndex: number,
-  dateType: 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED',
+  dateType: 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED' | 'CREATED',
   taskIndent: string,
   parser:
     | {
         getDateLineType: (
           line: string,
           indent: string,
-        ) => 'scheduled' | 'deadline' | 'closed' | 'started' | null;
+        ) => 'scheduled' | 'deadline' | 'closed' | 'started' | 'created' | null;
       }
     | null
     | undefined,
@@ -147,7 +147,7 @@ export function findDateLineWithParser(
   if (parser) {
     const maxLines = Math.min(startIndex + 9, lines.length);
     const targetDateType = dateType.toLowerCase() as
-      'scheduled' | 'deadline' | 'closed' | 'started';
+      'scheduled' | 'deadline' | 'closed' | 'started' | 'created';
 
     for (let i = startIndex; i < maxLines; i++) {
       const line = lines[i];
@@ -258,6 +258,7 @@ function isDateKeywordLine(line: string): boolean {
     trimmed.startsWith('DEADLINE:') ||
     trimmed.startsWith('CLOSED:') ||
     trimmed.startsWith('STARTED:') ||
+    trimmed.startsWith('CREATED:') ||
     trimmed.startsWith('DESCRIPTION:')
   ) {
     return true;
@@ -265,7 +266,9 @@ function isDateKeywordLine(line: string): boolean {
   // Slow path: quoted keywords (only test regex for lines starting with >)
   return (
     trimmed.startsWith('>') &&
-    /^(>\s*)+(SCHEDULED|DEADLINE|CLOSED|STARTED|DESCRIPTION):/.test(trimmed)
+    /^(>\s*)+(SCHEDULED|DEADLINE|CLOSED|STARTED|CREATED|DESCRIPTION):/.test(
+      trimmed,
+    )
   );
 }
 

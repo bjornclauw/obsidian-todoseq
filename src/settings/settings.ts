@@ -646,8 +646,13 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
           },
           {
             name: 'Track started date',
-            desc: 'Add started: timestamp when tasks first enter an active state. Written once and never removed automatically.',
+            desc: 'Add or update the started: timestamp whenever a task enters an active state. Updated on every restart; never removed automatically.',
             control: { type: 'toggle', key: 'trackStartedDate' },
+          },
+          {
+            name: 'Track created date',
+            desc: 'Add a created: timestamp when TODOseq creates a task. Written once and never changed afterwards.',
+            control: { type: 'toggle', key: 'trackCreatedDate' },
           },
           {
             name: 'Track repeat history',

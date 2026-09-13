@@ -622,6 +622,36 @@ describe('TaskWriter Instance Methods', () => {
       expect(processed).toContain('STARTED: [[');
       expect(result.startedDate).not.toBeNull();
     });
+
+    it('overwrites STARTED when a table-cell task re-enters an active state', async () => {
+      mockPlugin.settings.trackStartedDate = true;
+      const task: Task = createBaseTask({
+        state: 'DONE',
+        completed: true,
+        isTableTask: true,
+        tableCell: { cellIndex: 1 } as never,
+      });
+
+      mockApp.workspace.getActiveViewOfType = jest.fn().mockReturnValue(null);
+      let processed = '';
+      mockApp.vault.process = jest
+        .fn()
+        .mockImplementation(
+          (_file: any, updateFn: (content: string) => string) => {
+            processed = updateFn(
+              '| a | DONE Task <br>STARTED: [[2026-01-10 Sat 08:00]] |',
+            );
+            return Promise.resolve(processed);
+          },
+        );
+
+      const result = await taskWriter.applyLineUpdate(task, 'DOING');
+
+      const startedMatches = processed.match(/STARTED: \[\[/g) ?? [];
+      expect(startedMatches).toHaveLength(1);
+      expect(processed).not.toContain('2026-01-10');
+      expect(result.startedDate).not.toBeNull();
+    });
   });
 
   describe('updateKeywordManager', () => {

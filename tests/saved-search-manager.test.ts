@@ -274,7 +274,7 @@ describe('settings migration v5 - saved searches', () => {
       someSetting: 'value',
     };
     const result = migrateSettings(settings as Record<string, unknown>);
-    expect(result.settingsVersion).toBe(9);
+    expect(result.settingsVersion).toBe(10);
     expect(result.savedSearches).toBeDefined();
     const searches = result.savedSearches as SavedSearch[];
     expect(searches).toHaveLength(3);
@@ -295,7 +295,7 @@ describe('settings migration v5 - saved searches', () => {
       savedSearches: existingSearches,
     };
     const result = migrateSettings(settings as Record<string, unknown>);
-    expect(result.settingsVersion).toBe(9);
+    expect(result.settingsVersion).toBe(10);
     const searches = result.savedSearches as SavedSearch[];
     expect(searches).toHaveLength(1);
     expect(searches[0].name).toBe('Custom');
@@ -322,8 +322,8 @@ describe('settings migration v5 - saved searches', () => {
     expect(today!.sortMethod).toBe('sortByScheduled');
   });
 
-  test('getLatestSettingsVersion should return 9', () => {
-    expect(getLatestSettingsVersion()).toBe(9);
+  test('getLatestSettingsVersion should return 10', () => {
+    expect(getLatestSettingsVersion()).toBe(10);
   });
 });
 

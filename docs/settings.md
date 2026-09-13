@@ -421,16 +421,39 @@ FIXME Handle edge cases
 
 **When Enabled:**
 
-- Adds a STARTED date when a task first enters an active state (e.g., TODO → DOING)
+- Adds a STARTED date when a task enters an active state (e.g., TODO → DOING)
 - Also applies to tasks created already active and to tasks in table cells
 - STARTED date uses the same square-bracket syntax as CLOSED: `STARTED: [2025-01-18 Fri 09:00]`
-- Records when the task _first_ became active — written once, idempotently
+- **Updated on every restart**: closing a task and later reactivating it (DONE/TODO/WAIT → DOING) overwrites STARTED with the new start time, so it records when the current work stretch began
+- Does NOT update STARTED when an already-active task is simply saved again
 - Does NOT remove the STARTED date when tasks are reactivated (unlike CLOSED); only manual editing removes it
 
 **When Disabled:**
 
 - No STARTED date is added automatically
 - Manual STARTED dates in notes are still recognized and parsed
+
+### Track Created Date
+
+**Setting**: "Track created date" (toggle)
+
+**Description**: Enable or disable automatic CREATED date tracking when TODOseq creates a task.
+
+**Default**: Disabled
+
+**When Enabled:**
+
+- Adds a CREATED date when a task is created through the task editor / `TaskWriter`
+- Also adds a CREATED date to hand-typed tasks when you finish the task line (the cursor leaves a task line that has no CREATED date)
+- CREATED date uses the same square-bracket syntax as CLOSED/STARTED: `CREATED: [2025-01-18 Fri 09:00]`
+- Written once and **never changed** afterwards, even when the task is restarted
+- Sits above STARTED among the task's date lines
+- Travels with the task block on Copy/Move/Migrate to today
+
+**When Disabled:**
+
+- No CREATED date is added automatically
+- Manual CREATED dates in notes are still recognized and parsed
 
 ### Track Repeat History
 

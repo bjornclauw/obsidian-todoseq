@@ -1017,3 +1017,138 @@ describe('SmartDateProcessor enable/disable', () => {
     expect((view as any).dispatch).not.toHaveBeenCalled();
   });
 });
+
+describe('SmartDateProcessor handleCreatedDate', () => {
+  let mockPlugin: jest.Mocked<TodoTracker>;
+  let processor: SmartDateProcessor;
+
+  function createDocMockView(lines: string[]): Record<string, unknown> {
+    const offsets: number[] = [];
+    let pos = 0;
+    for (const line of lines) {
+      offsets.push(pos);
+      pos += line.length + 1;
+    }
+    const doc = {
+      lines: lines.length,
+      length: Math.max(0, pos - 1),
+      line: jest.fn((n: number) => {
+        const i = n - 1;
+        const text = lines[i] ?? '';
+        return {
+          number: n,
+          text,
+          from: offsets[i] ?? 0,
+          to: (offsets[i] ?? 0) + text.length,
+        };
+      }),
+    };
+    return {
+      state: { selection: { main: { head: 0 } }, doc },
+      dispatch: jest.fn(),
+    };
+  }
+
+  function mockParser(isTaskLine = true) {
+    const parser = {
+      isTaskLine: jest.fn().mockReturnValue(isTaskLine),
+      parseLineAsTask: jest.fn().mockReturnValue(
+        createBaseTask({
+          rawText: '- [ ] TODO Task text',
+          text: 'Task text',
+          state: 'TODO',
+          indent: '',
+        }),
+      ),
+      getDateLineType: jest.fn().mockReturnValue(null),
+    };
+    (mockPlugin.getVaultScanner as jest.Mock).mockReturnValue({
+      getParser: jest.fn().mockReturnValue(parser),
+    });
+    return parser;
+  }
+
+  beforeEach(() => {
+    mockPlugin = createMockPlugin();
+    mockPlugin.settings.trackCreatedDate = true;
+    processor = new SmartDateProcessor(mockPlugin);
+    const mockRaf = jest.fn((cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    // @ts-ignore
+    globalThis.requestAnimationFrame = mockRaf;
+    window.requestAnimationFrame = mockRaf;
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).requestAnimationFrame;
+    delete (window as any).requestAnimationFrame;
+  });
+
+  it('inserts a CREATED line when the cursor leaves a task line', () => {
+    mockPlugin.app.workspace.getActiveViewOfType.mockReturnValue({
+      file: { path: 'test.md' },
+    } as any);
+    mockParser(true);
+
+    const view = createDocMockView(['- [ ] TODO Buy milk']);
+    processor.handleCreatedDate(view as any, 1);
+
+    expect((view as any).dispatch).toHaveBeenCalledTimes(1);
+    const changes = (view as any).dispatch.mock.calls[0][0].changes;
+    expect(changes.insert).toMatch(/CREATED: \[20\d\d-\d\d-\d\d/);
+  });
+
+  it('does nothing when trackCreatedDate is disabled', () => {
+    mockPlugin.settings.trackCreatedDate = false;
+    mockPlugin.app.workspace.getActiveViewOfType.mockReturnValue({
+      file: { path: 'test.md' },
+    } as any);
+    mockParser(true);
+
+    const view = createDocMockView(['- [ ] TODO Buy milk']);
+    processor.handleCreatedDate(view as any, 1);
+
+    expect((view as any).dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the line is not a task', () => {
+    mockPlugin.app.workspace.getActiveViewOfType.mockReturnValue({
+      file: { path: 'test.md' },
+    } as any);
+    mockParser(false);
+
+    const view = createDocMockView(['Just some prose']);
+    processor.handleCreatedDate(view as any, 1);
+
+    expect((view as any).dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when a CREATED line already exists', () => {
+    mockPlugin.app.workspace.getActiveViewOfType.mockReturnValue({
+      file: { path: 'test.md' },
+    } as any);
+    mockParser(true);
+
+    const view = createDocMockView([
+      '- [ ] TODO Buy milk',
+      '  CREATED: [2026-01-01 Wed 08:00]',
+    ]);
+    processor.handleCreatedDate(view as any, 1);
+
+    expect((view as any).dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when no parser is available', () => {
+    mockPlugin.app.workspace.getActiveViewOfType.mockReturnValue({
+      file: { path: 'test.md' },
+    } as any);
+    (mockPlugin.getVaultScanner as jest.Mock).mockReturnValue(null);
+
+    const view = createDocMockView(['- [ ] TODO Buy milk']);
+    processor.handleCreatedDate(view as any, 1);
+
+    expect((view as any).dispatch).not.toHaveBeenCalled();
+  });
+});

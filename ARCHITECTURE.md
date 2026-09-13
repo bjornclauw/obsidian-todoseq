@@ -362,11 +362,11 @@ graph TB
 
 **SmartDateProcessor** (`src/services/smart-date-processor.ts`)
 
-- **Responsibility**: Automatic conversion of natural language dates in task text (e.g., "today", "next Monday") to structured org-mode date lines (SCHEDULED/DEADLINE) when the user finishes typing a task line
+- **Responsibility**: Automatic conversion of natural language dates in task text (e.g., "today", "next Monday") to structured org-mode date lines (SCHEDULED/DEADLINE) when the user finishes typing a task line. Also inserts a `CREATED` date line for hand-typed tasks (`handleCreatedDate`), controlled by the "Track created date" setting
 - **Key Patterns**: Debounce strategy, cursor-leave detection, editor dispatch
-- **Interface**: `handleEditorUpdate(view, update)`, `handleCursorLeave(view, previousLine)`, `setEnabled(state)`, `destroy()`
+- **Interface**: `handleEditorUpdate(view, update)`, `handleCursorLeave(view, previousLine)`, `handleCreatedDate(view, previousLine)`, `setEnabled(state)`, `destroy()`
 - **Trigger Sources**: Two triggers — `'debounce'` (user presses Enter/Down/Right, cursor leaves line) and `'cursorLeave'` (user presses Up/Left/clicks away)
-- **Implementation**: Uses 1500ms debounce per editor line via `Map<string, number>`; when triggered, consumes `ParsedDateInfo` from `NaturalDateParser` and applies the date transformation via `EditorView.dispatch()` (single CM6 change)
+- **Implementation**: Uses 1500ms debounce per editor line via `Map<string, number>`; when triggered, consumes `ParsedDateInfo` from `NaturalDateParser` and applies the date transformation via `EditorView.dispatch()` (single CM6 change). `handleCreatedDate()` is independent of the smart-date setting: it re-plans against the live document in a `requestAnimationFrame` and uses `planCreatedDateInsertion()` for idempotent, description-aware placement
 - **Dependencies**: Uses `NaturalDateParser` for date extraction; `formatOrgDate()` for date formatting; `getDateLineIndent()` for indentation
 - **Ownership**: Created and owned by `PluginLifecycleManager`; stored on main plugin as `smartDateProcessor`
 - **Lifecycle**: `setEnabled()` controlled by `smartDateParsing.enabled` setting; `destroy()` clears all debounce timers

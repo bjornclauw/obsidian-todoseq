@@ -530,8 +530,9 @@ export class SearchEvaluator {
     settings?: TodoTrackerSettings,
   ): boolean {
     // 'overdue' and 'due' describe planning dates (SCHEDULED/DEADLINE). A
-    // STARTED date records when work first began, so these expressions have
-    // no meaning here — reject them before generic date evaluation.
+    // STARTED date records when the current work stretch began, so these
+    // expressions have no meaning here — reject them before generic date
+    // evaluation.
     const normalized = value.trim().toLowerCase();
     if (normalized === 'overdue' || normalized === 'due') {
       return false;

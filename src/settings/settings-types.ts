@@ -57,7 +57,8 @@ export interface TodoTrackerSettings {
   stateTransitions: StateTransitionSettings;
   // Task completion settings
   trackClosedDate: boolean; // when true, adds CLOSED: timestamp when tasks are marked as completed
-  trackStartedDate: boolean; // when true, adds STARTED: timestamp when tasks first enter active state
+  trackStartedDate: boolean; // when true, adds/updates STARTED: timestamp when tasks enter an active state
+  trackCreatedDate: boolean; // when true, adds CREATED: timestamp when a task is created
   // Recurring completion log settings
   trackRepeatHistory: boolean; // when true, logs recurring completions in a collapsed [!repeats] callout (removes CLOSED)
   repeatHistoryLimit: number; // max entries kept in the [!repeats] log (default 50)
@@ -137,6 +138,7 @@ export const DefaultSettings: TodoTrackerSettings = {
   stateTransitions: DefaultStateTransitionSettings,
   trackClosedDate: false, // Disabled by default
   trackStartedDate: false, // Disabled by default
+  trackCreatedDate: false, // Disabled by default
   trackRepeatHistory: true, // Log recurring completions in a collapsed [!repeats] callout
   repeatHistoryLimit: 50, // Keep the latest 50 repeat log entries
   useExtendedCheckboxStyles: false, // Experimental feature - disabled by default

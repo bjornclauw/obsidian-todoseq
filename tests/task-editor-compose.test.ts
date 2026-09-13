@@ -55,6 +55,7 @@ function createWriter() {
     settings: {
       trackClosedDate: false,
       trackStartedDate: false,
+      trackCreatedDate: false,
       useExtendedCheckboxStyles: false,
       stateTransitions: {
         defaultInactive: 'TODO',
@@ -224,6 +225,46 @@ describe('TaskWriter.createTaskAtLine', () => {
 
     expect(result).toBeNull();
     expect(mockApp.vault.process).not.toHaveBeenCalled();
+  });
+
+  it('writes a CREATED line first when trackCreatedDate is enabled', async () => {
+    const { writer, mockApp, mockPlugin } = createWriter();
+    mockPlugin.settings.trackCreatedDate = true;
+    mockPlugin.settings.trackStartedDate = true;
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine(
+      'test.md',
+      0,
+      makeFields({ state: 'DOING', scheduledDate: new Date(2026, 2, 10) }),
+    );
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    const written = updateFn(content);
+    expect(written).toContain('CREATED:');
+    expect(written.indexOf('CREATED:')).toBeLessThan(
+      written.indexOf('STARTED:'),
+    );
+    expect(written.indexOf('STARTED:')).toBeLessThan(
+      written.indexOf('SCHEDULED:'),
+    );
+    expect(result?.task.createdDate).toBeInstanceOf(Date);
+  });
+
+  it('does not write a CREATED line when trackCreatedDate is disabled', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    await writer.createTaskAtLine('test.md', 0, makeFields());
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).not.toContain('CREATED:');
   });
 
   it('uses the editor API when the file is active in source mode', async () => {

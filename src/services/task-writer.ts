@@ -25,8 +25,8 @@ import { isTaskMetadataLine } from '../utils/task-metadata';
 import TodoTracker from '../main';
 import { getStateTransitionManager } from './task-update-coordinator';
 
-/** A SCHEDULED/DEADLINE/CLOSED/STARTED date line kind. */
-type DateLineType = 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED';
+/** A SCHEDULED/DEADLINE/CLOSED/STARTED/CREATED date line kind. */
+type DateLineType = 'SCHEDULED' | 'DEADLINE' | 'CLOSED' | 'STARTED' | 'CREATED';
 
 export interface DateLineUpdateResult {
   task: Task;
@@ -286,11 +286,33 @@ export class TaskWriter {
     return lineDelta;
   }
 
-  /** Whether a STARTED date should be written for a first active entry. */
+  /**
+   * Whether a STARTED date should be written when a task is created already in
+   * an active state. Later state transitions are handled by
+   * {@link shouldUpdateStarted}, which overwrites the existing value.
+   */
   private shouldWriteStarted(state: string): boolean {
     return (
       !!this.settings?.trackStartedDate && this.keywordManager.isActive(state)
     );
+  }
+
+  /**
+   * Whether STARTED should be (re)written for a state transition. Only fires on
+   * a genuine entry into an active state: saving an already-active task (e.g.
+   * editing its text) must not reset the restart time.
+   */
+  private shouldUpdateStarted(task: Task, newState: string): boolean {
+    return (
+      !!this.settings?.trackStartedDate &&
+      this.keywordManager.isActive(newState) &&
+      !this.keywordManager.isActive(task.state)
+    );
+  }
+
+  /** Whether a CREATED timestamp should be written for a newly created task. */
+  private shouldWriteCreated(): boolean {
+    return !!this.settings?.trackCreatedDate;
   }
 
   private static buildDateLineContent(
@@ -471,7 +493,6 @@ export class TaskWriter {
       });
     }
 
-    const settings = this.settings;
     const { newLine, completed } = TaskWriter.generateTaskLine(
       task,
       newState,
@@ -494,9 +515,9 @@ export class TaskWriter {
       !!task.closedDate &&
       !this.preservesClosed(task, newState);
 
-    // STARTED tracking: trigger on first entry into an active state.
-    // Idempotent and one-way — never removed on reactivation (first-ever-start).
-    const isActiveState = this.keywordManager.isActive(newState);
+    // STARTED tracking: (re)write on every genuine entry into an active state.
+    // The previous timestamp is overwritten; STARTED is never removed.
+    const shouldUpdateStarted = this.shouldUpdateStarted(task, newState);
 
     // Check if target is the active file in a MarkdownView
     // Using getActiveViewOfType() is safer than accessing workspace.activeLeaf directly
@@ -583,18 +604,15 @@ export class TaskWriter {
             this.removeDateLine(lines, task.line, 'CLOSED', task);
           }
 
-          // Handle STARTED date atomically (first entry into active state).
-          // updateOrInsertStartedDateLine is idempotent: an existing STARTED
-          // line is retained untouched (no duplicate, no overwrite).
-          if (
-            isActiveState &&
-            settings?.trackStartedDate &&
-            !task.startedDate
-          ) {
+          // Handle STARTED date atomically (entry into an active state).
+          // updateOrInsertDateLine overwrites an existing STARTED line with the
+          // new restart timestamp; it is never removed.
+          if (shouldUpdateStarted) {
             const startedDateStr = DateUtils.formatStartedDate(new Date());
-            const startedResult = this.updateOrInsertStartedDateLine(
+            const startedResult = this.updateOrInsertDateLine(
               lines,
               task.line,
+              'STARTED',
               startedDateStr,
               task,
             );
@@ -625,10 +643,10 @@ export class TaskWriter {
         updatedClosedDate = closedResult.task.closedDate;
       }
 
-      // STARTED: insert via Editor API on first entry into an active state.
-      // updateTaskStartedDate is idempotent (retains existing STARTED line)
-      // and there is NO removal branch — insertion is one-way.
-      if (isActiveState && settings?.trackStartedDate && !task.startedDate) {
+      // STARTED: (re)write via Editor API on entry into an active state.
+      // updateTaskStartedDate overwrites an existing STARTED line; there is NO
+      // removal branch — STARTED is never removed.
+      if (shouldUpdateStarted) {
         const startedResult = await this.updateTaskStartedDate(
           task,
           new Date(),
@@ -648,11 +666,10 @@ export class TaskWriter {
       }
 
       // STARTED was handled atomically above; account for the inserted line
-      if (isActiveState && settings?.trackStartedDate && !task.startedDate) {
+      // (an overwrite leaves the line count unchanged).
+      if (shouldUpdateStarted) {
         lineDelta += startedInserted ? 1 : 0;
-        updatedStartedDate = startedInserted
-          ? new Date()
-          : (task.startedDate ?? null);
+        updatedStartedDate = new Date();
       }
     }
 
@@ -776,8 +793,7 @@ export class TaskWriter {
     }
     cellContent = cellContent.trim();
 
-    const isActiveState = this.keywordManager.isActive(newState);
-    let startedInserted = false;
+    const shouldUpdateStarted = this.shouldUpdateStarted(task, newState);
 
     let fullCellContent = cellContent;
     await this.modifyTableCell(
@@ -810,14 +826,16 @@ export class TaskWriter {
           );
         }
 
-        // STARTED: first-ever-start, idempotent and one-way (add only). Table
-        // cells mirror the [[...]] timestamp format used for CLOSED.
-        if (isActiveState && this.settings?.trackStartedDate) {
+        // STARTED: (re)written on every entry into an active state. Table cells
+        // mirror the [[...]] timestamp format used for CLOSED.
+        if (shouldUpdateStarted) {
           const startedPattern =
             /\s*<br\s*\/?>\s*STARTED:\s*\[{1,2}[^\]]+\]{1,2}/i;
-          if (!startedPattern.test(dateSuffix)) {
-            dateSuffix = `${dateSuffix}<br>STARTED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
-            startedInserted = true;
+          const startedTag = `<br>STARTED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
+          if (startedPattern.test(dateSuffix)) {
+            dateSuffix = dateSuffix.replace(startedPattern, startedTag);
+          } else {
+            dateSuffix = `${dateSuffix}${startedTag}`;
           }
         }
 
@@ -837,7 +855,7 @@ export class TaskWriter {
       state: newState,
       completed,
       closedDate,
-      startedDate: startedInserted ? new Date() : task.startedDate,
+      startedDate: shouldUpdateStarted ? new Date() : task.startedDate,
     };
   }
 
@@ -1643,7 +1661,14 @@ export class TaskWriter {
     if (description) {
       lines.push(`${indent}DESCRIPTION: ${description}`);
     }
-    // STARTED is written first among the date lines (before
+    // CREATED is written once, first among the date lines, when the task is
+    // created (never updated afterwards).
+    if (this.shouldWriteCreated()) {
+      lines.push(
+        `${indent}CREATED: ${DateUtils.formatCreatedDate(new Date())}`,
+      );
+    }
+    // STARTED is written first among the remaining date lines (before
     // SCHEDULED/DEADLINE/CLOSED) when the task is created already active.
     if (this.shouldWriteStarted(fields.state)) {
       lines.push(
@@ -1706,6 +1731,7 @@ export class TaskWriter {
       deadlineDateRepeat: fields.deadlineRepeat,
       closedDate: shouldWriteClosed ? new Date() : null,
       startedDate: shouldWriteStarted ? new Date() : null,
+      createdDate: this.shouldWriteCreated() ? new Date() : null,
       scheduledWarningPeriod: fields.scheduledWarningPeriod,
       deadlineWarningPeriod: fields.deadlineWarningPeriod,
       urgency: null,
@@ -1887,26 +1913,22 @@ export class TaskWriter {
   /**
    * Updates or adds a STARTED date line below the task.
    *
-   * IDEMPOTENT and ONE-WAY (first-ever-start semantics):
-   * - If a STARTED line already exists, this method does NOTHING — the
-   *   original timestamp is retained (no duplicate, no update).
+   * UPSERT semantics (restart semantics):
+   * - If a STARTED line already exists, its timestamp is overwritten — the task
+   *   was restarted, so STARTED records when the current stretch began.
+   * - Otherwise a new STARTED line is inserted first in the date-line sequence
+   *   (before SCHEDULED/DEADLINE/CLOSED).
    * - There is intentionally NO removal path. STARTED is never removed by
    *   state transitions; only manual user editing can remove the line.
    *
-   * The line is inserted first in the date-line sequence (before
-   * SCHEDULED/DEADLINE/CLOSED), mirroring CLOSED handling for both the
-   * Editor and Vault API paths.
-   *
    * Returns both the updated task and the line delta (+1 if inserted, 0 if
-   * a STARTED line already existed).
+   * updated in place).
    */
   async updateTaskStartedDate(
     task: Task,
     startedDate: Date | null,
     forceVaultApi = false,
   ): Promise<DateLineUpdateResult> {
-    // Idempotent: if a STARTED line already exists, do nothing.
-    // STARTED is never removed once set (first-ever-start semantics).
     const dateStr = startedDate
       ? DateUtils.formatStartedDate(startedDate)
       : null;
@@ -1928,52 +1950,22 @@ export class TaskWriter {
       const editor = md?.editor;
 
       if (isActive && editor) {
-        // Use Editor API when file is open in editor to avoid triggering file watcher
-        const lines = Array.from({ length: editor.lineCount() }, (_, i) =>
-          editor.getLine(i),
-        );
-
-        // Get the proper indent including quote prefix, bullet, or checkbox marker
-        const taskIndent = getTaskIndent(task);
-
-        // Idempotency check: search for an existing STARTED line regardless of
-        // task.startedDate (file may contain one the parser hasn't picked up).
-        const startedLineIndex = findDateLine(
-          lines,
-          task.line + 1,
+        // Upsert in the existing editor buffer (updates or inserts).
+        lineDelta = this.updateDateLineInEditor(
+          editor,
+          task,
           'STARTED',
-          taskIndent,
-          this.keywordManager,
+          dateStr,
+          getTaskIndent(task),
         );
-
-        if (startedLineIndex >= 0) {
-          // Existing STARTED line found: retain original, do nothing.
-          lineDelta = 0;
-        } else {
-          // Insert new STARTED line first in the date-line sequence
-          const insertIndex = this.calcDateLineInsertIndex(
-            lines,
-            task.line,
-            'STARTED',
-            taskIndent,
-          );
-          const indent = this.getEffectiveDateLineIndent(lines, -1, task);
-          const from: EditorPosition = { line: insertIndex, ch: 0 };
-          const to: EditorPosition = { line: insertIndex, ch: 0 };
-          editor.replaceRange(
-            `${this.leadingNewlineForInsert(editor, insertIndex)}${indent}STARTED: ${dateStr}\n`,
-            from,
-            to,
-          );
-          lineDelta = 1;
-        }
       } else {
         // Vault API path (atomic)
         await this.app.vault.process(file, (data) => {
           const lines = data.split('\n');
-          const result = this.updateOrInsertStartedDateLine(
+          const result = this.updateOrInsertDateLine(
             lines,
             task.line,
+            'STARTED',
             dateStr,
             task,
           );
@@ -1984,50 +1976,9 @@ export class TaskWriter {
     }
 
     return {
-      task: {
-        ...task,
-        startedDate:
-          lineDelta > 0 ? startedDate : (task.startedDate ?? startedDate),
-      },
+      task: { ...task, startedDate },
       lineDelta,
     };
-  }
-
-  /**
-   * Vault-API variant of idempotent STARTED insertion.
-   * Unlike updateOrInsertDateLine, this NEVER updates an existing STARTED line —
-   * the first-ever-start timestamp is preserved.
-   */
-  private updateOrInsertStartedDateLine(
-    lines: string[],
-    taskLineIndex: number,
-    dateStr: string,
-    task: Task,
-  ): { lines: string[]; lineDelta: number } {
-    const kwManager = this.keywordManager;
-    const taskIndent = getTaskIndent(task);
-    const existingIdx = findDateLine(
-      lines,
-      taskLineIndex + 1,
-      'STARTED',
-      taskIndent,
-      kwManager,
-    );
-
-    if (existingIdx >= 0) {
-      // Idempotent: retain the original STARTED line untouched.
-      return { lines, lineDelta: 0 };
-    }
-
-    const insertIdx = this.calcDateLineInsertIndex(
-      lines,
-      taskLineIndex,
-      'STARTED',
-      taskIndent,
-    );
-    const indent = this.getEffectiveDateLineIndent(lines, -1, task);
-    lines.splice(insertIdx, 0, `${indent}STARTED: ${dateStr}`);
-    return { lines, lineDelta: 1 };
   }
 
   /**
@@ -2602,14 +2553,14 @@ export class TaskWriter {
    *
    * Insertion rules (all indices relative to task.line):
    * - DESCRIPTION: always inserted at taskLineIndex + 1
-   * - STARTED:     first in the date-line sequence — immediately after the task
-   *                line/description, BEFORE any SCHEDULED line (pushes SCHEDULED down)
-   * - SCHEDULED: before DEADLINE (if exists), else after STARTED (if exists),
-   *              else after DESCRIPTION (if exists), else after task
-   * - DEADLINE:  after SCHEDULED (if exists), else after STARTED (if exists),
-   *              else after DESCRIPTION (if exists), else after task
-   * - CLOSED:    after DEADLINE (if exists), else after SCHEDULED (if exists),
-   *              else after STARTED (if exists), else after task
+   * - CREATED:    first in the date-line sequence — before STARTED/SCHEDULED
+   * - STARTED:    after CREATED (if exists), before SCHEDULED/DEADLINE/CLOSED
+   * - SCHEDULED:  before DEADLINE (if exists), else after STARTED/CREATED (if
+   *               exists), else after DESCRIPTION
+   * - DEADLINE:   after SCHEDULED (if exists), else after STARTED/CREATED (if
+   *               exists), else after DESCRIPTION
+   * - CLOSED:     after DEADLINE/SCHEDULED/STARTED/CREATED (whichever is last),
+   *               else after DESCRIPTION
    */
   private calcDateLineInsertIndex(
     lines: string[],
@@ -2624,8 +2575,24 @@ export class TaskWriter {
     const descIdx = findDescriptionLine(lines, afterTask, taskIndent);
     const afterDesc = descIdx >= 0 ? descIdx + 1 : afterTask;
 
+    // CREATED is always the very first date line, so any other date line must
+    // be inserted after it when present.
+    const createdIdx = findDateLine(
+      lines,
+      afterTask,
+      'CREATED',
+      taskIndent,
+      kwManager,
+    );
+    const afterCreated = createdIdx >= 0 ? createdIdx + 1 : afterDesc;
+
+    if (dateType === 'CREATED') {
+      // Insert before any other date line.
+      return afterDesc;
+    }
     if (dateType === 'STARTED') {
-      // STARTED goes FIRST among date lines: before SCHEDULED/DEADLINE/CLOSED.
+      // STARTED goes first among the non-CREATED date lines: before
+      // SCHEDULED/DEADLINE/CLOSED (but after CREATED).
       const scheduledIdx = findDateLine(
         lines,
         afterTask,
@@ -2650,13 +2617,11 @@ export class TaskWriter {
         kwManager,
       );
       if (closedIdx >= 0) return closedIdx;
-      return afterDesc;
+      return afterCreated;
     }
     if (dateType === 'SCHEDULED') {
-      // Insert before DEADLINE (if exists), else after STARTED (if exists),
-      // else after DESCRIPTION. Checking STARTED keeps the sequence order
-      // STARTED → SCHEDULED: inserting before an existing STARTED line would
-      // violate the STARTED-first invariant.
+      // Insert before DEADLINE (if exists), else after STARTED/CREATED (if
+      // exists), else after DESCRIPTION.
       const deadlineIdx = findDateLine(
         lines,
         afterTask,
@@ -2672,11 +2637,11 @@ export class TaskWriter {
         taskIndent,
         kwManager,
       );
-      return startedIdx >= 0 ? startedIdx + 1 : afterDesc;
+      return startedIdx >= 0 ? startedIdx + 1 : afterCreated;
     }
     if (dateType === 'DEADLINE') {
-      // Insert after SCHEDULED (if exists), else after STARTED (if exists),
-      // else after DESCRIPTION. Checking STARTED keeps STARTED above DEADLINE.
+      // Insert after SCHEDULED (if exists), else after STARTED/CREATED (if
+      // exists), else after DESCRIPTION.
       const scheduledIdx = findDateLine(
         lines,
         afterTask,
@@ -2692,9 +2657,9 @@ export class TaskWriter {
         taskIndent,
         kwManager,
       );
-      return startedIdx >= 0 ? startedIdx + 1 : afterDesc;
+      return startedIdx >= 0 ? startedIdx + 1 : afterCreated;
     }
-    // CLOSED - insert after DEADLINE, SCHEDULED, or STARTED (whichever is last)
+    // CLOSED - insert after DEADLINE, SCHEDULED, or STARTED/CREATED (whichever is last)
     const deadlineIdx = findDateLine(
       lines,
       afterTask,
@@ -2721,7 +2686,7 @@ export class TaskWriter {
       kwManager,
     );
     if (startedIdx >= 0) return startedIdx + 1;
-    return afterDesc;
+    return afterCreated;
   }
 
   /**

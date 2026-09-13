@@ -6,7 +6,7 @@ You can perform these actions through the [task context menu](task-list.md#task-
 
 Some copy/move actions require the Daily Notes core plugin to be enabled in Obsidian.
 
-Copy, Move and Migrate carry the task's full metadata block — `DESCRIPTION`, `STARTED`, `CLOSED`, `SCHEDULED`, `DEADLINE` and the `[!repeats]` history — at the task's own indent, so keyword-only tasks keep their dates and description.
+Copy, Move and Migrate carry the task's full metadata block — `DESCRIPTION`, `CREATED`, `STARTED`, `CLOSED`, `SCHEDULED`, `DEADLINE` and the `[!repeats]` history — at the task's own indent, so keyword-only tasks keep their dates and description.
 
 ## Copy
 
