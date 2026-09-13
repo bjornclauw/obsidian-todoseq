@@ -11,6 +11,7 @@ import { Task, WarningPeriodInfo } from '../types/task';
 import { getTaskKey } from '../utils/task-utils';
 import { TaskStateManager } from './task-state-manager';
 import { TaskUpdateCoordinator } from './task-update-coordinator';
+import type { UpdateSource } from './task-update-coordinator';
 import { App, TFile } from 'obsidian';
 import TodoTracker from '../main';
 import { KeywordManager } from '../utils/keyword-manager';
@@ -94,6 +95,8 @@ export interface RecurrenceCoordinatorOptions {
  */
 export class RecurrenceCoordinator {
   private recurrenceTimeouts: Map<string, number> = new Map();
+  /** Write surface of the interaction that scheduled the roll-forward. */
+  private recurrenceSources: Map<string, UpdateSource> = new Map();
   private readonly defaultDelayMs: number;
   private taskUpdateCoordinator: TaskUpdateCoordinator;
 
@@ -156,8 +159,17 @@ export class RecurrenceCoordinator {
    *
    * @param task - The task to schedule recurrence for
    * @param delayMs - Delay in milliseconds
+   * @param source - Update surface of the triggering interaction. The
+   * roll-forward must use the same write API (editor vs vault) as the
+   * completion, otherwise the two writes race on the same file (Obsidian's
+   * "file changed elsewhere" popup, and editor/vault divergence that can
+   * corrupt the task line on rapid cycling).
    */
-  scheduleRecurrence(task: Task, delayMs: number = this.defaultDelayMs): void {
+  scheduleRecurrence(
+    task: Task,
+    delayMs: number = this.defaultDelayMs,
+    source: UpdateSource = 'task-list',
+  ): void {
     const key = getTaskKey(task);
 
     // Cancel any existing timeout for this task
@@ -166,10 +178,13 @@ export class RecurrenceCoordinator {
     // Schedule the update
     const timeout = window.setTimeout(() => {
       this.recurrenceTimeouts.delete(key);
-      void this.performRecurrenceUpdate(task);
+      const updateSource = this.recurrenceSources.get(key) ?? 'task-list';
+      this.recurrenceSources.delete(key);
+      void this.performRecurrenceUpdate(task, updateSource);
     }, delayMs);
 
     this.recurrenceTimeouts.set(key, timeout);
+    this.recurrenceSources.set(key, source);
   }
 
   /**
@@ -184,6 +199,7 @@ export class RecurrenceCoordinator {
     if (timeout) {
       window.clearTimeout(timeout);
       this.recurrenceTimeouts.delete(key);
+      this.recurrenceSources.delete(key);
     }
   }
 
@@ -286,9 +302,15 @@ export class RecurrenceCoordinator {
    * Perform recurrence update: advance dates and reset to inactive state.
    *
    * @param task - The task to update
+   * @param source - Update surface of the triggering interaction; the
+   * roll-forward is written through the same API (editor vs vault) so the two
+   * writes cannot race on the same file.
    * @returns Promise resolving to the update result
    */
-  async performRecurrenceUpdate(task: Task): Promise<RecurrenceUpdateResult> {
+  async performRecurrenceUpdate(
+    task: Task,
+    source: UpdateSource = 'task-list',
+  ): Promise<RecurrenceUpdateResult> {
     const defaultInactive = this.keywordManager.getDefaultInactive();
 
     // Check if task has repeating dates that need updating
@@ -374,6 +396,15 @@ export class RecurrenceCoordinator {
         };
       }
 
+      // Only reset the state when the task is still completed at fire time.
+      // The user may have re-activated it during the delay (rapid cycling);
+      // unconditionally writing the inactive keyword would stomp their newer
+      // state back to TODO. With the instant-reopen flow the state is normally
+      // already inactive here, so this only guards the race.
+      const shouldResetState = this.keywordManager.isCompleted(
+        taskForUpdate.state,
+      );
+
       // Use TaskUpdateCoordinator to update the task
       // This ensures all updates go through the unified flow
       // Warning periods are determined here (preserves -Nd, strips --Nd)
@@ -384,7 +415,8 @@ export class RecurrenceCoordinator {
         newDeadlineRepeat: taskForUpdate.deadlineDateRepeat,
         newScheduledWarningPeriod: dateResult.newScheduledWarningPeriod ?? null,
         newDeadlineWarningPeriod: dateResult.newDeadlineWarningPeriod ?? null,
-        newStateForRecurrence: defaultInactive,
+        newStateForRecurrence: shouldResetState ? defaultInactive : undefined,
+        source,
       });
 
       return {

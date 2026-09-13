@@ -208,7 +208,7 @@ describe('RecurrenceCoordinator', () => {
       callback();
 
       expect(timeouts.has('test.md:0')).toBe(false);
-      expect(performSpy).toHaveBeenCalledWith(task);
+      expect(performSpy).toHaveBeenCalledWith(task, 'task-list');
 
       performSpy.mockRestore();
       setTimeoutSpy.mockRestore();
