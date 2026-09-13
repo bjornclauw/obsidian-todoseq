@@ -461,7 +461,7 @@ export class SearchOptionsDropdown extends BaseDropdown {
     this.hide();
 
     // Dispatch a custom event to restore the match case state
-    window.dispatchEvent(
+    this.win.dispatchEvent(
       new CustomEvent('todoseq:history-select', {
         detail: { query, matchCase },
       }),
@@ -663,7 +663,7 @@ export class SearchOptionsDropdown extends BaseDropdown {
       const focusableElements = this.getFocusableElements();
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = window.activeDocument.activeElement;
+      const activeElement = this.doc.activeElement;
 
       if (e.key === 'Tab') {
         if (e.shiftKey && activeElement === firstElement) {

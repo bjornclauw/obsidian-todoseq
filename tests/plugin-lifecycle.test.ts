@@ -1,5 +1,6 @@
 import { PluginLifecycleManager } from '../src/plugin-lifecycle';
 import { PropertySearchEngine } from '../src/services/property-search-engine';
+import { TaskListView } from '../src/view/task-list/task-list-view';
 import { createBaseSettings } from './helpers/test-helper';
 
 // Mock obsidian
@@ -24,6 +25,7 @@ jest.mock('obsidian', () => ({
   Modal: class {},
   TFile: jest.fn(),
   WorkspaceLeaf: jest.fn(),
+  requireApiVersion: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../src/main', () => ({
@@ -120,6 +122,7 @@ jest.mock('../src/view/task-list/task-list-view', () => ({
   TaskListView: jest.fn().mockImplementation(function () {
     this.updateTasks = jest.fn();
     this.refreshVisibleList = jest.fn().mockResolvedValue(undefined);
+    this.reinitializeSearchWiringIfStale = jest.fn();
   }),
   TaskListViewMode: jest.fn(),
 }));
@@ -428,6 +431,38 @@ describe('PluginLifecycleManager', () => {
       );
       await lifecycleManager.onunload();
       expect(clearSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('onUserEnable', () => {
+    it('reinitializes wiring for existing task list views', async () => {
+      const viewInstance = new (TaskListView as any)();
+      const leafMock = {
+        loadIfDeferred: jest.fn().mockResolvedValue(undefined),
+        view: viewInstance,
+      };
+      (pluginMock.app as any).workspace.getLeavesOfType = jest
+        .fn()
+        .mockReturnValue([leafMock]);
+
+      await lifecycleManager.onUserEnable();
+
+      expect(leafMock.loadIfDeferred).toHaveBeenCalled();
+      expect(
+        viewInstance.reinitializeSearchWiringIfStale,
+      ).toHaveBeenCalled();
+    });
+
+    it('skips leaves whose view is not a TaskListView', async () => {
+      const leafMock = {
+        loadIfDeferred: jest.fn().mockResolvedValue(undefined),
+        view: {},
+      };
+      (pluginMock.app as any).workspace.getLeavesOfType = jest
+        .fn()
+        .mockReturnValue([leafMock]);
+
+      await expect(lifecycleManager.onUserEnable()).resolves.toBeUndefined();
     });
   });
 });

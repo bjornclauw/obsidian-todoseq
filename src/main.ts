@@ -147,6 +147,12 @@ export default class TodoTracker extends Plugin {
     void this.lifecycleManager?.onunload();
   }
 
+  // Obsidian lifecycle method called when the user enables the plugin at
+  // runtime (not on startup). Re-establish wiring for any reused view.
+  onUserEnable(): void {
+    void this.lifecycleManager?.onUserEnable();
+  }
+
   // Obsidian lifecycle method called when settings are loaded
   async loadSettings() {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- loadData() returns unknown; migration layer validates shape below

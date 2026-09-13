@@ -4,6 +4,8 @@ export abstract class BaseDropdown {
   protected containerEl: HTMLElement;
   protected inputEl: HTMLInputElement;
   protected vault: Vault;
+  protected readonly doc: Document;
+  protected readonly win: Window;
   protected currentSuggestions: string[] = [];
   protected selectedIndex = -1;
   protected isShowing = false;
@@ -19,7 +21,14 @@ export abstract class BaseDropdown {
     this.inputEl = inputEl;
     this.vault = vault;
 
-    this.containerEl = activeDocument.body.createDiv({
+    // The dropdown must live in the same document/window as the search input.
+    // The global `activeDocument`/`activeWindow` can point at a different window
+    // (e.g. during a plugin enable), which renders the dropdown somewhere the
+    // user cannot see.
+    this.doc = inputEl.ownerDocument;
+    this.win = inputEl.ownerDocument.defaultView ?? window;
+
+    this.containerEl = this.doc.body.createDiv({
       cls: 'todoseq-dropdown',
     });
 
@@ -47,7 +56,7 @@ export abstract class BaseDropdown {
     };
 
     this.blurHandler = () => {
-      window.requestAnimationFrame(() => {
+      this.win.requestAnimationFrame(() => {
         if (!this.shouldPreventHide()) {
           this.hide();
         }
@@ -62,10 +71,10 @@ export abstract class BaseDropdown {
       this.updatePosition();
     };
 
-    window.activeDocument.addEventListener('click', this.documentClickHandler);
+    this.doc.addEventListener('click', this.documentClickHandler);
     this.inputEl.addEventListener('blur', this.blurHandler);
-    window.addEventListener('resize', this.resizeHandler);
-    window.addEventListener('scroll', this.scrollHandler, { passive: true });
+    this.win.addEventListener('resize', this.resizeHandler);
+    this.win.addEventListener('scroll', this.scrollHandler, { passive: true });
   }
 
   protected shouldPreventHide(): boolean {
@@ -80,8 +89,8 @@ export abstract class BaseDropdown {
   public updatePosition(): void {
     const inputRect = this.inputEl.getBoundingClientRect();
 
-    const leftPos = window.scrollX + inputRect.left;
-    const topPos = window.scrollY + inputRect.bottom;
+    const leftPos = this.win.scrollX + inputRect.left;
+    const topPos = this.win.scrollY + inputRect.bottom;
 
     this.containerEl.style.left = `${leftPos}px`;
     this.containerEl.style.top = `${topPos}px`;
@@ -125,13 +134,10 @@ export abstract class BaseDropdown {
   }
 
   public cleanup(): void {
-    window.activeDocument.removeEventListener(
-      'click',
-      this.documentClickHandler,
-    );
+    this.doc.removeEventListener('click', this.documentClickHandler);
     this.inputEl.removeEventListener('blur', this.blurHandler);
-    window.removeEventListener('resize', this.resizeHandler);
-    window.removeEventListener('scroll', this.scrollHandler);
+    this.win.removeEventListener('resize', this.resizeHandler);
+    this.win.removeEventListener('scroll', this.scrollHandler);
 
     if (this.containerEl && this.containerEl.parentNode) {
       this.containerEl.remove();

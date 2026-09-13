@@ -11,7 +11,7 @@ import { OrgModeTaskParser } from './parser/org-mode-task-parser';
 import { CodeCommentTaskParser } from './parser/code-comment-task-parser';
 import { ParserRegistry } from './parser/parser-registry';
 import { TASK_VIEW_ICON } from './main';
-import { Editor, MarkdownView, Platform, Notice } from 'obsidian';
+import { Editor, MarkdownView, Platform, Notice, requireApiVersion } from 'obsidian';
 import { parseUrgencyCoefficients } from './utils/task-urgency';
 import { ReaderViewFormatter } from './view/markdown-renderers/reader-formatting';
 import { PropertySearchEngine } from './services/property-search-engine';
@@ -585,6 +585,25 @@ export class PluginLifecycleManager {
         console.error('TODOseq: Fatal background scanning error:', err);
       });
     });
+  }
+
+  /**
+   * Obsidian lifecycle method called when the user enables the plugin at
+   * runtime. A view that survived a previous disable can be reused by the
+   * workspace without `onOpen` running again, so re-establish its search wiring
+   * here.
+   */
+  async onUserEnable(): Promise<void> {
+    const { workspace } = this.plugin.app;
+    const leaves = workspace.getLeavesOfType(TaskListView.viewType);
+    for (const leaf of leaves) {
+      if (requireApiVersion('1.7.2')) {
+        await leaf.loadIfDeferred();
+      }
+      if (leaf.view instanceof TaskListView) {
+        leaf.view.reinitializeSearchWiringIfStale();
+      }
+    }
   }
 
   /**

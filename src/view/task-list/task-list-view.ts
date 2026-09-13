@@ -104,6 +104,7 @@ export class TaskListView extends ItemView {
   private defaultViewMode: TaskListViewMode;
   private defaultSortMethod: SortMethod;
   private searchInputEl: HTMLInputElement | null = null;
+  private wiredInputEl: HTMLInputElement | null = null;
   private saveSearchBtn: HTMLElement | null = null;
   private sortDirectionEl: HTMLElement | null = null;
   private groupByEl: HTMLSelectElement | null = null;
@@ -633,6 +634,7 @@ export class TaskListView extends ItemView {
       cls: 'search-input-container global-search-input-container',
     });
     const inputEl = searchInputWrap.createEl('input', {
+      cls: 'todoseq-search-input',
       attr: {
         id: searchId,
         type: 'search',
@@ -1124,7 +1126,7 @@ export class TaskListView extends ItemView {
 
   /** Setup search suggestion dropdowns for prefix filter autocomplete */
   private setupSearchSuggestions(): void {
-    const inputEl = this.searchInputEl;
+    const inputEl = this.resolveSearchInputEl();
     if (!inputEl) return;
 
     // Clean up any existing dropdowns before creating new ones
@@ -1137,61 +1139,103 @@ export class TaskListView extends ItemView {
       this.suggestionDropdown = null;
     }
 
-    // Wire input events synchronously; the handlers no-op until the dropdowns
-    // finish loading, so a focus/click that happens first is not lost.
-    inputEl.addEventListener('input', () => {
-      this.handleSearchInputForSuggestions();
-    });
+    // Attach the input listeners once per physical input element. A plugin
+    // disable/enable cycle can reuse this view without `onOpen` running again,
+    // so this setup is also reached from `reinitializeSearchWiringIfStale`;
+    // the guard keeps re-runs from stacking duplicate handlers.
+    if (this.wiredInputEl !== inputEl) {
+      this.registerDomEvent(inputEl, 'input', () => {
+        this.handleSearchInputForSuggestions();
+      });
 
-    inputEl.addEventListener('focus', () => {
-      this.handleSearchFocus();
-    });
+      this.registerDomEvent(inputEl, 'focus', () => {
+        this.handleSearchFocus();
+      });
 
-    // Clicking a field that is already focused (or after the dropdown was
-    // dismissed) does not fire 'focus' again, so re-check on pointer down.
-    inputEl.addEventListener('pointerdown', () => {
-      window.setTimeout(() => this.handleSearchFocus(), 0);
-    });
+      // Clicking a field that is already focused (or after the dropdown was
+      // dismissed) does not fire 'focus' again, so re-check on pointer down.
+      this.registerDomEvent(inputEl, 'pointerdown', () => {
+        window.setTimeout(() => this.handleSearchFocus(), 0);
+      });
 
-    inputEl.addEventListener('keydown', (e) => {
-      if (this.optionsDropdown && this.optionsDropdown.handleKeyDown(e)) {
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (
-        this.suggestionDropdown &&
-        this.suggestionDropdown.handleKeyDown(e)
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    });
+      this.registerDomEvent(inputEl, 'keydown', (e) => {
+        if (this.optionsDropdown && this.optionsDropdown.handleKeyDown(e)) {
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (
+          this.suggestionDropdown &&
+          this.suggestionDropdown.handleKeyDown(e)
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      });
 
-    // Listen for history selection to restore match case state
-    this.historySelectHandler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as {
-        query: string;
-        matchCase: boolean;
+      this.wiredInputEl = inputEl;
+    }
+
+    // Listen for history selection to restore match case state. Registered once
+    // per view instance; `onClose` clears it so reuse re-attaches it.
+    if (!this.historySelectHandler) {
+      this.historySelectHandler = (e: Event) => {
+        const detail = (e as CustomEvent).detail as {
+          query: string;
+          matchCase: boolean;
+        };
+        // Guard: if the user typed a different query before this
+        // setTimeout(0) fired, skip to avoid overwriting their input
+        const currentInput = this.searchInputEl?.value ?? '';
+        if (currentInput !== detail.query) return;
+        this.isCaseSensitive = detail.matchCase;
+        this.setSearchQuery(detail.query);
+        const matchCaseBtn = this.contentEl.querySelector(
+          '.input-right-decorator[aria-label="Match case"]',
+        );
+        if (matchCaseBtn) {
+          matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
+        }
+        void this.refreshVisibleList();
       };
-      // Guard: if the user typed a different query before this
-      // setTimeout(0) fired, skip to avoid overwriting their input
-      const currentInput = this.searchInputEl?.value ?? '';
-      if (currentInput !== detail.query) return;
-      this.isCaseSensitive = detail.matchCase;
-      this.setSearchQuery(detail.query);
-      const matchCaseBtn = this.contentEl.querySelector(
-        '.input-right-decorator[aria-label="Match case"]',
+      window.addEventListener(
+        'todoseq:history-select',
+        this.historySelectHandler,
       );
-      if (matchCaseBtn) {
-        matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
-      }
-      void this.refreshVisibleList();
-    };
-    window.addEventListener(
-      'todoseq:history-select',
-      this.historySelectHandler,
-    );
+    }
 
     this.createSearchDropdowns(inputEl);
+  }
+
+  /**
+   * Resolve the live search input. After a plugin disable/enable the view can
+   * survive without `onOpen` running again, leaving the cached reference null
+   * while the DOM is still intact; recover it from the panel instead of
+   * silently failing.
+   */
+  private resolveSearchInputEl(): HTMLInputElement | null {
+    if (this.searchInputEl && this.searchInputEl.isConnected) {
+      return this.searchInputEl;
+    }
+    const found =
+      this.contentEl?.querySelector<HTMLInputElement>(
+        '.todoseq-search-input',
+      ) ?? null;
+    this.searchInputEl = found;
+    return found;
+  }
+
+  /**
+   * Re-establish the search wiring when a reused view lost it (e.g. it survived
+   * a runtime plugin disable/enable without `onOpen` re-running). Safe to call
+   * repeatedly; `setupSearchSuggestions` is idempotent.
+   */
+  public reinitializeSearchWiringIfStale(): void {
+    if (
+      !this.searchInputEl ||
+      !this.optionsDropdown ||
+      !this.suggestionDropdown
+    ) {
+      this.setupSearchSuggestions();
+    }
   }
 
   /** Construct the search dropdowns (idempotent). */
@@ -1243,10 +1287,10 @@ export class TaskListView extends ItemView {
   }
 
   private handleSearchInputForSuggestions(): void {
-    const inputEl = this.searchInputEl;
+    const inputEl = this.resolveSearchInputEl();
     if (!inputEl) return;
     if (!this.optionsDropdown || !this.suggestionDropdown) {
-      this.createSearchDropdowns(inputEl);
+      this.setupSearchSuggestions();
     }
     if (!this.optionsDropdown || !this.suggestionDropdown) return;
 
@@ -1338,10 +1382,10 @@ export class TaskListView extends ItemView {
   }
 
   private handleSearchFocus(): void {
-    const inputEl = this.searchInputEl;
+    const inputEl = this.resolveSearchInputEl();
     if (!inputEl) return;
     if (!this.optionsDropdown || !this.suggestionDropdown) {
-      this.createSearchDropdowns(inputEl);
+      this.setupSearchSuggestions();
     }
     if (!this.optionsDropdown || !this.suggestionDropdown) return;
 
@@ -3141,6 +3185,7 @@ export class TaskListView extends ItemView {
     this.renderQueue.clear();
 
     this.searchInputEl = null;
+    this.wiredInputEl = null;
     this.saveSearchBtn = null;
     this.taskListContainer = null;
     await super.onClose?.();

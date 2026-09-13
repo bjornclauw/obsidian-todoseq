@@ -17,6 +17,17 @@ jest.mock('obsidian', () => ({
   ItemView: class MockItemView {
     contentEl: HTMLElement;
     app = { workspace: {}, vault: {} };
+    register = jest.fn();
+    registerDomEvent = jest.fn(
+      (
+        el: EventTarget,
+        type: string,
+        callback: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions,
+      ) => {
+        el.addEventListener(type, callback, options);
+      },
+    );
     constructor() {
       this.contentEl = activeDocument.createElement('div');
       // Add Obsidian's getAttr/setAttr methods
@@ -484,6 +495,46 @@ describe('TaskListView', () => {
 
       expect(document.querySelector('.todoseq-dropdown.show')).not.toBeNull();
       input.remove();
+    });
+
+    it('wires the search input listeners only once across repeated setup', () => {
+      const input = document.createElement('input');
+      input.className = 'todoseq-search-input';
+      document.body.appendChild(input);
+      view['searchInputEl'] = input;
+
+      view['setupSearchSuggestions']();
+      view['setupSearchSuggestions']();
+
+      // 4 input listeners.
+      expect(
+        view['registerDomEvent'] as unknown as jest.Mock,
+      ).toHaveBeenCalledTimes(4);
+      input.remove();
+    });
+
+    it('reinitializes search wiring on a view reused across a plugin reload', async () => {
+      const input = document.createElement('input');
+      input.className = 'todoseq-search-input';
+      view['contentEl'].appendChild(input);
+
+      // State left behind when a view survives a disable/enable without onOpen
+      // running: cached refs are null but the panel DOM is intact.
+      view['searchInputEl'] = null;
+      view['wiredInputEl'] = null;
+      view['optionsDropdown'] = null;
+      view['suggestionDropdown'] = null;
+
+      view.reinitializeSearchWiringIfStale();
+
+      expect(view['searchInputEl']).toBe(input);
+      expect(
+        view['registerDomEvent'] as unknown as jest.Mock,
+      ).toHaveBeenCalledTimes(4);
+
+      input.focus();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(document.querySelector('.todoseq-dropdown.show')).not.toBeNull();
     });
   });
 
