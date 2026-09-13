@@ -89,6 +89,10 @@ Some TODOseq features are not available in Logseq. The use of checkboxes before 
 
 \*Note: the Logseq import relates to the original Markdown based version of Logseq. Migration from the newer Logseq database version format has not been tested.
 
+## Migrating from Obsidian Tasks
+
+TODOseq can convert tasks created by the [Obsidian Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) plugin. Run **Import Obsidian tasks** from the command palette to preview and convert emoji or Dataview date fields, priorities and recurrence into TODOseq's keyword and date lines. See [Import Tasks](import.md) for details.
+
 ## Experimental Features
 
 TODOseq offers some experimental features that may not be fully polished and could change in future versions:

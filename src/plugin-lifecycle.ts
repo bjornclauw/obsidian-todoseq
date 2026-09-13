@@ -11,7 +11,13 @@ import { OrgModeTaskParser } from './parser/org-mode-task-parser';
 import { CodeCommentTaskParser } from './parser/code-comment-task-parser';
 import { ParserRegistry } from './parser/parser-registry';
 import { TASK_VIEW_ICON } from './main';
-import { Editor, MarkdownView, Platform, Notice, requireApiVersion } from 'obsidian';
+import {
+  Editor,
+  MarkdownView,
+  Platform,
+  Notice,
+  requireApiVersion,
+} from 'obsidian';
 import { parseUrgencyCoefficients } from './utils/task-urgency';
 import { ReaderViewFormatter } from './view/markdown-renderers/reader-formatting';
 import { PropertySearchEngine } from './services/property-search-engine';
@@ -19,6 +25,7 @@ import { EventCoordinator } from './services/event-coordinator';
 import { TaskUpdateCoordinator } from './services/task-update-coordinator';
 import { TaskEditorController } from './services/task-editor-controller';
 import { TodoseqCodeBlockProcessor } from './view/embedded-task-list/code-block-processor';
+import { ImportTasksModal } from './view/components/import-tasks-modal';
 import {
   smartDatePlugin,
   smartDateHighlightPlugin,
@@ -211,6 +218,25 @@ export class PluginLifecycleManager {
         await this.plugin.vaultScanner?.scanVault();
       },
     });
+
+    // Add command to import tasks from the Obsidian Tasks plugin (desktop only —
+    // the importer's side-by-side preview needs the extra screen space)
+    if (!Platform.isMobile) {
+      this.plugin.addCommand({
+        id: 'import-obsidian-tasks',
+        name: 'Import Obsidian tasks',
+        icon: 'file-input',
+        callback: () => {
+          new ImportTasksModal({
+            app: this.plugin.app,
+            keywordManager: this.plugin.taskStateManager.getKeywordManager(),
+            onApplied: async () => {
+              await this.plugin.vaultScanner?.scanVault();
+            },
+          }).open();
+        },
+      });
+    }
 
     // Add editor command to toggle task state
     this.plugin.addCommand({

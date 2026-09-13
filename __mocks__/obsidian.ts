@@ -11,6 +11,18 @@ export class TFile {
   }
 }
 
+export class TFolder {
+  path: string;
+  name: string;
+  children: unknown[];
+
+  constructor(path = '', name = '', children: unknown[] = []) {
+    this.path = path;
+    this.name = name;
+    this.children = children;
+  }
+}
+
 export class App {
   vault: Vault;
 
@@ -20,6 +32,8 @@ export class App {
 }
 
 export class Vault {
+  configDir = '.obsidian';
+
   getAbstractFileByPath(path: string): TFile | null {
     return null;
   }
@@ -28,12 +42,24 @@ export class Vault {
     return '';
   }
 
+  async cachedRead(file: TFile): Promise<string> {
+    return '';
+  }
+
+  async process(file: TFile, fn: (data: string) => string): Promise<string> {
+    return fn(await this.read(file));
+  }
+
   async modify(_file: TFile, _data: string): Promise<void> {
     // no-op in tests
   }
 
   getMarkdownFiles(): TFile[] {
     return [];
+  }
+
+  getRoot(): TFolder {
+    return new TFolder();
   }
 
   getConfig(key: string): unknown {

@@ -7,6 +7,7 @@ TODOseq provides several commands that can be accessed through Obsidian's Comman
 - TODOseq: Show task list
 - TODOseq: Open task list in new tab
 - TODOseq: Rescan vault
+- TODOseq: Import Obsidian tasks _(desktop only)_
 - TODOseq: Create or edit task _(editor only)_
 - TODOseq: Toggle task state _(editor only)_
 - TODOseq: Cycle task state _(editor only)_
@@ -36,6 +37,10 @@ Opens the TODOseq Task List view in a new tab in the main workspace area. This i
 Manually triggers a full vault scan to update the task list with the latest changes.
 
 A full rescan is not typically required, unless the vault level setting for Excluded files has been updated. General file changes (create, modify, delete) trigger automatic incremental updates.
+
+### Import Obsidian tasks
+
+_(Desktop only.)_ Opens the interactive importer for tasks written with the [Obsidian Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) plugin. It scans the top-level folders you select, lets you choose the priority mapping, previews the before/after content with any warnings, and writes the selected files. Back up your vault before running it — the importer does not create snapshots. See [Import Tasks](import.md) for details.
 
 ### Create or edit task
 

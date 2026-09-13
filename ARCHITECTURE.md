@@ -379,6 +379,16 @@ graph TB
 - **Validation**: Name length capped at 50 characters; empty names rejected
 - **Used by**: SearchOptionsDropdown, settings UI
 
+**ObsidianTasksImporter** (`src/services/import/obsidian-tasks-importer.ts`)
+
+- **Responsibility**: Import tasks written in the Obsidian Tasks plugin's syntax — scan in-scope markdown files, preview conversions, and write them back atomically
+- **Key Patterns**: Pure-transform / I/O-shell split, atomic `vault.process()` writes, batched scanning with `yieldToEventLoop`
+- **Interface**: `scan({ onProgress?, folderPrefixes? })`, `apply(candidates)`
+- **Scope**: `folderPrefixes` limits the scan to selected top-level folders (`''` means vault-root files); omitted to scan everything
+- **Pure Transform**: `convertObsidianTasksLine()` / `convertObsidianTasksContent()` in `obsidian-tasks-converter.ts` handle emoji (`⏳📅🛫➕✅❌🔁⏫🔼🔽⏬`) and Dataview (`[due:: …]`) fields, checkbox status characters, priority mapping and recurrence; a `🛫` start date becomes `SCHEDULED` when none exists. `buildConverterOptions()` derives the states and keyword set from `KeywordManager` so no keyword is hard-coded
+- **Backups**: none — the importer writes files in place and the UI warns the user to make their own backup
+- **Used by**: `ImportTasksModal` via the `import-obsidian-tasks` command
+
 ### 2. UI Layer (User Interaction)
 
 **UIManager** (`src/ui-manager.ts`)
@@ -480,6 +490,15 @@ graph TB
 - **Interface**: `hide()`, `isVisible()`, `cleanup()`, `positionDialog()`, `attachGlobalListeners()`, `detachGlobalListeners()`, `moveFocus()`
 - **Features**: Global menu management (only one menu open at a time); phone-specific backdrop and centered positioning; desktop cursor-based positioning with viewport bounds checking; arrow key navigation; scroll-to-hide behavior; mobile touch suppression delay
 - **Subclasses**: DatePicker, StateMenuBuilder, TaskContextMenu
+
+**ImportTasksModal** (`src/view/components/import-tasks-modal.ts`)
+
+- **Responsibility**: Interactive Obsidian Tasks → TODOseq migration; scans the selected top-level folders, lists convertible files with selectable checkboxes and a filter, exposes the priority mapping, shows an aligned before/after diff with warnings, and applies the selected files
+- **Key Patterns**: Native Obsidian `Modal`, aligned single-scroll diff (one grid row per line pair, so the two sides cannot drift), context-collapsed equal runs, summary chips, callback to rescan the vault after apply
+- **Interface**: `open()`; options `{ app, keywordManager, onApplied }`
+- **Diff engine**: `buildDiffRows()` in `src/services/import/line-diff.ts` (pure, LCS-based, with line numbers per side and `change`/`add`/`remove`/`equal` rows)
+- **Desktop only**: the `import-obsidian-tasks` command is registered only when `!Platform.isMobile` because the side-by-side preview needs the screen space
+- **Used by**: `PluginLifecycleManager` command `import-obsidian-tasks`
 
 **BaseDropdown** (`src/view/components/base-dropdown.ts`)
 
