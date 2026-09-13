@@ -908,44 +908,50 @@ export class TaskUpdateCoordinator {
     task: Task,
     context: ProcessingContext,
   ): Promise<Task> {
+    // Only the editor's own commands should edit the live editor buffer.
+    // Updates coming from the Task List, embedded code blocks or the reader go
+    // through the vault so they do not move the cursor/scroll of an open note
+    // (Obsidian re-renders the file for us).
+    const forceVaultApi = context.source !== 'editor';
+
     switch (context.type) {
       case 'state':
         return taskEditor.updateTaskState(task, context.newState, {
           recordCompletion: context.recordCompletion,
-          // Only the editor's own commands should edit the live editor buffer.
-          // Updates coming from the Task List, embedded code blocks or the
-          // reader go through the vault so they do not move the cursor/scroll
-          // of an open note (Obsidian re-renders the file for us).
-          forceVaultApi: context.source !== 'editor',
+          forceVaultApi,
         });
 
       case 'scheduled-date':
         if (!context.newDate) {
-          return taskEditor.removeTaskScheduledDate(task);
+          return taskEditor.removeTaskScheduledDate(task, { forceVaultApi });
         }
         return taskEditor.updateTaskScheduledDate(
           task,
           context.newDate,
           context.newRepeat,
           context.newWarningPeriod,
+          { forceVaultApi },
         );
 
       case 'deadline-date':
         if (!context.newDate) {
-          return taskEditor.removeTaskDeadlineDate(task);
+          return taskEditor.removeTaskDeadlineDate(task, { forceVaultApi });
         }
         return taskEditor.updateTaskDeadlineDate(
           task,
           context.newDate,
           context.newRepeat,
           context.newWarningPeriod,
+          { forceVaultApi },
         );
 
       case 'priority':
         if (context.newPriority === null || context.newPriority === undefined) {
-          return taskEditor.removeTaskPriority(task);
+          return taskEditor.removeTaskPriority(task, { forceVaultApi });
         }
-        return taskEditor.updateTaskPriority(task, context.newPriority);
+        return taskEditor.updateTaskPriority(task, context.newPriority, {
+          forceVaultApi,
+        });
 
       case 'closed-date':
         return task;
@@ -969,6 +975,7 @@ export class TaskUpdateCoordinator {
             task.deadlineWarningPeriod,
           ),
           newState: context.newStateForRecurrence,
+          forceVaultApi,
         });
       }
 

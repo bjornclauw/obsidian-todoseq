@@ -175,6 +175,16 @@ export function createCoordinatorHarness(
     deadlineDateRepeat: null,
     lineDelta: -1,
   }));
+  taskEditor.updateTaskPriority.mockImplementation(
+    async (task: Task, newPriority: Task['priority']) => ({
+      ...task,
+      priority: newPriority,
+    }),
+  );
+  taskEditor.removeTaskPriority.mockImplementation(async (task: Task) => ({
+    ...task,
+    priority: null,
+  }));
   taskEditor.applyRecurrenceUpdate.mockImplementation(
     async (task: Task, options: Record<string, unknown>) => {
       const result = { ...task };

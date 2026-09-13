@@ -428,6 +428,7 @@ export class TaskWriter {
         newState,
         keepPriority,
         recordCompletion,
+        forceVaultApi,
       );
     }
 
@@ -644,6 +645,7 @@ export class TaskWriter {
   private async modifyTableCell(
     task: Task,
     mutate: (cellContent: string) => string,
+    forceVaultApi = false,
   ): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (!(file instanceof TFile)) return;
@@ -667,6 +669,7 @@ export class TaskWriter {
     const isActive = md?.file?.path === task.path;
     const editor = md?.editor;
     const isSourceMode =
+      !forceVaultApi &&
       isActive &&
       !!editor &&
       md?.getViewType() === 'markdown' &&
@@ -701,6 +704,7 @@ export class TaskWriter {
     newState: string,
     keepPriority: boolean,
     recordCompletion = false,
+    forceVaultApi = false,
   ): Promise<Task> {
     const { newLine, completed } = TaskWriter.generateTaskLine(
       task,
@@ -731,47 +735,52 @@ export class TaskWriter {
     let startedInserted = false;
 
     let fullCellContent = cellContent;
-    await this.modifyTableCell(task, (origCell) => {
-      const brIdx = origCell.indexOf('<br');
-      let dateSuffix = brIdx >= 0 ? origCell.substring(brIdx) : '';
+    await this.modifyTableCell(
+      task,
+      (origCell) => {
+        const brIdx = origCell.indexOf('<br');
+        let dateSuffix = brIdx >= 0 ? origCell.substring(brIdx) : '';
 
-      // Add or update CLOSED date when trackClosedDate is enabled
-      if (shouldWriteClosed) {
-        // CLOSED dates in cells use [[...]] wikilink format.
-        // Support both old [date] and new [[date]] formats for migration
-        const closedPattern = /\s*<br\s*\/?>\s*CLOSED:\s*\[{1,2}[^\]]+\]{1,2}/i;
-        const closedTag = `<br>CLOSED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
-        if (closedPattern.test(dateSuffix)) {
-          dateSuffix = dateSuffix.replace(closedPattern, closedTag);
-        } else {
-          dateSuffix = `${dateSuffix}${closedTag}`;
+        // Add or update CLOSED date when trackClosedDate is enabled
+        if (shouldWriteClosed) {
+          // CLOSED dates in cells use [[...]] wikilink format.
+          // Support both old [date] and new [[date]] formats for migration
+          const closedPattern =
+            /\s*<br\s*\/?>\s*CLOSED:\s*\[{1,2}[^\]]+\]{1,2}/i;
+          const closedTag = `<br>CLOSED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
+          if (closedPattern.test(dateSuffix)) {
+            dateSuffix = dateSuffix.replace(closedPattern, closedTag);
+          } else {
+            dateSuffix = `${dateSuffix}${closedTag}`;
+          }
+        } else if (shouldRemoveClosed) {
+          // Remove CLOSED date when un-completing, regardless of whether
+          // task.closedDate is set. For table cells, task.closedDate is
+          // parsed only from the first <br> segment (before the CLOSED tag),
+          // so it is always null even when the cell has a CLOSED date.
+          // Support both old [date] and new [[date]] formats for migration
+          dateSuffix = dateSuffix.replace(
+            /\s*<br\s*\/?>\s*CLOSED:\s*\[{1,2}[^\]]+\]{1,2}/i,
+            '',
+          );
         }
-      } else if (shouldRemoveClosed) {
-        // Remove CLOSED date when un-completing, regardless of whether
-        // task.closedDate is set. For table cells, task.closedDate is
-        // parsed only from the first <br> segment (before the CLOSED tag),
-        // so it is always null even when the cell has a CLOSED date.
-        // Support both old [date] and new [[date]] formats for migration
-        dateSuffix = dateSuffix.replace(
-          /\s*<br\s*\/?>\s*CLOSED:\s*\[{1,2}[^\]]+\]{1,2}/i,
-          '',
-        );
-      }
 
-      // STARTED: first-ever-start, idempotent and one-way (add only). Table
-      // cells mirror the [[...]] timestamp format used for CLOSED.
-      if (isActiveState && this.settings?.trackStartedDate) {
-        const startedPattern =
-          /\s*<br\s*\/?>\s*STARTED:\s*\[{1,2}[^\]]+\]{1,2}/i;
-        if (!startedPattern.test(dateSuffix)) {
-          dateSuffix = `${dateSuffix}<br>STARTED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
-          startedInserted = true;
+        // STARTED: first-ever-start, idempotent and one-way (add only). Table
+        // cells mirror the [[...]] timestamp format used for CLOSED.
+        if (isActiveState && this.settings?.trackStartedDate) {
+          const startedPattern =
+            /\s*<br\s*\/?>\s*STARTED:\s*\[{1,2}[^\]]+\]{1,2}/i;
+          if (!startedPattern.test(dateSuffix)) {
+            dateSuffix = `${dateSuffix}<br>STARTED: ${TaskWriter.formatTableCellTimestamp(new Date())}`;
+            startedInserted = true;
+          }
         }
-      }
 
-      fullCellContent = `${cellContent}${dateSuffix}`;
-      return fullCellContent;
-    });
+        fullCellContent = `${cellContent}${dateSuffix}`;
+        return fullCellContent;
+      },
+      forceVaultApi,
+    );
 
     let closedDate = task.closedDate;
     if (shouldWriteClosed) closedDate = new Date();
@@ -795,12 +804,17 @@ export class TaskWriter {
     task: Task,
     cellContent: string,
     extraUpdates: Partial<Task>,
+    forceVaultApi = false,
   ): Promise<Task> {
-    await this.modifyTableCell(task, (origCell) => {
-      const brIdx = origCell.indexOf('<br');
-      const dateSuffix = brIdx >= 0 ? origCell.substring(brIdx) : '';
-      return `${cellContent}${dateSuffix}`;
-    });
+    await this.modifyTableCell(
+      task,
+      (origCell) => {
+        const brIdx = origCell.indexOf('<br');
+        const dateSuffix = brIdx >= 0 ? origCell.substring(brIdx) : '';
+        return `${cellContent}${dateSuffix}`;
+      },
+      forceVaultApi,
+    );
 
     return { ...task, rawText: cellContent, ...extraUpdates };
   }
@@ -815,6 +829,7 @@ export class TaskWriter {
     dateType: 'SCHEDULED' | 'DEADLINE',
     repeat?: DateRepeatInfo | null,
     warningPeriod?: WarningPeriodInfo | null,
+    forceVaultApi = false,
   ): Promise<Task & { lineDelta?: number }> {
     const dateStr = TaskWriter.buildDateLineContent(
       newDate,
@@ -822,13 +837,20 @@ export class TaskWriter {
       warningPeriod,
     );
 
-    await this.modifyTableCell(task, (cell) => {
-      const dateTag = `${dateType}: ${dateStr}`;
-      const existing = new RegExp(`<br\\s*/?>\\s*${dateType}:\\s*<[^>]+>`, 'i');
-      return existing.test(cell)
-        ? cell.replace(existing, `<br>${dateTag}`)
-        : `${cell}<br>${dateTag}`;
-    });
+    await this.modifyTableCell(
+      task,
+      (cell) => {
+        const dateTag = `${dateType}: ${dateStr}`;
+        const existing = new RegExp(
+          `<br\\s*/?>\\s*${dateType}:\\s*<[^>]+>`,
+          'i',
+        );
+        return existing.test(cell)
+          ? cell.replace(existing, `<br>${dateTag}`)
+          : `${cell}<br>${dateTag}`;
+      },
+      forceVaultApi,
+    );
 
     const result: Task & { lineDelta?: number } = {
       ...task,
@@ -854,23 +876,28 @@ export class TaskWriter {
   private async removeTableCellDate(
     task: Task,
     dateType: 'SCHEDULED' | 'DEADLINE' | 'CLOSED',
+    forceVaultApi = false,
   ): Promise<Task & { lineDelta?: number }> {
-    await this.modifyTableCell(task, (cell) => {
-      if (dateType === 'CLOSED') {
-        // CLOSED dates use [[date]] wikilink format in table cells
+    await this.modifyTableCell(
+      task,
+      (cell) => {
+        if (dateType === 'CLOSED') {
+          // CLOSED dates use [[date]] wikilink format in table cells
+          const datePattern = new RegExp(
+            `\\s*<br\\s*/?>\\s*${dateType}:\\s*(?:\\[\\[[^\\]]+\\]\\]|\\[[^\\]]+\\])`,
+            'i',
+          );
+          return cell.replace(datePattern, '');
+        }
+        // SCHEDULED and DEADLINE use <date> format
         const datePattern = new RegExp(
-          `\\s*<br\\s*/?>\\s*${dateType}:\\s*(?:\\[\\[[^\\]]+\\]\\]|\\[[^\\]]+\\])`,
+          `\\s*<br\\s*/?>\\s*${dateType}:\\s*<[^>]+>`,
           'i',
         );
         return cell.replace(datePattern, '');
-      }
-      // SCHEDULED and DEADLINE use <date> format
-      const datePattern = new RegExp(
-        `\\s*<br\\s*/?>\\s*${dateType}:\\s*<[^>]+>`,
-        'i',
-      );
-      return cell.replace(datePattern, '');
-    });
+      },
+      forceVaultApi,
+    );
 
     const result: Task & { lineDelta?: number } = {
       ...task,
@@ -927,6 +954,7 @@ export class TaskWriter {
   async updateTaskPriority(
     task: Task,
     newPriority: 'high' | 'med' | 'low',
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task> {
     // Table tasks: update cell content only
     if (task.isTableTask && task.tableCell) {
@@ -938,9 +966,14 @@ export class TaskWriter {
             : '[#C]';
       const text = task.text ? ` ${task.text}` : '';
       const cellContent = `${task.state} ${priorityToken}${text}`;
-      return this.applyTableCellContent(task, cellContent, {
-        priority: newPriority,
-      });
+      return this.applyTableCellContent(
+        task,
+        cellContent,
+        {
+          priority: newPriority,
+        },
+        options.forceVaultApi ?? false,
+      );
     }
 
     // Generate priority token
@@ -978,11 +1011,13 @@ export class TaskWriter {
       };
     }
 
+    const forceVaultApi = options.forceVaultApi ?? false;
     const md = this.app.workspace.getActiveViewOfType(MarkdownView);
     const isActive = md?.file?.path === task.path;
     const editor = md?.editor;
 
     const isSourceMode =
+      !forceVaultApi &&
       isActive &&
       editor &&
       md?.getViewType() === 'markdown' &&
@@ -1026,7 +1061,10 @@ export class TaskWriter {
    * Removes the priority token from a task and persists the change.
    * If the task has no priority, returns the task unchanged without writing.
    */
-  async removeTaskPriority(task: Task): Promise<Task> {
+  async removeTaskPriority(
+    task: Task,
+    options: { forceVaultApi?: boolean } = {},
+  ): Promise<Task> {
     if (!task.priority) {
       return { ...task };
     }
@@ -1035,7 +1073,12 @@ export class TaskWriter {
     if (task.isTableTask && task.tableCell) {
       const text = task.text ? ` ${task.text}` : '';
       const cellContent = `${task.state}${text}`;
-      return this.applyTableCellContent(task, cellContent, { priority: null });
+      return this.applyTableCellContent(
+        task,
+        cellContent,
+        { priority: null },
+        options.forceVaultApi ?? false,
+      );
     }
 
     // Reconstruct task line from task attributes (without priority)
@@ -1058,7 +1101,7 @@ export class TaskWriter {
     const footnoteReference = task.footnoteReference || '';
     const newTaskLine = `${indent}${footnoteMarker}${listMarkerWithSpace}${state}${embedReference}${text}${footnoteReference}`;
 
-    await this.writeLineToFile(task, newTaskLine);
+    await this.writeLineToFile(task, newTaskLine, options);
 
     return {
       ...task,
@@ -1078,6 +1121,7 @@ export class TaskWriter {
     newDate: Date,
     repeat?: DateRepeatInfo | null,
     warningPeriod?: WarningPeriodInfo | null,
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task & { lineDelta?: number }> {
     // Table tasks store dates inline with <br> separators
     if (this.isTableCellDateUpdate(task)) {
@@ -1087,6 +1131,7 @@ export class TaskWriter {
         'SCHEDULED',
         repeat,
         warningPeriod,
+        options.forceVaultApi ?? false,
       );
     }
 
@@ -1099,7 +1144,10 @@ export class TaskWriter {
 
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (file && file instanceof TFile) {
-      const editor = this.getEditorForTask(task);
+      const editor = this.getEditorForTask(
+        task,
+        options.forceVaultApi ?? false,
+      );
 
       if (editor) {
         const taskIndent = getTaskIndent(task);
@@ -1149,17 +1197,25 @@ export class TaskWriter {
    */
   async removeTaskScheduledDate(
     task: Task,
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task & { lineDelta?: number }> {
     // Table tasks store dates inline — strip from cell
     if (this.isTableCellDateUpdate(task)) {
-      return this.removeTableCellDate(task, 'SCHEDULED');
+      return this.removeTableCellDate(
+        task,
+        'SCHEDULED',
+        options.forceVaultApi ?? false,
+      );
     }
 
     let lineDelta = 0;
 
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (file && file instanceof TFile) {
-      const editor = this.getEditorForTask(task);
+      const editor = this.getEditorForTask(
+        task,
+        options.forceVaultApi ?? false,
+      );
 
       if (editor) {
         const taskIndent = getTaskIndent(task);
@@ -1208,6 +1264,7 @@ export class TaskWriter {
     newDate: Date,
     repeat?: DateRepeatInfo | null,
     warningPeriod?: WarningPeriodInfo | null,
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task & { lineDelta?: number }> {
     // Table tasks store dates inline with <br> separators
     if (this.isTableCellDateUpdate(task)) {
@@ -1217,6 +1274,7 @@ export class TaskWriter {
         'DEADLINE',
         repeat,
         warningPeriod,
+        options.forceVaultApi ?? false,
       );
     }
 
@@ -1229,7 +1287,10 @@ export class TaskWriter {
 
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (file && file instanceof TFile) {
-      const editor = this.getEditorForTask(task);
+      const editor = this.getEditorForTask(
+        task,
+        options.forceVaultApi ?? false,
+      );
 
       if (editor) {
         const taskIndent = getTaskIndent(task);
@@ -1279,17 +1340,25 @@ export class TaskWriter {
    */
   async removeTaskDeadlineDate(
     task: Task,
+    options: { forceVaultApi?: boolean } = {},
   ): Promise<Task & { lineDelta?: number }> {
     // Table tasks store dates inline — strip from cell
     if (this.isTableCellDateUpdate(task)) {
-      return this.removeTableCellDate(task, 'DEADLINE');
+      return this.removeTableCellDate(
+        task,
+        'DEADLINE',
+        options.forceVaultApi ?? false,
+      );
     }
 
     let lineDelta = 0;
 
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (file && file instanceof TFile) {
-      const editor = this.getEditorForTask(task);
+      const editor = this.getEditorForTask(
+        task,
+        options.forceVaultApi ?? false,
+      );
 
       if (editor) {
         const taskIndent = getTaskIndent(task);
@@ -1725,11 +1794,15 @@ export class TaskWriter {
    * Helper: write a single line replacement to the file, using Editor API
    * for active files or Vault.process for background files.
    */
-  private async writeLineToFile(task: Task, newLine: string): Promise<void> {
+  private async writeLineToFile(
+    task: Task,
+    newLine: string,
+    options: { forceVaultApi?: boolean } = {},
+  ): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(task.path);
     if (file && file instanceof TFile) {
       const md = this.app.workspace.getActiveViewOfType(MarkdownView);
-      const isActive = md?.file?.path === task.path;
+      const isActive = !options.forceVaultApi && md?.file?.path === task.path;
       const editor = md?.editor;
 
       if (isActive && editor) {
@@ -2019,7 +2092,7 @@ export class TaskWriter {
   ): Promise<DateLineUpdateResult> {
     // Table tasks store dates inline — strip from cell
     if (this.isTableCellDateUpdate(task)) {
-      await this.removeTableCellDate(task, 'CLOSED');
+      await this.removeTableCellDate(task, 'CLOSED', forceVaultApi);
       return {
         task: { ...task, closedDate: null },
         lineDelta: 0,
@@ -2109,6 +2182,7 @@ export class TaskWriter {
       newScheduledWarningPeriod?: WarningPeriodInfo | null;
       newDeadlineWarningPeriod?: WarningPeriodInfo | null;
       newState?: string;
+      forceVaultApi?: boolean;
     },
   ): Promise<Task & { lineDelta?: number }> {
     const file = this.app.vault.getAbstractFileByPath(task.path);
@@ -2122,6 +2196,7 @@ export class TaskWriter {
     const isActive = md?.file?.path === task.path;
     const editor = md?.editor;
     const isSourceMode =
+      !options.forceVaultApi &&
       isActive &&
       editor &&
       md?.getViewType() === 'markdown' &&
@@ -2370,8 +2445,8 @@ export class TaskWriter {
    * Check if the task's file is active in source mode and return the editor.
    * Returns null if the file is not active or not in source mode.
    */
-  private getEditorForTask(task: Task): Editor | null {
-    return this.getSourceModeEditorForPath(task.path);
+  private getEditorForTask(task: Task, forceVaultApi = false): Editor | null {
+    return forceVaultApi ? null : this.getSourceModeEditorForPath(task.path);
   }
 
   /**
