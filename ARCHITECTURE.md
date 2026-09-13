@@ -29,6 +29,7 @@ graph TB
              StateManager["TaskStateManager<br/>Central State"]
              VaultScanner["VaultScanner<br/>File Monitoring"]
              UpdateCoordinator["TaskUpdateCoordinator<br/>Update Pipeline"]
+             TaskEditorController["TaskEditorController<br/>Task Editor Operations"]
              EditorController["EditorController<br/>Editor Operations"]
              TaskWriter["TaskWriter<br/>File Operations"]
              EventCoordinator["EventCoordinator<br/>Unified Event Handling"]
@@ -54,6 +55,7 @@ graph TB
             DatePicker["DatePicker<br/>Date Picker Dialog"]
             SavedSearchDialog["SavedSearchDialog<br/>Saved Search Dialog"]
             TaskContextMenu["TaskContextMenu<br/>Task Context Menu"]
+            TaskEditorModal["TaskEditorModal<br/>Task Editor Dialog"]
             TaskDragDropHandler["TaskDragDropHandler<br/>Drag & Drop"]
             TaskItemRenderer["TaskItemRenderer<br/>Task Item Rendering"]
             TaskListFilter["TaskListFilter<br/>View Mode & Sort"]
@@ -96,6 +98,10 @@ graph TB
             TaskSubBullets["TaskSubBullets<br/>Subtask Operations"]
             PropertyEvaluator["PropertyEvaluator<br/>Property Evaluation"]
             MobileUtils["MobileUtils<br/>Mobile Detection"]
+            KeyboardInsetWatcher["KeyboardInsetWatcher<br/>Mobile Keyboard Inset"]
+            LocaleUtils["LocaleUtils<br/>Locale & Date Formatting"]
+            RepeatLog["RepeatLog<br/>Repeat History"]
+            TaskGroup["TaskGroup<br/>Task Grouping"]
             OrgPatterns["OrgPatterns<br/>Org-mode Patterns"]
             DateRepeater["DateRepeater<br/>Date Repeat Logic"]
             TaskFormat["TaskFormat<br/>Task Formatting"]
@@ -217,6 +223,7 @@ graph TB
 - These are services that depend on core services and are managed together as a lifecycle group
 - `VaultScanner` - File monitoring (receives `TaskStateManager`, `KeywordManager`, `ChangeTracker`)
 - `TaskUpdateCoordinator` - Update pipeline (receives `TaskStateManager`, `KeywordManager`, `ChangeTracker`)
+- `TaskEditorController` - Task editor entry point (opened from the ribbon button and the `Create or edit task` command)
 - `EmbeddedTaskListProcessor` - Embedded lists (receives `TaskUpdateCoordinator`)
 - `EventCoordinator` - Event handling (receives `VaultScanner`, `PropertySearchEngine`)
 - `SmartDateProcessor` - Automatic date conversion (created with main plugin instance; `setEnabled()` controlled by setting)
@@ -277,6 +284,14 @@ graph TB
   - **Open scheduled date picker** (`open-scheduled-date-picker`, icon: `calendar-clock`): Opens the date picker dialog for setting the scheduled date at cursor position. Uses CodeMirror editor API for positioning. Only appears when cursor is on a valid task line.
   - **Open deadline date picker** (`open-deadline-date-picker`, icon: `calendar-range`): Opens the date picker dialog for setting the deadline date at cursor position. Uses CodeMirror editor API for positioning. Only appears when cursor is on a valid task line.
 - **Implementation Details**: All three commands delegate to methods in EditorController: `handleOpenContextMenuAtCursor()`, `handleOpenScheduledDatePickerAtCursor()`, and `handleOpenDeadlineDatePickerAtCursor()`. These methods use the standard Obsidian `editorCheckCallback` signature `(checking: boolean, editor: Editor, view: MarkdownView)` and integrate with `TaskUpdateCoordinator` for task updates.
+
+**TaskEditorController** (`src/services/task-editor-controller.ts`)
+
+- **Responsibility**: Opens the Task Editor modal for the task at the active editor cursor
+- **Key Patterns**: Bridge pattern, command delegation, editor context capture
+- **Interface**: `openFromActiveEditor()`, `cleanup()`
+- **Behaviour**: Reads the cursor line; when it is not a task, the modal creates one at that position. The modal writes through `TaskWriter`, so the note and the Task List stay in sync.
+- **Used by**: The ribbon button and the `Create or edit task` command
 
 **TaskWriter** (`src/services/task-writer.ts`)
 
@@ -431,6 +446,14 @@ graph TB
 - **Interface**: `show(task, position)`, `showAtMouseEvent()`, `hide()`, `isVisible()`, `cleanup()`
 - **Features**: Go to task, priority selection, scheduled date shortcuts, deadline date picker, copy/move to today
 - **Used by**: TaskListView, EmbeddedTaskItemRenderer
+
+**TaskEditorModal** (`src/view/components/task-editor-modal.ts`)
+
+- **Responsibility**: Modal for creating or editing the task at the editor cursor
+- **Key Patterns**: Obsidian `Modal` subclass, form fields, mobile keyboard inset handling
+- **Interface**: `TaskEditorModalOptions`, `TaskEditorInitialValues`, `open()`, `close()`
+- **Features**: State, priority, scheduled and deadline dates (with repeat and warning period) and description; creates a task when the cursor line is not one; hides the repeat and description options for table-cell tasks
+- **Used by**: TaskEditorController
 
 **DatePicker** (`src/view/components/date-picker-menu.ts`)
 
@@ -1102,6 +1125,34 @@ graph LR
 - **Interface**: `isPhoneDevice()`
 - **Logic**: Phone = `Platform.isMobile` AND viewport width ≤ 768px (TABLET_BREAKPOINT)
 - **Used by**: BaseDialog, DatePicker, TaskContextMenu
+
+**KeyboardInsetWatcher** (`src/utils/keyboard-inset.ts`)
+
+- **Responsibility**: Tracks the on-screen keyboard inset on mobile so dialogs can sit above the soft keyboard
+- **Key Patterns**: `visualViewport` resize tracking, change callback, threshold constant
+- **Interface**: `start(win, onChange)`, `stop()`, `getInset()`, `KEYBOARD_OPEN_THRESHOLD_PX`
+- **Used by**: TaskEditorModal
+
+**LocaleUtils** (`src/utils/locale-utils.ts`)
+
+- **Responsibility**: Single locale source for date and time formatting, driven by Obsidian's language
+- **Key Patterns**: Static utility class, cached `Intl` formatters
+- **Interface**: `setLocale()`, `getLocale()`, `formatDate()`, `formatTime()`, `formatRelativeDays()`, `getWeekdayLabels()`
+- **Used by**: Task List, DatePicker, TaskEditorModal, reader and embedded renderers
+
+**RepeatLog** (`src/utils/repeat-log.ts`)
+
+- **Responsibility**: Parses and builds the collapsed `[!repeats]` history callout for recurring completions
+- **Key Patterns**: Regex parsing, newest-first entry building, running total
+- **Interface**: `parseRepeatLogTotal()`, `isRepeatLogLine()`, `buildRepeatLogTitle()`, `buildRepeatLogEntry()`, and the `REPEAT_LOG_*` regexes
+- **Used by**: TaskUpdateCoordinator, RecurrenceCoordinator, TaskWriter
+
+**TaskGroup** (`src/utils/task-group.ts`)
+
+- **Responsibility**: Groups tasks for the Task List and embedded `group-by:` option
+- **Key Patterns**: Field-based grouping, natural per-field ordering, multi-membership for tags
+- **Interface**: `groupTasks()`, `getNaturalGroupDirection()`, `buildStateRank()`, `GroupByField`, `TaskGroup`, `STATE_RANK_GROUPS`
+- **Used by**: TaskListView, EmbeddedTaskListRenderer
 
 **OrgPatterns** (`src/utils/org-patterns.ts`)
 

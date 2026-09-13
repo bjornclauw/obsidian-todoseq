@@ -20,7 +20,9 @@ Most task managers force you into a separate system. TODOseq meets you where you
 
 **Smart Date Recognition** — Type dates using everyday language like "today", "tomorrow", "every Friday", or "daily 20:00". TODOseq automatically converts them to structured format when you finish typing.
 
-**Unified Task List** — See all tasks from across your vault in one searchable, sortable panel. Filter by state, priority, date, tags, or use advanced boolean queries. Sort by urgency to surface what matters most right now.
+**Unified Task List** — See all tasks from across your vault in one searchable, sortable panel. Filter by state, priority, date, tags, or use advanced boolean queries. Sort by urgency to surface what matters most right now, and group the list into collapsible sections by folder, file, heading, status, priority, date, or tag.
+
+**Task Editor** — Create or edit the task at your cursor from the ribbon button or the "Create or edit task" command. Set state, priority, scheduled and deadline dates (with repeat and warning period), and a description.
 
 **Works Everywhere** — Tasks remain functional in both Edit mode and Reader view. Click any keyword to cycle through states. Right-click for direct state selection. Use `Ctrl+Enter` to toggle tasks from your keyboard.
 
@@ -30,9 +32,9 @@ Most task managers force you into a separate system. TODOseq meets you where you
 
 **Subtasks** — Break down complex tasks with indented checkbox items. The Task List shows subtask progress as `[1/3]` indicating completed and total subtasks.
 
-**Repeating Tasks** — Automatically advance scheduled and deadline dates when completed. Use natural language like "every day" or Org-mode repeaters like `.+1d`, `++1w`, or `+1m` to create recurring tasks. A recurring task reopens immediately on completion and keeps a CLOSED date recording that occurrence.
+**Repeating Tasks** — Automatically advance scheduled and deadline dates when completed. Use natural language like "every day" or Org-mode repeaters like `.+1d`, `++1w`, or `+1m` to create recurring tasks. A recurring task reopens immediately on completion.
 
-**Closed Date Tracking** — Optional CLOSED date on completed tasks, following Org-mode syntax. Records when tasks were marked as done and automatically manages the date when tasks are reactivated. Recurring tasks keep their CLOSED date as the last-completion record.
+**Closed Date Tracking** — Optional CLOSED date on completed tasks, following Org-mode syntax. Records when tasks were marked as done and automatically manages the date when tasks are reactivated. Recurring completions are recorded in a repeat-history log instead.
 
 **Logseq Compatible** — Use the same task format across both tools. Existing Logseq tasks work without modification. Dual-use your vault or migrate at your own pace.
 

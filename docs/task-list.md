@@ -37,7 +37,7 @@ Located at the top of the Task List, the toolbar contains:
 - **View mode icons**: Three buttons for different task display modes
 - **Sort method dropdown**: Choose how tasks are ordered
 - **Sort direction flip**: The ↑/↓ glyph embedded in the sort dropdown flips between ascending and descending for the current sort method. Changing the sort method resets it to that method's natural direction
-- **Group by dropdown**: Splits the list into labelled sections (folder, file, heading, status, priority, scheduled/deadline/closed/started date, or tag). Each header shows a task count, and grouping can be combined with search and sort. A `tag` group lists a multi-tagged task under each of its tags. The ↑/↓ glyph embedded in the group dropdown reverses the section order (and resets to the field's natural direction when the grouping changes)
+- **Group by dropdown**: Splits the list into labelled sections (folder, file, heading, status, priority, scheduled/deadline/closed/started date, or tag). Each header shows a task count, and grouping can be combined with search and sort. A `tag` group lists a multi-tagged task under each of its tags. The ↑/↓ glyph embedded in the group dropdown reverses the section order (and resets to the field's natural direction when the grouping changes). Click a group header to collapse or expand its tasks
 - **Task count**: Shows "X of Y tasks" based on current filters
 
 ### 2. Task List
@@ -71,6 +71,14 @@ The checkbox provides a simple toggle between completed and incomplete states:
 - **Check the box**: Task state changes to DONE
 - **Uncheck the box**: Task state changes to TODO
 - **Automatic synchronization**: Both the keyword and checkbox are updated
+
+### Collapsing Group Headers
+
+When the list is grouped, each section header can be collapsed to hide its tasks:
+
+- Click the header, or focus it and press Enter or Space, to toggle the section.
+- The header shows the task count and a chevron that points down when expanded and right when collapsed.
+- The collapsed state is kept while the list refreshes, for example after a search or a task change.
 
 ### Right-Click Context Menu
 

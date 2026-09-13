@@ -6,6 +6,8 @@ You can perform these actions through the [task context menu](task-list.md#task-
 
 Some copy/move actions require the Daily Notes core plugin to be enabled in Obsidian.
 
+Copy, Move and Migrate carry the task's full metadata block — `DESCRIPTION`, `STARTED`, `CLOSED`, `SCHEDULED`, `DEADLINE` and the `[!repeats]` history — at the task's own indent, so keyword-only tasks keep their dates and description.
+
 ## Copy
 
 Copy the task content to the clipboard. This is useful when you want to duplicate a task without changing its original location.
@@ -48,7 +50,7 @@ TODO Review project timeline
 
 The replacement text does not need to be a valid task keyword. You can use any text to indicate the task's new status
 
-Using a non-keyword marker such as `(migrated)` or `(moved)` can be used to retain to original task content while removing from being tracked by TODOseq:
+Using a non-keyword marker such as `(migrated)` or `(moved)` can be used to retain the original task content while removing it from being tracked by TODOseq:
 
 ```markdown
 # source page

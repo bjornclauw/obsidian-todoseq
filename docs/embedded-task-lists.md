@@ -24,7 +24,7 @@ Using the following parameters within the `todoseq` code block you define which 
 - `search:` any valid search string (see [search](/search.html))
 - `title:` (optional) adds a custom title displayed above the task list
 - `sort:` (optional) one of `filepath`, `scheduled`, `deadline`, `closed`, `started`, `priority`, `urgency`, `keyword`, or `tag`. Default is `filepath`
-- `group-by:` (optional) one of `folder`, `file`, or `heading`. Splits the results into labelled sections (see [Group By](#group-by))
+- `group-by:` (optional) one of `folder`, `file`, `heading`, `status`, `priority`, `scheduled`, `deadline`, `closed`, `started`, or `tag`, optionally followed by `asc`/`desc`. Splits the results into labelled sections with a task count per section (see [Group By](#group-by))
 - `limit:` (optional) set the display limit to restrict the number of results shown
 - `show-completed:` (optional) one of `show`, `hide`, `sort-to-end`. Controls how completed tasks are displayed. Defaults to `show`. (`completed:` is an alternative alias)
 - `show-file:` (optional) `show`, `hide`, `true`, or `false`. Controls whether to show the source file info column. Defaults to `show` (responsive layout)

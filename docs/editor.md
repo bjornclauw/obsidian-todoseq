@@ -172,6 +172,21 @@ See [Settings → Smart Date Recognition](settings.md#smart-date-recognition) fo
 
 This feature helps you capture tasks quickly without breaking your writing flow, while ensuring dates are stored in a consistent, structured format that works across all TODOseq features.
 
+## Task Editor
+
+The Task Editor is a modal for creating or editing the task at your cursor without editing the note text by hand. Open it from the ribbon button or the "TODOseq: Create or edit task" command.
+
+If the current line is not a task, the editor creates one at the cursor position.
+
+The editor provides:
+
+- **State**: the task keyword, chosen from the configured states.
+- **Priority**: high `[#A]`, medium `[#B]`, low `[#C]`, or none.
+- **Scheduled date** and **deadline date**: each with a date, optional time, repeat pattern, and warning period.
+- **Description**: a short context note stored on the `DESCRIPTION:` line.
+
+All changes are written through the vault, so the note and the Task List stay in sync. For a task in a table cell, the repeat and description options are not shown because they are not supported in cells.
+
 ## Task State Synchronization
 
 TODOseq ensures that the task state and checkbox are always in sync:

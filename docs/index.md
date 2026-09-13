@@ -49,8 +49,13 @@
 </div>
 
 <div class="ts-card">
+<h3>Task editor &amp; grouping</h3>
+<p>Create or edit the task at your cursor from a modal, and organise the Task List into collapsible sections by folder, file, heading, status, priority, date, or tag.</p>
+</div>
+
+<div class="ts-card">
 <h3>Priorities, subtasks, repeats</h3>
-<p>Mark <code>[#A]</code>/<code>[#B]</code>/<code>[#C]</code> priorities, track subtask progress as <code>[1/3]</code>, and let repeating tasks advance their dates automatically.</p>
+<p>Mark <code>[#A]</code>/<code>[#B]</code>/<code>[#C]</code> priorities, track subtask progress as <code>[1/3]</code>, and let repeating tasks advance their dates automatically, with an optional repeat-history log.</p>
 </div>
 
 </div>

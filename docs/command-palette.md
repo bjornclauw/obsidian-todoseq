@@ -7,6 +7,7 @@ TODOseq provides several commands that can be accessed through Obsidian's Comman
 - TODOseq: Show task list
 - TODOseq: Open task list in new tab
 - TODOseq: Rescan vault
+- TODOseq: Create or edit task _(editor only)_
 - TODOseq: Toggle task state _(editor only)_
 - TODOseq: Cycle task state _(editor only)_
 - TODOseq: Copy task to today _(editor only)_
@@ -35,6 +36,12 @@ Opens the TODOseq Task List view in a new tab in the main workspace area. This i
 Manually triggers a full vault scan to update the task list with the latest changes.
 
 A full rescan is not typically required, unless the vault level setting for Excluded files has been updated. General file changes (create, modify, delete) trigger automatic incremental updates.
+
+### Create or edit task
+
+Opens the Task Editor for the task at the current cursor position. If the line is not a task, the editor creates one at the cursor. The editor sets the state, priority, scheduled and deadline dates (with repeat and warning period) and a description, and writes the result through the vault.
+
+The same editor is available from the ribbon button.
 
 ### Toggle task state
 
