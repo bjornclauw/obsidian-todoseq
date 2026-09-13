@@ -242,9 +242,9 @@ export class SearchEvaluator {
       case 'content':
         return this.evaluateContentFilter(value, task, caseSensitive);
       case 'description':
-        return this.evaluateDescriptionFilter(value, task, caseSensitive);
+        return this.containsField(task.description, value, caseSensitive);
       case 'heading':
-        return this.evaluateHeadingFilter(value, task, caseSensitive);
+        return this.containsField(task.parentHeading, value, caseSensitive);
       case 'scheduled':
         return this.evaluateScheduledFilter(
           value,
@@ -432,32 +432,16 @@ export class SearchEvaluator {
     return targetText.includes(searchText);
   }
 
-  private static evaluateDescriptionFilter(
+  /** Case-aware substring match against an optional task field. */
+  private static containsField(
+    fieldValue: string | undefined,
     value: string,
-    task: Task,
     caseSensitive: boolean,
   ): boolean {
-    if (!task.description) return false;
+    if (!fieldValue) return false;
 
     const searchText = caseSensitive ? value : value.toLowerCase();
-    const target = caseSensitive
-      ? task.description
-      : task.description.toLowerCase();
-
-    return target.includes(searchText);
-  }
-
-  private static evaluateHeadingFilter(
-    value: string,
-    task: Task,
-    caseSensitive: boolean,
-  ): boolean {
-    if (!task.parentHeading) return false;
-
-    const searchText = caseSensitive ? value : value.toLowerCase();
-    const target = caseSensitive
-      ? task.parentHeading
-      : task.parentHeading.toLowerCase();
+    const target = caseSensitive ? fieldValue : fieldValue.toLowerCase();
 
     return target.includes(searchText);
   }

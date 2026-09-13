@@ -492,45 +492,6 @@ collapse: true`;
     });
   });
 
-  describe('getSortMethod() method', () => {
-    it('should map sort options to internal sort methods', () => {
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'default' }),
-      ).toBe('default');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'filepath' }),
-      ).toBe('default');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'scheduled' }),
-      ).toBe('sortByScheduled');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'deadline' }),
-      ).toBe('sortByDeadline');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'priority' }),
-      ).toBe('sortByPriority');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'urgency' }),
-      ).toBe('sortByUrgency');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'keyword' }),
-      ).toBe('sortByKeyword');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'closed' }),
-      ).toBe('sortByClosedDate');
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'started' }),
-      ).toBe('sortByStarted');
-    });
-
-    it('should return default for unknown sort method', () => {
-      // @ts-ignore - testing with invalid sort method
-      expect(
-        TodoseqCodeBlockParser.getSortMethod({ sortMethod: 'invalid' }),
-      ).toBe('default');
-    });
-  });
-
   describe('getCompletedSetting() method', () => {
     it('should map completed options to internal settings', () => {
       expect(TodoseqCodeBlockParser.getCompletedSetting(undefined)).toBe(

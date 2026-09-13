@@ -17,6 +17,17 @@ import {
 import { KeywordManager } from '../../utils/keyword-manager';
 import { PropertySearchEngine } from '../../services/property-search-engine';
 
+/** Sort methods whose tie-breaks benefit from the keyword sort config. */
+const KEYWORD_TIEBREAK_METHODS = new Set<TaskSortMethod>([
+  'sortByKeyword',
+  'sortByUrgency',
+  'sortByPriority',
+  'sortByScheduled',
+  'sortByDeadline',
+  'sortByClosedDate',
+  'sortByStarted',
+]);
+
 /**
  * Manages task filtering and sorting for embedded task lists.
  * Reuses existing Search and task-sort utilities for maximum consistency.
@@ -202,7 +213,7 @@ export class EmbeddedTaskListManager {
   private sortTasks(tasks: Task[], params: TodoseqParameters): Task[] {
     try {
       const now = new Date();
-      const sortMethod = this.getSortMethod(params);
+      const sortMethod = this.getSortOptionMethod(params.sortMethod);
       const sortDirection =
         params.sortDirection ?? getNaturalDirection(sortMethod);
 
@@ -231,19 +242,10 @@ export class EmbeddedTaskListManager {
           : 'showAll'; // Default embedded lists to show all unless overridden
 
       // Build keyword config if sorting by keyword, priority, urgency, scheduled, deadline, or closed date
-      const needsKeywordConfig = (method: TaskSortMethod): boolean =>
-        method === 'sortByKeyword' ||
-        method === 'sortByUrgency' ||
-        method === 'sortByPriority' ||
-        method === 'sortByScheduled' ||
-        method === 'sortByDeadline' ||
-        method === 'sortByClosedDate' ||
-        method === 'sortByStarted';
-
       let keywordConfig: KeywordSortConfig | undefined;
       if (
-        needsKeywordConfig(sortMethod) ||
-        (secondary && needsKeywordConfig(secondary.method))
+        KEYWORD_TIEBREAK_METHODS.has(sortMethod) ||
+        (secondary && KEYWORD_TIEBREAK_METHODS.has(secondary.method))
       ) {
         keywordConfig = this.getKeywordSortConfig();
       }
@@ -305,15 +307,6 @@ export class EmbeddedTaskListManager {
     }
 
     return this.cachedKeywordConfig;
-  }
-
-  /**
-   * Get the sort method for task-sort utilities
-   * @param params Parsed parameters
-   * @returns Sort method compatible with task-sort utilities
-   */
-  private getSortMethod(params: TodoseqParameters): TaskSortMethod {
-    return this.getSortOptionMethod(params.sortMethod);
   }
 
   /**

@@ -32,6 +32,90 @@ export type FutureOption =
  */
 export type GroupByOption = GroupByField;
 
+/** Sort aliases mapped to their canonical option (backward compatibility). */
+const SORT_ALIASES: Record<string, SortOption | 'default'> = {
+  default: 'default',
+  priority: 'priority',
+  due: 'deadline',
+  deadline: 'deadline',
+  urgency: 'urgency',
+  urgent: 'urgency',
+  scheduled: 'scheduled',
+  filepath: 'filepath',
+  file: 'filepath',
+  path: 'filepath',
+  keyword: 'keyword',
+  keywords: 'keyword',
+  closed: 'closed',
+  started: 'started',
+  tag: 'tag',
+  tags: 'tag',
+};
+
+/** Canonical sort fields, shown in validation messages. */
+const SORT_FIELDS: SortOption[] = [
+  'filepath',
+  'scheduled',
+  'deadline',
+  'closed',
+  'started',
+  'priority',
+  'urgency',
+  'keyword',
+  'tag',
+];
+
+const GROUP_BY_FIELDS: GroupByOption[] = [
+  'folder',
+  'file',
+  'heading',
+  'status',
+  'priority',
+  'scheduled',
+  'deadline',
+  'closed',
+  'started',
+  'tag',
+];
+
+/**
+ * Parse a `"<field> [asc|desc]"` token, validating the field against
+ * `validFields` (aliases allowed) and the direction against `asc`/`desc`.
+ * `displayFields` is what the error message lists.
+ */
+function parseFieldWithDirection(
+  raw: string,
+  validFields: readonly string[],
+  displayFields: readonly string[],
+  fieldNoun: string,
+  directionNoun: string,
+): { field: string; direction?: SortDirection } {
+  const tokens = raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0 || tokens.length > 2) {
+    throw new Error(
+      `Invalid ${fieldNoun} value: "${raw}". Expected "<field> [asc|desc]"`,
+    );
+  }
+  if (!validFields.includes(tokens[0])) {
+    throw new Error(
+      `Invalid ${fieldNoun}: ${tokens[0]}. Valid options: ${displayFields.join(', ')}`,
+    );
+  }
+  if (tokens.length === 2) {
+    const direction = tokens[1];
+    if (direction !== 'asc' && direction !== 'desc') {
+      throw new Error(
+        `Invalid ${directionNoun}: ${tokens[1]}. Valid options: asc, desc`,
+      );
+    }
+    return { field: tokens[0], direction };
+  }
+  return { field: tokens[0] };
+}
+
 /**
  * Parsed parameters from a todoseq code block
  */
@@ -115,8 +199,6 @@ export class TodoseqCodeBlockParser {
       let groupBy: GroupByOption | undefined;
       let groupByDirection: SortDirection | undefined;
 
-      const validDirections: SortDirection[] = ['asc', 'desc'];
-
       // Parse each line for parameters
       for (const line of lines) {
         const trimmed = line.trim();
@@ -125,25 +207,6 @@ export class TodoseqCodeBlockParser {
           searchQuery = trimmed.substring('search:'.length).trim();
         } else if (trimmed.startsWith('sort:')) {
           const sortValue = trimmed.substring('sort:'.length).trim();
-          // Map old sort values to new ones for backward compatibility
-          const sortMap: Record<string, SortOption | 'default'> = {
-            default: 'default',
-            priority: 'priority',
-            due: 'deadline',
-            deadline: 'deadline',
-            urgency: 'urgency',
-            urgent: 'urgency',
-            scheduled: 'scheduled',
-            filepath: 'filepath',
-            file: 'filepath',
-            path: 'filepath',
-            keyword: 'keyword',
-            keywords: 'keyword',
-            closed: 'closed',
-            started: 'started',
-            tag: 'tag',
-            tags: 'tag',
-          };
           const sortKeys = sortValue
             .split(',')
             .map((part) => part.trim())
@@ -153,82 +216,46 @@ export class TodoseqCodeBlockParser {
               'Invalid sort value. Use up to two keys, e.g. "sort: priority desc, scheduled"',
             );
           }
-          const parseSortKey = (
-            part: string,
-          ): { method: SortOption | 'default'; direction?: SortDirection } => {
-            const tokens = part.toLowerCase().split(/\s+/);
-            if (tokens.length > 2) {
-              throw new Error(
-                `Invalid sort key: ${part}. Expected "<field> [asc|desc]"`,
-              );
-            }
-            const mappedSort = sortMap[tokens[0]];
-            if (!mappedSort) {
-              throw new Error(
-                `Invalid sort method: ${tokens[0]}. Valid options: filepath, scheduled, deadline, closed, started, priority, urgency, keyword, tag`,
-              );
-            }
-            if (tokens.length === 2) {
-              const dir = tokens[1] as SortDirection;
-              if (!validDirections.includes(dir)) {
-                throw new Error(
-                  `Invalid sort direction: ${tokens[1]}. Valid options: asc, desc`,
-                );
-              }
-              return { method: mappedSort, direction: dir };
-            }
-            return { method: mappedSort };
-          };
 
-          const primary = parseSortKey(sortKeys[0]);
-          sortMethod = primary.method;
+          const validSortFields = Object.keys(SORT_ALIASES);
+          const primary = parseFieldWithDirection(
+            sortKeys[0],
+            validSortFields,
+            SORT_FIELDS,
+            'sort method',
+            'sort direction',
+          );
+          sortMethod = SORT_ALIASES[primary.field];
           sortDirection = primary.direction;
 
           if (sortKeys.length === 2) {
-            const secondary = parseSortKey(sortKeys[1]);
-            if (secondary.method === 'default') {
+            const secondary = parseFieldWithDirection(
+              sortKeys[1],
+              validSortFields,
+              SORT_FIELDS,
+              'sort method',
+              'sort direction',
+            );
+            const mappedSecondary = SORT_ALIASES[secondary.field];
+            if (mappedSecondary === 'default') {
               throw new Error(
                 'Invalid secondary sort method: default. Use a real field',
               );
             }
-            secondarySortMethod = secondary.method;
+            secondarySortMethod = mappedSecondary;
             secondarySortDirection = secondary.direction;
           }
         } else if (trimmed.startsWith('group-by:')) {
           const groupValue = trimmed.substring('group-by:'.length).trim();
-          const tokens = groupValue.toLowerCase().split(/\s+/);
-          const validGroupBy: GroupByOption[] = [
-            'folder',
-            'file',
-            'heading',
-            'status',
-            'priority',
-            'scheduled',
-            'deadline',
-            'closed',
-            'started',
-            'tag',
-          ];
-          if (tokens.length === 0 || tokens.length > 2) {
-            throw new Error(
-              'Invalid group-by value. Expected "<field> [asc|desc]"',
-            );
-          }
-          if (!validGroupBy.includes(tokens[0] as GroupByOption)) {
-            throw new Error(
-              `Invalid group-by option: ${tokens[0]}. Valid options: folder, file, heading, status, priority, scheduled, deadline, closed, started, tag`,
-            );
-          }
-          groupBy = tokens[0] as GroupByOption;
-          if (tokens.length === 2) {
-            const dir = tokens[1] as SortDirection;
-            if (!validDirections.includes(dir)) {
-              throw new Error(
-                `Invalid group-by direction: ${tokens[1]}. Valid options: asc, desc`,
-              );
-            }
-            groupByDirection = dir;
-          }
+          const parsed = parseFieldWithDirection(
+            groupValue,
+            GROUP_BY_FIELDS,
+            GROUP_BY_FIELDS,
+            'group-by option',
+            'group-by direction',
+          );
+          groupBy = parsed.field as GroupByOption;
+          groupByDirection = parsed.direction;
         } else if (trimmed.startsWith('show-completed:')) {
           const completedValue = trimmed
             .substring('show-completed:'.length)
@@ -623,29 +650,6 @@ export class TodoseqCodeBlockParser {
 
     // If no file-specific filters, assume it might be affected
     return true;
-  }
-
-  /**
-   * Extract the sort method from parameters
-   * @param params Parsed parameters
-   * @returns Sort method string compatible with task-sort utilities
-   */
-  static getSortMethod(params: TodoseqParameters): string {
-    // Map user-friendly sort names to internal sort methods
-    const sortMap: Record<string, string> = {
-      default: 'default',
-      filepath: 'default',
-      scheduled: 'sortByScheduled',
-      deadline: 'sortByDeadline',
-      closed: 'sortByClosedDate',
-      started: 'sortByStarted',
-      priority: 'sortByPriority',
-      urgency: 'sortByUrgency',
-      keyword: 'sortByKeyword',
-      tag: 'sortByTag',
-    };
-
-    return sortMap[params.sortMethod] || 'default';
   }
 
   /**

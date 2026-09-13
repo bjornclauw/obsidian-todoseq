@@ -131,46 +131,49 @@ describe('EmbeddedTaskListManager', () => {
     });
   });
 
-  describe('getSortMethod', () => {
+  describe('getSortOptionMethod', () => {
     it('maps default to default', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'default' });
+      const result = (manager as any).getSortOptionMethod('default');
       expect(result).toBe('default');
     });
 
     it('maps priority to sortByPriority', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'priority' });
+      const result = (manager as any).getSortOptionMethod('priority');
       expect(result).toBe('sortByPriority');
     });
 
     it('maps urgency to sortByUrgency', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'urgency' });
+      const result = (manager as any).getSortOptionMethod('urgency');
       expect(result).toBe('sortByUrgency');
     });
 
     it('maps scheduled to sortByScheduled', () => {
-      const result = (manager as any).getSortMethod({
-        sortMethod: 'scheduled',
-      });
+      const result = (manager as any).getSortOptionMethod('scheduled');
       expect(result).toBe('sortByScheduled');
     });
 
     it('maps deadline to sortByDeadline', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'deadline' });
+      const result = (manager as any).getSortOptionMethod('deadline');
       expect(result).toBe('sortByDeadline');
     });
 
     it('maps closed to sortByClosedDate', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'closed' });
+      const result = (manager as any).getSortOptionMethod('closed');
       expect(result).toBe('sortByClosedDate');
     });
 
     it('maps keyword to sortByKeyword', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'keyword' });
+      const result = (manager as any).getSortOptionMethod('keyword');
       expect(result).toBe('sortByKeyword');
     });
 
+    it('maps tag to sortByTag', () => {
+      const result = (manager as any).getSortOptionMethod('tag');
+      expect(result).toBe('sortByTag');
+    });
+
     it('falls back to default for unknown sort methods', () => {
-      const result = (manager as any).getSortMethod({ sortMethod: 'unknown' });
+      const result = (manager as any).getSortOptionMethod('unknown');
       expect(result).toBe('default');
     });
   });

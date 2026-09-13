@@ -73,6 +73,13 @@ const MISSING_DATE_LABELS: Partial<Record<GroupByField, string>> = {
   started: 'No started',
 };
 
+const DATE_FIELDS = new Set<GroupByField>([
+  'scheduled',
+  'deadline',
+  'closed',
+  'started',
+]);
+
 /** Directory portion of a vault path ('' for files at the vault root). */
 function getFolder(path: string): string {
   const lastSlash = path.lastIndexOf('/');
@@ -111,6 +118,16 @@ function localDateKey(date: Date): string {
 }
 
 function getGroupLabel(field: GroupByField, task: Task): string {
+  if (DATE_FIELDS.has(field)) {
+    const date = getDateForField(field, task);
+    if (!date) return MISSING_DATE_LABELS[field] ?? '';
+    return LocaleUtils.formatDate(date, {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
   switch (field) {
     case 'folder': {
       const folder = getFolder(task.path);
@@ -124,27 +141,17 @@ function getGroupLabel(field: GroupByField, task: Task): string {
       return task.state;
     case 'priority':
       return task.priority ? PRIORITY_LABELS[task.priority] : NO_PRIORITY_LABEL;
-    case 'tag':
+    default:
+      // 'tag' is grouped with multi-membership by groupByTag.
       return task.tags?.[0] ? `#${task.tags[0]}` : NO_TAG_LABEL;
-    case 'scheduled':
-    case 'deadline':
-    case 'closed':
-    case 'started': {
-      const date = getDateForField(field, task);
-      if (!date) {
-        return MISSING_DATE_LABELS[field] ?? '';
-      }
-      return LocaleUtils.formatDate(date, {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    }
   }
 }
 
 function getGroupKey(field: GroupByField, task: Task): string {
+  if (DATE_FIELDS.has(field)) {
+    const date = getDateForField(field, task);
+    return date ? localDateKey(date) : '';
+  }
   switch (field) {
     case 'folder':
       return getFolder(task.path);
@@ -156,16 +163,26 @@ function getGroupKey(field: GroupByField, task: Task): string {
       return task.state;
     case 'priority':
       return task.priority ?? 'none';
-    case 'tag':
+    default:
       return task.tags?.[0] ?? '';
-    case 'scheduled':
-    case 'deadline':
-    case 'closed':
-    case 'started': {
-      const date = getDateForField(field, task);
-      return date ? localDateKey(date) : '';
-    }
   }
+}
+
+/** Add a task to the group with `key`, creating it (and its label) on first use. */
+function addToGroup(
+  groups: TaskGroup[],
+  byKey: Map<string, TaskGroup>,
+  key: string,
+  label: string,
+  task: Task,
+): void {
+  let group = byKey.get(key);
+  if (!group) {
+    group = { key, label, tasks: [] };
+    byKey.set(key, group);
+    groups.push(group);
+  }
+  group.tasks.push(task);
 }
 
 /**
@@ -194,20 +211,10 @@ function groupByTag(tasks: Task[], direction: SortDirection): TaskGroup[] {
   const groups: TaskGroup[] = [];
   const groupsByKey = new Map<string, TaskGroup>();
 
-  const add = (key: string, label: string, task: Task): void => {
-    let group = groupsByKey.get(key);
-    if (!group) {
-      group = { key, label, tasks: [] };
-      groupsByKey.set(key, group);
-      groups.push(group);
-    }
-    group.tasks.push(task);
-  };
-
   for (const task of tasks) {
     const tags = task.tags ?? [];
     if (tags.length === 0) {
-      add('', NO_TAG_LABEL, task);
+      addToGroup(groups, groupsByKey, '', NO_TAG_LABEL, task);
       continue;
     }
     const seen = new Set<string>();
@@ -215,7 +222,7 @@ function groupByTag(tasks: Task[], direction: SortDirection): TaskGroup[] {
       const key = tag.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      add(key, `#${tag}`, task);
+      addToGroup(groups, groupsByKey, key, `#${tag}`, task);
     }
   }
 
@@ -253,14 +260,13 @@ export function groupTasks(
   const groupsByKey = new Map<string, TaskGroup>();
 
   for (const task of tasks) {
-    const key = getGroupKey(field, task);
-    let group = groupsByKey.get(key);
-    if (!group) {
-      group = { key, label: getGroupLabel(field, task), tasks: [] };
-      groupsByKey.set(key, group);
-      groups.push(group);
-    }
-    group.tasks.push(task);
+    addToGroup(
+      groups,
+      groupsByKey,
+      getGroupKey(field, task),
+      getGroupLabel(field, task),
+      task,
+    );
   }
 
   switch (field) {

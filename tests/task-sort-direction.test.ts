@@ -2,6 +2,7 @@ import {
   getNaturalDirection,
   getSortFunction,
   sortTasksWithThreeBlockSystem,
+  KeywordSortConfig,
 } from '../src/utils/task-sort';
 import { Task } from '../src/types/task';
 import { createBaseTask } from './helpers/test-helper';
@@ -133,6 +134,38 @@ describe('task-sort direction + secondary key', () => {
         'lower',
         'upper',
       ]);
+    });
+  });
+
+  describe('keyword', () => {
+    const config: KeywordSortConfig = {
+      activeKeywords: new Set(['DOING']),
+      activeKeywordsOrder: ['DOING'],
+      inactiveKeywords: new Set(['TODO']),
+      inactiveKeywordsOrder: ['TODO'],
+      waitingKeywords: new Set(),
+      waitingKeywordsOrder: [],
+      completedKeywords: new Set(['DONE']),
+      completedKeywordsOrder: ['DONE'],
+    };
+    const tasks = [
+      makeTask({ text: 'todo', state: 'TODO' }),
+      makeTask({ text: 'doing', state: 'DOING' }),
+      makeTask({ text: 'done', state: 'DONE', completed: true }),
+    ];
+
+    it('asc orders by keyword group', () => {
+      expect(textsOf(tasks, getSortFunction('sortByKeyword', config))).toEqual([
+        'doing',
+        'todo',
+        'done',
+      ]);
+    });
+
+    it('desc reverses the keyword order', () => {
+      expect(
+        textsOf(tasks, getSortFunction('sortByKeyword', config, 'desc')),
+      ).toEqual(['done', 'todo', 'doing']);
     });
   });
 

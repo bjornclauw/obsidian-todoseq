@@ -97,6 +97,33 @@ function getFirstTag(task: Task): string | null {
   return first;
 }
 
+const PRIORITY_RANK: Record<'high' | 'med' | 'low', number> = {
+  high: 3,
+  med: 2,
+  low: 1,
+};
+
+/**
+ * Compare an optional field value, keeping missing values (null/undefined) last
+ * regardless of direction and applying `dir` only to the value comparison.
+ */
+function compareOptional<T>(
+  get: (task: Task) => T | null | undefined,
+  compare: (a: T, b: T) => number,
+  dir: number,
+): (a: Task, b: Task) => number {
+  return (a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    const aMissing = av === null || av === undefined;
+    const bMissing = bv === null || bv === undefined;
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1;
+    if (bMissing) return -1;
+    return dir * compare(av, bv);
+  };
+}
+
 /**
  * Classify a task into a keyword group for sorting
  *
@@ -425,72 +452,59 @@ export function getFieldComparator(
 
   switch (sortMethod) {
     case 'sortByScheduled':
-      return (a, b) => {
-        if (!a.scheduledDate && !b.scheduledDate) return 0;
-        if (!a.scheduledDate) return 1;
-        if (!b.scheduledDate) return -1;
-        return dir * (a.scheduledDate.getTime() - b.scheduledDate.getTime());
-      };
+      return compareOptional(
+        (t) => t.scheduledDate,
+        (a, b) => a.getTime() - b.getTime(),
+        dir,
+      );
 
     case 'sortByDeadline':
-      return (a, b) => {
-        if (!a.deadlineDate && !b.deadlineDate) return 0;
-        if (!a.deadlineDate) return 1;
-        if (!b.deadlineDate) return -1;
-        return dir * (a.deadlineDate.getTime() - b.deadlineDate.getTime());
-      };
+      return compareOptional(
+        (t) => t.deadlineDate,
+        (a, b) => a.getTime() - b.getTime(),
+        dir,
+      );
 
     case 'sortByClosedDate':
-      return (a, b) => {
-        if (!a.closedDate && !b.closedDate) return 0;
-        if (!a.closedDate) return 1;
-        if (!b.closedDate) return -1;
-        return dir * (a.closedDate.getTime() - b.closedDate.getTime());
-      };
+      return compareOptional(
+        (t) => t.closedDate,
+        (a, b) => a.getTime() - b.getTime(),
+        dir,
+      );
 
     case 'sortByStarted':
-      return (a, b) => {
-        if (!a.startedDate && !b.startedDate) return 0;
-        if (!a.startedDate) return 1;
-        if (!b.startedDate) return -1;
-        return dir * (a.startedDate.getTime() - b.startedDate.getTime());
-      };
+      return compareOptional(
+        (t) => t.startedDate,
+        (a, b) => a.getTime() - b.getTime(),
+        dir,
+      );
 
     case 'sortByPriority':
-      return (a, b) => {
-        const priorityOrder = { high: 3, med: 2, low: 1 };
-        const aMissing = a.priority === null || a.priority === undefined;
-        const bMissing = b.priority === null || b.priority === undefined;
-        if (aMissing && bMissing) return 0;
-        if (aMissing) return 1;
-        if (bMissing) return -1;
-        return dir * (priorityOrder[a.priority!] - priorityOrder[b.priority!]);
-      };
+      return compareOptional(
+        (t) => t.priority,
+        (a, b) => PRIORITY_RANK[a] - PRIORITY_RANK[b],
+        dir,
+      );
 
     case 'sortByUrgency':
-      return (a, b) => {
-        const aMissing = a.urgency === null || a.urgency === undefined;
-        const bMissing = b.urgency === null || b.urgency === undefined;
-        if (aMissing && bMissing) return 0;
-        if (aMissing) return 1;
-        if (bMissing) return -1;
-        return dir * (a.urgency! - b.urgency!);
-      };
-
-    case 'sortByKeyword':
-      return keywordConfig
-        ? (a, b) => keywordSortComparator(a, b, keywordConfig)
-        : taskComparator;
+      return compareOptional(
+        (t) => t.urgency,
+        (a, b) => a - b,
+        dir,
+      );
 
     case 'sortByTag':
-      return (a, b) => {
-        const aTag = getFirstTag(a);
-        const bTag = getFirstTag(b);
-        if (!aTag && !bTag) return 0;
-        if (!aTag) return 1;
-        if (!bTag) return -1;
-        return dir * aTag.toLowerCase().localeCompare(bTag.toLowerCase());
-      };
+      return compareOptional(
+        getFirstTag,
+        (a, b) => a.toLowerCase().localeCompare(b.toLowerCase()),
+        dir,
+      );
+
+    case 'sortByKeyword':
+      if (!keywordConfig) return taskComparator;
+      return direction === 'desc'
+        ? (a, b) => -keywordSortComparator(a, b, keywordConfig)
+        : (a, b) => keywordSortComparator(a, b, keywordConfig);
 
     case 'default':
       return direction === 'desc'

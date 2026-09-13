@@ -36,6 +36,10 @@ export class EmbeddedTaskListRenderer {
   private taskContextMenu: TaskContextMenu;
   private itemRenderer: EmbeddedTaskItemRenderer;
   private renderedLists = new WeakMap<HTMLElement, RenderedListSnapshot>();
+  private stateRankCache: {
+    key: string;
+    rank: (state: string) => number;
+  } | null = null;
 
   constructor(plugin: TodoTracker) {
     this.plugin = plugin;
@@ -766,22 +770,34 @@ export class EmbeddedTaskListRenderer {
 
   /**
    * Build a ranker for `status` grouping from the effective keyword order:
-   * active → inactive → waiting → completed, with unknown states last.
+   * active → inactive → waiting → completed, with unknown states last. Cached
+   * until the keyword order changes.
    */
   private getStateRank(): (state: string) => number {
     const keywordManager = this.plugin.keywordManager;
-    const order = [
-      ...keywordManager.getKeywordsForGroup('activeKeywords'),
-      ...keywordManager.getKeywordsForGroup('inactiveKeywords'),
-      ...keywordManager.getKeywordsForGroup('waitingKeywords'),
-      ...keywordManager.getKeywordsForGroup('completedKeywords'),
-    ];
+    const groups = [
+      'activeKeywords',
+      'inactiveKeywords',
+      'waitingKeywords',
+      'completedKeywords',
+    ] as const;
+    const order = groups.flatMap((group) =>
+      keywordManager.getKeywordsForGroup(group),
+    );
+    const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
+    if (this.stateRankCache?.key === key) {
+      return this.stateRankCache.rank;
+    }
+
     const ranks = new Map<string, number>();
     order.forEach((keyword, index) => {
-      const key = keyword.toUpperCase();
-      if (!ranks.has(key)) ranks.set(key, index);
+      const normalized = keyword.toUpperCase();
+      if (!ranks.has(normalized)) ranks.set(normalized, index);
     });
-    return (state) => ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rank = (state: string): number =>
+      ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
+    this.stateRankCache = { key, rank };
+    return rank;
   }
 
   /**
@@ -859,55 +875,8 @@ export class EmbeddedTaskListRenderer {
       });
     }
 
-    // Show search query using the same format for both states
-    if (params.showQuery !== false && params.searchQuery) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-search',
-        text: `Search: ${params.searchQuery}`,
-      });
-    }
-
-    // Show sort method if specified
-    const sortValue = this.sortSummaryValue(params);
-    if (sortValue) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-sort',
-        text: `Sort: ${sortValue}`,
-      });
-    }
-
-    // Show completed filter if specified
-    if (params.completed !== undefined) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-completed',
-        text: `Completed: ${params.completed}`,
-      });
-    }
-
-    // Show future filter if specified
-    if (params.future !== undefined) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-future',
-        text: `Future: ${params.future}`,
-      });
-    }
-
-    // Show limit if specified
-    if (params.limit !== undefined) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-limit',
-        text: `Limit: ${params.limit}`,
-      });
-    }
-
-    // Show group-by if specified
-    const groupValue = this.groupSummaryValue(params);
-    if (groupValue) {
-      header.createSpan({
-        cls: 'todoseq-embedded-task-list-group',
-        text: `Group: ${groupValue}`,
-      });
-    }
+    // Show search query / sort / filters using the shared header renderer.
+    this.renderHeaderContentSpans(header, params, params.showQuery !== false);
 
     // Create chevron icon container after the header content
     const chevronSpan = header.createSpan({
@@ -1001,14 +970,16 @@ export class EmbeddedTaskListRenderer {
   }
 
   /**
-   * Render the header content spans (search, sort, completed, future, limit) into a header element.
-   * This is shared between static and toggle headers.
+   * Render the header content spans (search, sort, completed, future, limit,
+   * group) into a header element. Shared by the static, toggle and no-title
+   * collapsible headers.
    */
   private renderHeaderContentSpans(
     header: HTMLElement,
     params: TodoseqParameters,
+    showQuery = true,
   ): void {
-    if (params.searchQuery) {
+    if (showQuery && params.searchQuery) {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-search',
         text: `Search: ${params.searchQuery}`,
@@ -1174,7 +1145,7 @@ export class EmbeddedTaskListRenderer {
 
   /**
    * Render the task rows. With `group-by` set, render a header (label + count)
-   * followed by a sibling list per group in first-appearance order; otherwise
+   * followed by a sibling list per group in the field's group order; otherwise
    * render a single flat list.
    */
   private renderTaskItems(
