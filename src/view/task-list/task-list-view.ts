@@ -92,8 +92,8 @@ const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
  * than one group (tag multi-membership).
  */
 type TaskListRenderItem =
-  | { kind: 'header'; group: TaskGroup; collapsed: boolean }
-  | { kind: 'task'; task: Task; itemKey: string; groupCollapsed: boolean };
+  | { kind: 'header'; group: TaskGroup }
+  | { kind: 'task'; task: Task; itemKey: string; groupKey: string };
 
 export type { TaskListViewMode, SortMethod } from './task-list-filter';
 
@@ -548,7 +548,7 @@ export class TaskListView extends ItemView {
         kind: 'task',
         task,
         itemKey: getTaskKey(task),
-        groupCollapsed: false,
+        groupKey: '',
       }));
     }
 
@@ -557,18 +557,49 @@ export class TaskListView extends ItemView {
       field === 'status' ? { stateRank: this.getStateRank() } : undefined;
     const items: TaskListRenderItem[] = [];
     for (const group of groupTasks(tasks, field, direction, options)) {
-      const collapsed = this.isGroupCollapsed(group.key);
-      items.push({ kind: 'header', group, collapsed });
+      items.push({ kind: 'header', group });
       for (const task of group.tasks) {
         items.push({
           kind: 'task',
           task,
           itemKey: `${group.key}\u0000${getTaskKey(task)}`,
-          groupCollapsed: collapsed,
+          groupKey: group.key,
         });
       }
     }
     return items;
+  }
+
+  /**
+   * Snap a grouped render slice's end so it never ends on a group header.
+   * A header must render with at least its first task; otherwise the list
+   * briefly shows a count with nothing underneath it. Dropping the trailing
+   * header (rather than extending to the whole group) keeps batches small even
+   * for very large groups.
+   */
+  private snapGroupedSliceEnd(
+    items: TaskListRenderItem[],
+    startIndex: number,
+    endIndex: number,
+  ): number {
+    let end = Math.min(endIndex, items.length);
+    if (
+      end > startIndex &&
+      end < items.length &&
+      items[end - 1].kind === 'header'
+    ) {
+      end -= 1;
+      if (end <= startIndex) {
+        // The slice was only the header; include its first task instead.
+        end = Math.min(startIndex + 2, items.length);
+      }
+    }
+    return end;
+  }
+
+  /** Collapsed groups keep their header but none of their rows in the DOM. */
+  private isItemRenderable(item: TaskListRenderItem): boolean {
+    return item.kind === 'header' || !this.isGroupCollapsed(item.groupKey);
   }
 
   /** Composite id so group keys don't collide across grouping fields. */
@@ -596,9 +627,19 @@ export class TaskListView extends ItemView {
     const collapsed = !this.isGroupCollapsed(groupKey);
     this.setGroupCollapsed(groupKey, collapsed);
     this.applyGroupCollapsedState(headerEl, collapsed);
+    // Collapsed groups keep no rows in the DOM, so a large collapsed section
+    // cannot bloat the list or defeat lazy loading.
+    if (collapsed) {
+      this.removeGroupRows(headerEl);
+    } else {
+      this.insertGroupRows(headerEl, groupKey);
+    }
+    // Collapsing shortens the list; load more if that left it too short to
+    // scroll, otherwise the remaining groups would never lazy-load.
+    this.maybeLoadMore();
   }
 
-  /** Apply collapsed styling and hide/show the rows that follow the header. */
+  /** Apply the header's collapsed chrome (rows are added/removed separately). */
   private applyGroupCollapsedState(
     headerEl: HTMLElement,
     collapsed: boolean,
@@ -611,16 +652,39 @@ export class TaskListView extends ItemView {
     if (chevron) {
       chevron.toggleClass('is-expanded', !collapsed);
     }
-    let sibling = headerEl.nextElementSibling as HTMLElement | null;
+  }
+
+  /** Remove a collapsed group's rendered rows. */
+  private removeGroupRows(headerEl: HTMLElement): void {
+    let sibling = headerEl.nextElementSibling;
     while (
       sibling &&
       !sibling.classList.contains('todoseq-task-group-header')
     ) {
+      const next = sibling.nextElementSibling;
       if (sibling.classList.contains('todoseq-task-item')) {
-        sibling.toggleClass('todoseq-task-item-collapsed', collapsed);
+        sibling.remove();
       }
-      sibling = sibling.nextElementSibling as HTMLElement | null;
+      sibling = next;
     }
+  }
+
+  /** Rebuild and insert an expanded group's loaded rows after its header. */
+  private insertGroupRows(headerEl: HTMLElement, groupKey: string): void {
+    const items = this.cachedRenderItems;
+    if (!items) return;
+    const headerIndex = items.findIndex(
+      (item) => item.kind === 'header' && item.group.key === groupKey,
+    );
+    if (headerIndex < 0) return;
+
+    const fragment = createFragment();
+    for (let i = headerIndex + 1; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'header' || i >= this.loadedTaskCount) break;
+      fragment.appendChild(this.buildRenderItemElement(item));
+    }
+    headerEl.after(fragment);
   }
 
   /** Build a group-header list item matching the embedded group chrome. */
@@ -666,10 +730,16 @@ export class TaskListView extends ItemView {
   /** Build a DOM element for a render item (header or task row). */
   private buildRenderItemElement(item: TaskListRenderItem): HTMLLIElement {
     if (item.kind === 'header') {
-      return this.buildGroupHeaderItem(item.group, item.collapsed);
+      return this.buildGroupHeaderItem(
+        item.group,
+        this.isGroupCollapsed(item.group.key),
+      );
     }
     const li = this.buildTaskListItem(item.task);
-    li.toggleClass('todoseq-task-item-collapsed', item.groupCollapsed);
+    li.toggleClass(
+      'todoseq-task-item-collapsed',
+      this.isGroupCollapsed(item.groupKey),
+    );
     return li;
   }
 
@@ -2212,28 +2282,37 @@ export class TaskListView extends ItemView {
 
     // Use scroll event listener instead of IntersectionObserver
     const scrollHandler = () => {
-      if (!this.taskListContainer || !this.sentinelElement) return;
-
-      const container = this.taskListContainer;
-      const sentinel = this.sentinelElement;
-
-      const scrollBottom = container.scrollTop + container.clientHeight;
-      const sentinelTop = sentinel.offsetTop;
-      const threshold = container.clientHeight + 200;
-      const isNearBottom = sentinelTop <= scrollBottom + threshold;
-
-      if (isNearBottom && !this.isLoadingMore && !this.isAllTasksLoaded) {
-        window.requestAnimationFrame(() => {
-          void this.loadMoreTasks().catch((error) => {
-            new Notice('Failed to load more tasks');
-            console.error('Error loading more tasks:', error);
-          });
-        });
-      }
+      this.maybeLoadMore();
     };
 
     this.taskListContainer.addEventListener('scroll', scrollHandler);
     this.lazyLoadScrollHandler = scrollHandler;
+
+    // Fill the first screen even when the content is too short to scroll. A
+    // grouped list with collapsed sections keeps no rows for them, so no scroll
+    // event would ever fire and the remaining groups would never load.
+    window.requestAnimationFrame(() => this.maybeLoadMore());
+  }
+
+  /** Load the next batch when the sentinel is near the viewport. */
+  private maybeLoadMore(): void {
+    if (!this.taskListContainer || !this.sentinelElement) return;
+    if (this.isLoadingMore || this.isAllTasksLoaded) return;
+
+    const container = this.taskListContainer;
+    const sentinel = this.sentinelElement;
+    const scrollBottom = container.scrollTop + container.clientHeight;
+    const sentinelTop = sentinel.offsetTop;
+    const threshold = container.clientHeight + 200;
+
+    if (sentinelTop <= scrollBottom + threshold) {
+      window.requestAnimationFrame(() => {
+        void this.loadMoreTasks().catch((error) => {
+          new Notice('Failed to load more tasks');
+          console.error('Error loading more tasks:', error);
+        });
+      });
+    }
   }
 
   private cleanupSentinelObserver(): void {
@@ -2281,11 +2360,17 @@ export class TaskListView extends ItemView {
     const endIndex = startIndex + toLoad;
 
     const renderItems = this.cachedRenderItems;
+    let loadedThisBatch = toLoad;
     if (renderItems) {
-      // Grouped: append the next header/task items in order (headers are
-      // created lazily with their group's first task).
+      // Grouped: append the next header/task items in order. Snap the batch so
+      // it never ends on a group header, which would show a count with no tasks.
+      const end = this.snapGroupedSliceEnd(renderItems, startIndex, endIndex);
+      loadedThisBatch = end - startIndex;
+      const batch = renderItems
+        .slice(startIndex, end)
+        .filter((item) => this.isItemRenderable(item));
       await this.renderQueue.enqueue(
-        renderItems.slice(startIndex, endIndex),
+        batch,
         (item) => this.buildRenderItemElement(item),
         list,
       );
@@ -2316,13 +2401,16 @@ export class TaskListView extends ItemView {
       list.appendChild(this.sentinelElement);
     }
 
-    this.loadedTaskCount += toLoad;
+    this.loadedTaskCount += loadedThisBatch;
     this.isLoadingMore = false;
 
     // Check if all tasks are now loaded
     if (this.loadedTaskCount >= this.totalTaskCount) {
       this.isAllTasksLoaded = true;
       this.cleanupSentinelObserver();
+    } else {
+      // Keep filling until the list is scrollable or everything is loaded.
+      this.maybeLoadMore();
     }
   }
 
@@ -2661,9 +2749,16 @@ export class TaskListView extends ItemView {
         // Grouped: build an ordered header/task plan and render the first batch.
         const items = this.buildRenderItems(visible);
         this.cachedRenderItems = items;
-        const renderCount = Math.min(items.length, INITIAL_LOAD_COUNT);
+        const renderCount = this.snapGroupedSliceEnd(
+          items,
+          0,
+          Math.min(items.length, INITIAL_LOAD_COUNT),
+        );
+        const initialItems = items
+          .slice(0, renderCount)
+          .filter((item) => this.isItemRenderable(item));
         const fragment = await this.renderQueue.renderToFragment(
-          items.slice(0, renderCount),
+          initialItems,
           (item) => this.buildRenderItemElement(item),
           false,
         );

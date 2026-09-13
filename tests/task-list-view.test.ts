@@ -432,19 +432,64 @@ describe('TaskListView', () => {
       );
     });
 
-    it('should flag a collapsed group and its tasks in the plan', () => {
+    it('should tag task items with their group key', () => {
       const tasks = [
         createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
         createBaseTask({ path: 'a/two.md', line: 1, text: 'B' }),
       ];
       view['setGroupBy']('folder');
-      view['setGroupCollapsed']('a', true);
       const items = view['buildRenderItems'](tasks);
       expect((items[0] as any).kind).toBe('header');
-      expect((items[0] as any).collapsed).toBe(true);
+      expect((items[0] as any).group.key).toBe('a');
       const taskItems = items.filter((item: any) => item.kind === 'task');
       expect(taskItems).toHaveLength(2);
-      expect(taskItems.every((item: any) => item.groupCollapsed)).toBe(true);
+      expect(taskItems.every((item: any) => item.groupKey === 'a')).toBe(true);
+    });
+  });
+
+  describe('snapGroupedSliceEnd', () => {
+    const buildPlan = () => {
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'b/two.md', line: 0, text: 'B' }),
+      ];
+      view['setGroupBy']('folder');
+      return view['buildRenderItems'](tasks);
+    };
+
+    it('should keep a cut that lands on a task', () => {
+      const items = buildPlan();
+      expect(view['snapGroupedSliceEnd'](items, 0, 2)).toBe(2);
+    });
+
+    it('should drop a trailing header instead of loading its whole group', () => {
+      const items = buildPlan();
+      // [0,3) would end on the second header; drop it.
+      expect(view['snapGroupedSliceEnd'](items, 0, 3)).toBe(2);
+    });
+
+    it('should keep the header with its first task for a one-item slice', () => {
+      const items = buildPlan();
+      // A slice of just the first header must include its first task.
+      expect(view['snapGroupedSliceEnd'](items, 0, 1)).toBe(2);
+    });
+
+    it('should clamp to the item count and allow zero', () => {
+      const items = buildPlan();
+      expect(view['snapGroupedSliceEnd'](items, 0, 0)).toBe(0);
+      expect(view['snapGroupedSliceEnd'](items, 0, 99)).toBe(items.length);
+    });
+
+    it('should never leave a batch ending on a header', () => {
+      const items = buildPlan();
+      for (let start = 0; start <= items.length; start++) {
+        for (let end = start; end <= items.length; end++) {
+          const snapped = view['snapGroupedSliceEnd'](items, start, end);
+          if (snapped > start && snapped < items.length) {
+            expect((items[snapped - 1] as any).kind).not.toBe('header');
+          }
+        }
+      }
     });
   });
 
@@ -495,7 +540,79 @@ describe('TaskListView', () => {
       expect(chevron?.classList.contains('is-expanded')).toBe(false);
     });
 
-    it('should toggle collapse and hide the following task rows', () => {
+    it('should remove collapsed rows and restore them on expand', () => {
+      view['setGroupBy']('folder');
+      const container = activeDocument.createElement('div');
+      const list = activeDocument.createElement('ul');
+      list.classList.add('todoseq-task-list');
+      container.appendChild(list);
+      view['taskListContainer'] = container;
+
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'b/two.md', line: 0, text: 'B' }),
+      ];
+      const items = view['buildRenderItems'](tasks);
+      view['cachedRenderItems'] = items;
+      view['loadedTaskCount'] = items.length;
+      for (const item of items) {
+        list.appendChild(view['buildRenderItemElement'](item));
+      }
+
+      const headerA = list.querySelector(
+        'li.todoseq-task-group-header',
+      ) as HTMLElement;
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(2);
+
+      view['toggleGroupCollapsed'](headerA);
+      expect(view['isGroupCollapsed']('a')).toBe(true);
+      expect(headerA.getAttribute('aria-expanded')).toBe('false');
+      expect(headerA.classList.contains('is-collapsed')).toBe(true);
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(1);
+
+      view['toggleGroupCollapsed'](headerA);
+      expect(view['isGroupCollapsed']('a')).toBe(false);
+      expect(headerA.getAttribute('aria-expanded')).toBe('true');
+      expect(list.querySelectorAll('li.todoseq-task-item').length).toBe(2);
+    });
+
+    it('should apply the live collapsed state to lazily built rows', () => {
+      view['setGroupBy']('folder');
+      view['setGroupCollapsed']('a', true);
+
+      const header = view['buildRenderItemElement']({
+        kind: 'header',
+        group: { key: 'a', label: 'a/', tasks: [createBaseTask()] },
+      });
+      expect(header.classList.contains('is-collapsed')).toBe(true);
+      expect(header.getAttribute('aria-expanded')).toBe('false');
+
+      const task = view['buildRenderItemElement']({
+        kind: 'task',
+        task: createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        itemKey: 'a\u00000',
+        groupKey: 'a',
+      });
+      expect(task.classList.contains('todoseq-task-item-collapsed')).toBe(true);
+    });
+
+    it('should build rows visible again once the group is expanded', () => {
+      view['setGroupBy']('folder');
+      view['setGroupCollapsed']('a', true);
+      view['setGroupCollapsed']('a', false);
+
+      const task = view['buildRenderItemElement']({
+        kind: 'task',
+        task: createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        itemKey: 'a\u00000',
+        groupKey: 'a',
+      });
+      expect(task.classList.contains('todoseq-task-item-collapsed')).toBe(
+        false,
+      );
+    });
+
+    it('should ask the lazy loader to fill after a collapse toggle', () => {
       view['setGroupBy']('folder');
       const container = activeDocument.createElement('div');
       const list = activeDocument.createElement('ul');
@@ -504,29 +621,16 @@ describe('TaskListView', () => {
       view['taskListContainer'] = container;
 
       const header = view['buildGroupHeaderItem']({
-        key: 'a/',
+        key: 'a',
         label: 'a/',
         tasks: [createBaseTask()],
       });
       list.appendChild(header);
-      const taskLi = activeDocument.createElement('li');
-      taskLi.classList.add('todoseq-task-item');
-      list.appendChild(taskLi);
 
+      const maybeLoadMore = jest.fn();
+      view['maybeLoadMore'] = maybeLoadMore;
       view['toggleGroupCollapsed'](header);
-      expect(view['isGroupCollapsed']('a/')).toBe(true);
-      expect(header.getAttribute('aria-expanded')).toBe('false');
-      expect(header.classList.contains('is-collapsed')).toBe(true);
-      expect(taskLi.classList.contains('todoseq-task-item-collapsed')).toBe(
-        true,
-      );
-
-      view['toggleGroupCollapsed'](header);
-      expect(view['isGroupCollapsed']('a/')).toBe(false);
-      expect(header.getAttribute('aria-expanded')).toBe('true');
-      expect(taskLi.classList.contains('todoseq-task-item-collapsed')).toBe(
-        false,
-      );
+      expect(maybeLoadMore).toHaveBeenCalledTimes(1);
     });
   });
 
