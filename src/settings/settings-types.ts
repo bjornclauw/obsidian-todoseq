@@ -1,17 +1,15 @@
+import type { SortMethod } from '../utils/task-sort';
+import type { GroupByField } from '../utils/task-group';
+
 export interface SavedSearch {
   id: string; // unique identifier
   name: string; // user-given label, max 50 chars
   query: string; // full search query string
   viewMode?: 'showAll' | 'sortCompletedLast' | 'hideCompleted'; // optional override
-  sortMethod?:
-    | 'default'
-    | 'sortByScheduled'
-    | 'sortByDeadline'
-    | 'sortByClosedDate'
-    | 'sortByStarted'
-    | 'sortByPriority'
-    | 'sortByUrgency'
-    | 'sortByKeyword'; // optional override
+  sortMethod?: SortMethod; // optional override
+  sortDirection?: 'natural' | 'asc' | 'desc'; // optional sort-direction override
+  groupBy?: GroupByField | 'none'; // optional grouping override
+  groupDirection?: 'natural' | 'asc' | 'desc'; // optional group-direction override
   futureTaskSorting?: 'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture'; // optional override
   matchCase?: boolean; // optional: enable case-sensitive search
 }
@@ -37,15 +35,10 @@ export interface TodoTrackerSettings {
   includeCommentBlocks: boolean; // when true, tasks inside multiline comment blocks (%%) are included
   taskListViewMode: 'showAll' | 'sortCompletedLast' | 'hideCompleted'; // controls view transformation in the task view
   futureTaskSorting: 'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture'; // controls how future tasks are handled
-  defaultSortMethod:
-    | 'default'
-    | 'sortByScheduled'
-    | 'sortByDeadline'
-    | 'sortByClosedDate'
-    | 'sortByStarted'
-    | 'sortByPriority'
-    | 'sortByUrgency'
-    | 'sortByKeyword'; // default sort method for task list view
+  defaultSortMethod: SortMethod; // default sort method for task list view
+  taskListGroupBy: GroupByField | 'none'; // last-used grouping for the task list view
+  taskListSortDirection: 'natural' | 'asc' | 'desc'; // last-used sort direction for the task list view
+  taskListGroupDirection: 'natural' | 'asc' | 'desc'; // last-used group direction for the task list view
   languageCommentSupport: boolean; // language-specific comment support settings
   weekStartsOn: 'Monday' | 'Sunday'; // controls which day the week starts on for date filtering
   formatTaskKeywords: boolean; // format task keywords in editor
@@ -128,6 +121,9 @@ export const DefaultSettings: TodoTrackerSettings = {
   taskListViewMode: 'showAll',
   futureTaskSorting: 'showAll',
   defaultSortMethod: 'default', // Default to file path sorting
+  taskListGroupBy: 'none', // No grouping by default
+  taskListSortDirection: 'natural', // Use each sort method's natural direction
+  taskListGroupDirection: 'natural', // Use each group field's natural direction
   languageCommentSupport: false,
   weekStartsOn: 'Monday', // Default to Monday as requested
   formatTaskKeywords: true, // Default to enabled

@@ -2,6 +2,7 @@ import { Task } from '../types/task';
 import { getFilename } from './task-utils';
 import { SortDirection } from './task-sort';
 import { LocaleUtils } from './locale-utils';
+import type { KeywordManager } from './keyword-manager';
 
 /**
  * Fields a task list can be grouped by.
@@ -48,6 +49,32 @@ export function getNaturalGroupDirection(field: GroupByField): SortDirection {
   return field === 'priority' || field === 'closed' || field === 'started'
     ? 'desc'
     : 'asc';
+}
+
+/** Keyword groups, in the order used for `status` group ranking. */
+export const STATE_RANK_GROUPS = [
+  'activeKeywords',
+  'inactiveKeywords',
+  'waitingKeywords',
+  'completedKeywords',
+] as const;
+
+/**
+ * Build a ranker for `status` grouping from the effective keyword order:
+ * active → inactive → waiting → completed, with unknown states last.
+ */
+export function buildStateRank(
+  keywordManager: KeywordManager,
+): (state: string) => number {
+  const order = STATE_RANK_GROUPS.flatMap((group) =>
+    keywordManager.getKeywordsForGroup(group),
+  );
+  const ranks = new Map<string, number>();
+  order.forEach((keyword, index) => {
+    const normalized = keyword.toUpperCase();
+    if (!ranks.has(normalized)) ranks.set(normalized, index);
+  });
+  return (state) => ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
 }
 
 const NO_HEADING_LABEL = '(No heading)';

@@ -102,9 +102,12 @@ export class SearchOptionsDropdown extends BaseDropdown {
       'state:',
       'priority:',
       'content:',
+      'description:',
+      'heading:',
       'scheduled:',
       'deadline:',
       'closed:',
+      'started:',
       '[]',
     ];
 
@@ -481,12 +484,18 @@ export class SearchOptionsDropdown extends BaseDropdown {
         return 'match task priority';
       case 'content:':
         return 'match task content';
+      case 'description:':
+        return 'match task description';
+      case 'heading:':
+        return 'match the nearest heading';
       case 'scheduled:':
         return 'filter by scheduled date';
       case 'deadline:':
         return 'filter by deadline date';
       case 'closed:':
         return 'filter by closed date';
+      case 'started:':
+        return 'filter by started date';
       case '[]':
         return 'match page property';
       default:

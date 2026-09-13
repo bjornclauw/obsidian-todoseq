@@ -36,6 +36,8 @@ Located at the top of the Task List, the toolbar contains:
 - **Case sensitivity toggle**: Button to toggle case-sensitive search
 - **View mode icons**: Three buttons for different task display modes
 - **Sort method dropdown**: Choose how tasks are ordered
+- **Sort direction flip**: The ↑/↓ glyph embedded in the sort dropdown flips between ascending and descending for the current sort method. Changing the sort method resets it to that method's natural direction
+- **Group by dropdown**: Splits the list into labelled sections (folder, file, heading, status, priority, scheduled/deadline/closed/started date, or tag). Each header shows a task count, and grouping can be combined with search and sort. A `tag` group lists a multi-tagged task under each of its tags. The ↑/↓ glyph embedded in the group dropdown reverses the section order (and resets to the field's natural direction when the grouping changes)
 - **Task count**: Shows "X of Y tasks" based on current filters
 
 ### 2. Task List
@@ -152,9 +154,10 @@ A notice appears confirming the action: "Task copied", "Task moved", or "Task mi
 
 ## Sort Methods
 
-Sort the task list
+Sort the task list with the sort dropdown, and use the ↑/↓ toggle beside it to reverse the
+order. Changing the sort method returns the direction to that method's natural default.
 
-See [Sort Methods](sort-methods.md) for detials.
+See [Sort Methods](sort-methods.md) for details.
 
 ## Search Functionality
 

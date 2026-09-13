@@ -1,20 +1,18 @@
-import { Task } from '../../types/task';
-
 const CHUNK_BATCH_SIZE = 15;
 const YIELD_EVERY_N_TASKS = 5;
 const PRIORITY_FIRST_BATCH = 10;
 
 export class ChunkedRenderQueue {
-  private pending: Task[] = [];
+  private pending: unknown[] = [];
   private isProcessing = false;
-  private renderFn: ((task: Task) => HTMLLIElement) | null = null;
+  private renderFn: ((item: unknown) => HTMLLIElement) | null = null;
   private container: Element | null = null;
   private generation = 0;
   private currentRenderPromise: Promise<void> | null = null;
 
-  async enqueue(
-    tasks: Task[],
-    renderFn: (task: Task) => HTMLLIElement,
+  async enqueue<T>(
+    items: T[],
+    renderFn: (item: T) => HTMLLIElement,
     container: Element,
   ): Promise<void> {
     this.generation++;
@@ -23,7 +21,7 @@ export class ChunkedRenderQueue {
 
     this.renderFn = renderFn;
     this.container = container;
-    this.pending = tasks;
+    this.pending = items;
 
     this.isProcessing = true;
     this.currentRenderPromise = this.processQueue();
@@ -52,12 +50,12 @@ export class ChunkedRenderQueue {
 
       const batch = this.pending.splice(0, batchSize);
 
-      for (const task of batch) {
+      for (const item of batch) {
         if (this.generation !== currentGeneration) {
           return;
         }
 
-        const element = renderFn(task);
+        const element = renderFn(item);
         container.appendChild(element);
         priorityRendered++;
         renderedInBatch++;
@@ -82,15 +80,15 @@ export class ChunkedRenderQueue {
     return this.pending.length === 0 && !this.isProcessing;
   }
 
-  async renderToFragment(
-    tasks: Task[],
-    renderFn: (task: Task) => HTMLLIElement,
+  async renderToFragment<T>(
+    items: T[],
+    renderFn: (item: T) => HTMLLIElement,
     yieldDuringRender = true,
   ): Promise<DocumentFragment> {
     const fragment = createFragment();
 
-    for (let i = 0; i < tasks.length; i++) {
-      const element = renderFn(tasks[i]);
+    for (let i = 0; i < items.length; i++) {
+      const element = renderFn(items[i]);
       fragment.appendChild(element);
 
       if (yieldDuringRender && i > 0 && i % YIELD_EVERY_N_TASKS === 0) {

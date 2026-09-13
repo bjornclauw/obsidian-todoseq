@@ -1,7 +1,7 @@
 import { Vault, App } from 'obsidian';
 import { Task } from '../types/task';
 import { TodoTrackerSettings } from '../settings/settings-types';
-import { TaskListViewMode } from '../view/task-list/task-list-view';
+import { TaskListViewMode } from '../view/task-list/task-list-filter';
 import { TAG_PATTERN } from '../utils/patterns';
 import { KeywordManager } from '../utils/keyword-manager';
 import { DateUtils } from '../utils/date-utils';

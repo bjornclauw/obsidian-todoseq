@@ -58,9 +58,42 @@ import {
   modifyLinesForMigration,
   readTaskBlockFromVault,
 } from '../../utils/task-sub-bullets';
+import { SortDirection, getNaturalDirection } from '../../utils/task-sort';
+import {
+  groupTasks,
+  getNaturalGroupDirection,
+  buildStateRank,
+  STATE_RANK_GROUPS,
+  GroupByField,
+  TaskGroup,
+} from '../../utils/task-group';
 
 const INITIAL_LOAD_COUNT = 50;
 const LOAD_BATCH_SIZE = 30;
+
+/** Choices for the Group-by dropdown in the results bar. */
+const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
+  { value: 'none', label: 'No grouping' },
+  { value: 'folder', label: 'Folder' },
+  { value: 'file', label: 'File' },
+  { value: 'heading', label: 'Heading' },
+  { value: 'status', label: 'Status' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'scheduled', label: 'Scheduled date' },
+  { value: 'deadline', label: 'Deadline date' },
+  { value: 'closed', label: 'Closed date' },
+  { value: 'started', label: 'Started date' },
+  { value: 'tag', label: 'Tag' },
+];
+
+/**
+ * A single rendered entry in the (optionally grouped) list: either a group
+ * header or a task row. `itemKey` disambiguates a task that appears in more
+ * than one group (tag multi-membership).
+ */
+type TaskListRenderItem =
+  | { kind: 'header'; group: TaskGroup }
+  | { kind: 'task'; task: Task; itemKey: string };
 
 export type { TaskListViewMode, SortMethod } from './task-list-filter';
 
@@ -72,6 +105,9 @@ export class TaskListView extends ItemView {
   private defaultSortMethod: SortMethod;
   private searchInputEl: HTMLInputElement | null = null;
   private saveSearchBtn: HTMLElement | null = null;
+  private sortDirectionEl: HTMLElement | null = null;
+  private groupByEl: HTMLSelectElement | null = null;
+  private groupDirectionEl: HTMLElement | null = null;
   private _searchKeyHandler: ((e: KeyboardEvent) => void) | undefined;
   private isCaseSensitive = false;
   private searchError: string | null = null;
@@ -81,6 +117,11 @@ export class TaskListView extends ItemView {
   private ariaLiveRegion: HTMLElement | null = null;
   private unsubscribeFromStateManager: (() => void) | null = null;
   private cachedVisibleTasks: Task[] = [];
+  private cachedRenderItems: TaskListRenderItem[] | null = null;
+  private stateRankCache: {
+    key: string;
+    rank: (state: string) => number;
+  } | null = null;
   private wasPanelVisible = false;
   private resizeObserver: ResizeObserver | null = null;
 
@@ -373,7 +414,8 @@ export class TaskListView extends ItemView {
         attr === 'sortByStarted' ||
         attr === 'sortByPriority' ||
         attr === 'sortByUrgency' ||
-        attr === 'sortByKeyword'
+        attr === 'sortByKeyword' ||
+        attr === 'sortByTag'
       )
         return attr;
     }
@@ -386,7 +428,8 @@ export class TaskListView extends ItemView {
       this.defaultSortMethod === 'sortByStarted' ||
       this.defaultSortMethod === 'sortByPriority' ||
       this.defaultSortMethod === 'sortByUrgency' ||
-      this.defaultSortMethod === 'sortByKeyword'
+      this.defaultSortMethod === 'sortByKeyword' ||
+      this.defaultSortMethod === 'sortByTag'
     ) {
       return this.defaultSortMethod;
     }
@@ -395,6 +438,149 @@ export class TaskListView extends ItemView {
   }
   setSortMethod(method: SortMethod) {
     this.contentEl.setAttr('data-sort-method', method);
+  }
+
+  /** Sort-direction preference: explicit asc/desc or 'natural' (per-method default). */
+  private getSortDirection(): SortDirection | 'natural' {
+    const attr = this.contentEl.getAttr('data-sort-direction');
+    if (attr === 'asc' || attr === 'desc' || attr === 'natural') return attr;
+    const setting = this.plugin.settings.taskListSortDirection;
+    if (setting === 'asc' || setting === 'desc' || setting === 'natural') {
+      return setting;
+    }
+    return 'natural';
+  }
+  private setSortDirection(direction: SortDirection | 'natural') {
+    this.contentEl.setAttr('data-sort-direction', direction);
+  }
+
+  /** The direction actually applied after resolving 'natural' for the current method. */
+  private getEffectiveSortDirection(): SortDirection {
+    const preference = this.getSortDirection();
+    return preference === 'natural'
+      ? getNaturalDirection(this.getSortMethod())
+      : preference;
+  }
+
+  private updateSortDirectionIcon(): void {
+    if (!this.sortDirectionEl) return;
+    const ascending = this.getEffectiveSortDirection() === 'asc';
+    setIcon(this.sortDirectionEl, ascending ? 'arrow-up' : 'arrow-down');
+    const label = ascending ? 'Sort ascending' : 'Sort descending';
+    setTooltip(this.sortDirectionEl, label);
+    this.sortDirectionEl.setAttribute('aria-label', label);
+  }
+
+  /** Grouping preference for the list. */
+  private getGroupBy(): GroupByField | 'none' {
+    const attr = this.contentEl.getAttr('data-group-by');
+    if (GROUP_BY_OPTIONS.some((option) => option.value === attr)) {
+      return attr as GroupByField | 'none';
+    }
+    const setting = this.plugin.settings.taskListGroupBy;
+    if (GROUP_BY_OPTIONS.some((option) => option.value === setting)) {
+      return setting;
+    }
+    return 'none';
+  }
+  private setGroupBy(field: GroupByField | 'none') {
+    this.contentEl.setAttr('data-group-by', field);
+  }
+
+  /** Group-direction preference: explicit asc/desc or 'natural' (per-field default). */
+  private getGroupDirection(): SortDirection | 'natural' {
+    const attr = this.contentEl.getAttr('data-group-direction');
+    if (attr === 'asc' || attr === 'desc' || attr === 'natural') return attr;
+    const setting = this.plugin.settings.taskListGroupDirection;
+    if (setting === 'asc' || setting === 'desc' || setting === 'natural') {
+      return setting;
+    }
+    return 'natural';
+  }
+  private setGroupDirection(direction: SortDirection | 'natural') {
+    this.contentEl.setAttr('data-group-direction', direction);
+  }
+
+  /** The group direction applied after resolving 'natural' for the current field. */
+  private getEffectiveGroupDirection(): SortDirection {
+    const field = this.getGroupBy();
+    const natural = field === 'none' ? 'asc' : getNaturalGroupDirection(field);
+    const preference = this.getGroupDirection();
+    return preference === 'natural' ? natural : preference;
+  }
+
+  private updateGroupDirectionIcon(): void {
+    if (!this.groupDirectionEl) return;
+    this.groupDirectionEl.toggleClass(
+      'todoseq-hidden',
+      this.getGroupBy() === 'none',
+    );
+    const ascending = this.getEffectiveGroupDirection() === 'asc';
+    setIcon(this.groupDirectionEl, ascending ? 'arrow-up' : 'arrow-down');
+    const label = ascending ? 'Group ascending' : 'Group descending';
+    setTooltip(this.groupDirectionEl, label);
+    this.groupDirectionEl.setAttribute('aria-label', label);
+  }
+
+  /** Cached state ranker for `status` grouping. */
+  private getStateRank(): (state: string) => number {
+    const keywordManager = this.keywordManager;
+    const order = STATE_RANK_GROUPS.flatMap((group) =>
+      keywordManager.getKeywordsForGroup(group),
+    );
+    const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
+    if (this.stateRankCache?.key === key) {
+      return this.stateRankCache.rank;
+    }
+    const rank = buildStateRank(keywordManager);
+    this.stateRankCache = { key, rank };
+    return rank;
+  }
+
+  /** Build the ordered header/task plan for grouped rendering. */
+  private buildRenderItems(tasks: Task[]): TaskListRenderItem[] {
+    const field = this.getGroupBy();
+    if (field === 'none') {
+      return tasks.map((task) => ({
+        kind: 'task',
+        task,
+        itemKey: getTaskKey(task),
+      }));
+    }
+
+    const direction = this.getEffectiveGroupDirection();
+    const options =
+      field === 'status' ? { stateRank: this.getStateRank() } : undefined;
+    const items: TaskListRenderItem[] = [];
+    for (const group of groupTasks(tasks, field, direction, options)) {
+      items.push({ kind: 'header', group });
+      for (const task of group.tasks) {
+        items.push({
+          kind: 'task',
+          task,
+          itemKey: `${group.key}\u0000${getTaskKey(task)}`,
+        });
+      }
+    }
+    return items;
+  }
+
+  /** Build a group-header list item matching the embedded group chrome. */
+  private buildGroupHeaderItem(group: TaskGroup): HTMLLIElement {
+    const li = createEl('li', { cls: 'todoseq-task-group-header' });
+    li.setAttribute('data-group-key', group.key);
+    const label = li.createSpan({ cls: 'todoseq-embedded-task-group-label' });
+    label.setText(group.label);
+    const count = li.createSpan({ cls: 'todoseq-embedded-task-group-count' });
+    count.setText(String(group.tasks.length));
+    return li;
+  }
+
+  /** Build a DOM element for a render item (header or task row). */
+  private buildRenderItemElement(item: TaskListRenderItem): HTMLLIElement {
+    return item.kind === 'header'
+      ? this.buildGroupHeaderItem(item.group)
+      : this.buildTaskListItem(item.task);
   }
 
   /**
@@ -414,7 +600,12 @@ export class TaskListView extends ItemView {
   /** Non-mutating transform for rendering */
   private transformForView(tasks: Task[], mode: TaskListViewMode): Task[] {
     const sortMethod = this.getSortMethod();
-    return this.taskListFilter.transformForView(tasks, mode, sortMethod);
+    return this.taskListFilter.transformForView(
+      tasks,
+      mode,
+      sortMethod,
+      this.getSortDirection(),
+    );
   }
 
   /** Search query (persisted on root contentEl attribute to survive re-renders) */
@@ -774,9 +965,11 @@ export class TaskListView extends ItemView {
     const searchResultsCount = searchResultsWarp.createSpan();
     searchResultsCount.setText('0 Of 0 tasks');
 
-    // Right side: sort dropdown
-    // const sortDropdown = searchResultsInfo.createEl('div');
-    const select = searchResultsInfo.createEl('select', {
+    // Right side: sort dropdown with an embedded direction flip
+    const sortControl = searchResultsInfo.createDiv({
+      cls: 'todoseq-select-control',
+    });
+    const select = sortControl.createEl('select', {
       cls: 'dropdown',
       attr: {
         'aria-label': 'Sort tasks by',
@@ -793,6 +986,7 @@ export class TaskListView extends ItemView {
       { value: 'sortByPriority', label: 'Priority' },
       { value: 'sortByUrgency', label: 'Urgency' },
       { value: 'sortByKeyword', label: 'Keyword' },
+      { value: 'sortByTag', label: 'Tag' },
     ];
 
     for (const option of sortOptions) {
@@ -805,6 +999,30 @@ export class TaskListView extends ItemView {
     // Set current sort mode
     const currentSortMethod = this.getSortMethod();
     select.value = currentSortMethod;
+
+    // Direction flip, overlaid inside the select's own right padding
+    const directionBtn = sortControl.createDiv({
+      cls: 'clickable-icon todoseq-direction-flip todoseq-sort-direction',
+      attr: { role: 'button', tabindex: '0', 'aria-label': 'Sort direction' },
+    });
+    this.sortDirectionEl = directionBtn;
+    this.updateSortDirectionIcon();
+    const toggleSortDirection = () => {
+      const next: SortDirection =
+        this.getEffectiveSortDirection() === 'asc' ? 'desc' : 'asc';
+      this.setSortDirection(next);
+      this.plugin.settings.taskListSortDirection = next;
+      this.debouncedSaveSettings();
+      this.updateSortDirectionIcon();
+      void this.refreshVisibleList(true);
+    };
+    directionBtn.addEventListener('click', toggleSortDirection);
+    directionBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleSortDirection();
+      }
+    });
 
     // Add change handler for dropdown
     select.addEventListener('change', () => {
@@ -825,16 +1043,78 @@ export class TaskListView extends ItemView {
         sortMethod = 'sortByClosedDate';
       } else if (selectedValue === 'sortByStarted') {
         sortMethod = 'sortByStarted';
+      } else if (selectedValue === 'sortByTag') {
+        sortMethod = 'sortByTag';
       }
 
       // Update the sort method (keep the current view mode)
       this.setSortMethod(sortMethod);
+
+      // Changing the sort resets direction to the new method's natural default
+      this.setSortDirection('natural');
+      this.plugin.settings.taskListSortDirection = 'natural';
+      this.debouncedSaveSettings();
+      this.updateSortDirectionIcon();
 
       // Update the dropdown to reflect the current sort method
       select.value = sortMethod;
 
       // Refresh the visible list (transformForView will handle the sorting)
       // Reset to top since sort order changed fundamentally
+      void this.refreshVisibleList(true);
+    });
+
+    // Group-by dropdown with an embedded direction flip
+    const groupControl = searchResultsInfo.createDiv({
+      cls: 'todoseq-select-control',
+    });
+    const groupBySelect = groupControl.createEl('select', {
+      cls: 'dropdown todoseq-group-by-dropdown',
+      attr: { 'aria-label': 'Group tasks by' },
+    });
+    for (const option of GROUP_BY_OPTIONS) {
+      const optionEl = groupBySelect.createEl('option', {
+        attr: { value: option.value },
+      });
+      optionEl.setText(option.label);
+    }
+    groupBySelect.value = this.getGroupBy();
+    this.groupByEl = groupBySelect;
+
+    const groupDirectionBtn = groupControl.createDiv({
+      cls: 'clickable-icon todoseq-direction-flip todoseq-group-direction',
+      attr: { role: 'button', tabindex: '0', 'aria-label': 'Group direction' },
+    });
+    this.groupDirectionEl = groupDirectionBtn;
+    this.updateGroupDirectionIcon();
+    const toggleGroupDirection = () => {
+      const next: SortDirection =
+        this.getEffectiveGroupDirection() === 'asc' ? 'desc' : 'asc';
+      this.setGroupDirection(next);
+      this.plugin.settings.taskListGroupDirection = next;
+      this.debouncedSaveSettings();
+      this.updateGroupDirectionIcon();
+      void this.refreshVisibleList(true);
+    };
+    groupDirectionBtn.addEventListener('click', toggleGroupDirection);
+    groupDirectionBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleGroupDirection();
+      }
+    });
+
+    groupBySelect.addEventListener('change', () => {
+      const value = groupBySelect.value as GroupByField | 'none';
+      this.setGroupBy(value);
+      this.plugin.settings.taskListGroupBy = value;
+      // Changing the grouping resets direction to the new field's natural default
+      this.setGroupDirection('natural');
+      this.plugin.settings.taskListGroupDirection = 'natural';
+      this.debouncedSaveSettings();
+      groupBySelect.value = value;
+      this.updateGroupDirectionIcon();
+      // Reset to top since the layout changes fundamentally
       void this.refreshVisibleList(true);
     });
 
@@ -857,122 +1137,122 @@ export class TaskListView extends ItemView {
       this.suggestionDropdown = null;
     }
 
-    // Import both dropdown classes dynamically to avoid circular dependencies
-    Promise.all([
-      import('../components/search-options-dropdown'),
-      import('../components/search-suggestion-dropdown'),
-    ])
-      .then(([optionsModule, suggestionsModule]) => {
-        this.suggestionDropdown =
-          new suggestionsModule.SearchSuggestionDropdown(
-            inputEl,
-            this.app.vault,
-            this.app,
-            this.tasks,
-            this.plugin.settings,
-            this.getViewMode(),
-          );
+    // Wire input events synchronously; the handlers no-op until the dropdowns
+    // finish loading, so a focus/click that happens first is not lost.
+    inputEl.addEventListener('input', () => {
+      this.handleSearchInputForSuggestions();
+    });
 
-        this.optionsDropdown = new optionsModule.SearchOptionsDropdown(
-          inputEl,
-          this.app.vault,
-          this.tasks,
-          this.plugin.settings,
-          this.suggestionDropdown,
-        );
+    inputEl.addEventListener('focus', () => {
+      this.handleSearchFocus();
+    });
 
-        // Set up visibility change callbacks to manage debounce timer
-        this.suggestionDropdown.setOnVisibilityChange((isVisible) => {
-          this.handleDropdownVisibilityChange(isVisible);
-        });
-        this.optionsDropdown.setOnVisibilityChange((isVisible) => {
-          this.handleDropdownVisibilityChange(isVisible);
-        });
+    // Clicking a field that is already focused (or after the dropdown was
+    // dismissed) does not fire 'focus' again, so re-check on pointer down.
+    inputEl.addEventListener('pointerdown', () => {
+      window.setTimeout(() => this.handleSearchFocus(), 0);
+    });
 
-        // Wire up saved search support
-        this.optionsDropdown.setSavedSearches(
-          this.plugin.settings.savedSearches,
-        );
-        const savedSearchCallbacks: SavedSearchCallbacks = {
-          onApply: (search) => {
-            void this.applySavedSearch(search);
-          },
-          onEdit: (search) => {
-            this.openEditSavedSearchDialog(search);
-          },
-          onDelete: (search) => {
-            this.deleteSavedSearch(search);
-          },
-          onSaveFromHistory: (query) => {
-            this.openSaveSearchDialog(query);
-          },
-        };
-        this.optionsDropdown.setSavedSearchCallbacks(savedSearchCallbacks);
+    inputEl.addEventListener('keydown', (e) => {
+      if (this.optionsDropdown && this.optionsDropdown.handleKeyDown(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (
+        this.suggestionDropdown &&
+        this.suggestionDropdown.handleKeyDown(e)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
 
-        // Input event handler for dropdown triggering
-        inputEl.addEventListener('input', () => {
-          this.handleSearchInputForSuggestions();
-        });
+    // Listen for history selection to restore match case state
+    this.historySelectHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        query: string;
+        matchCase: boolean;
+      };
+      // Guard: if the user typed a different query before this
+      // setTimeout(0) fired, skip to avoid overwriting their input
+      const currentInput = this.searchInputEl?.value ?? '';
+      if (currentInput !== detail.query) return;
+      this.isCaseSensitive = detail.matchCase;
+      this.setSearchQuery(detail.query);
+      const matchCaseBtn = this.contentEl.querySelector(
+        '.input-right-decorator[aria-label="Match case"]',
+      );
+      if (matchCaseBtn) {
+        matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
+      }
+      void this.refreshVisibleList();
+    };
+    window.addEventListener(
+      'todoseq:history-select',
+      this.historySelectHandler,
+    );
 
-        // Focus event handler
-        inputEl.addEventListener('focus', () => {
-          this.handleSearchFocus();
-        });
+    this.createSearchDropdowns(inputEl);
+  }
 
-        // Listen for history selection to restore match case state
-        this.historySelectHandler = (e: Event) => {
-          const detail = (e as CustomEvent).detail as {
-            query: string;
-            matchCase: boolean;
-          };
-          // Guard: if the user typed a different query before this
-          // setTimeout(0) fired, skip to avoid overwriting their input
-          const currentInput = this.searchInputEl?.value ?? '';
-          if (currentInput !== detail.query) return;
-          this.isCaseSensitive = detail.matchCase;
-          this.setSearchQuery(detail.query);
-          const matchCaseBtn = this.contentEl.querySelector(
-            '.input-right-decorator[aria-label="Match case"]',
-          );
-          if (matchCaseBtn) {
-            matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
-          }
-          void this.refreshVisibleList();
-        };
-        window.addEventListener(
-          'todoseq:history-select',
-          this.historySelectHandler,
-        );
+  /** Construct the search dropdowns (idempotent). */
+  private createSearchDropdowns(inputEl: HTMLInputElement): void {
+    if (this.optionsDropdown || this.suggestionDropdown) return;
 
-        // Keydown event handler
-        inputEl.addEventListener('keydown', (e) => {
-          if (this.optionsDropdown && this.optionsDropdown.handleKeyDown(e)) {
-            e.preventDefault();
-            e.stopPropagation();
-          } else if (
-            this.suggestionDropdown &&
-            this.suggestionDropdown.handleKeyDown(e)
-          ) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        });
-      })
-      .catch((error) => {
-        console.error('Failed to load search suggestion dropdowns:', error);
-      });
+    this.suggestionDropdown = new SearchSuggestionDropdown(
+      inputEl,
+      this.app.vault,
+      this.app,
+      this.tasks,
+      this.plugin.settings,
+      this.getViewMode(),
+    );
+
+    this.optionsDropdown = new SearchOptionsDropdown(
+      inputEl,
+      this.app.vault,
+      this.tasks,
+      this.plugin.settings,
+      this.suggestionDropdown,
+    );
+
+    // Set up visibility change callbacks to manage debounce timer
+    this.suggestionDropdown.setOnVisibilityChange((isVisible) => {
+      this.handleDropdownVisibilityChange(isVisible);
+    });
+    this.optionsDropdown.setOnVisibilityChange((isVisible) => {
+      this.handleDropdownVisibilityChange(isVisible);
+    });
+
+    // Wire up saved search support
+    this.optionsDropdown.setSavedSearches(this.plugin.settings.savedSearches);
+    const savedSearchCallbacks: SavedSearchCallbacks = {
+      onApply: (search) => {
+        void this.applySavedSearch(search);
+      },
+      onEdit: (search) => {
+        this.openEditSavedSearchDialog(search);
+      },
+      onDelete: (search) => {
+        this.deleteSavedSearch(search);
+      },
+      onSaveFromHistory: (query) => {
+        this.openSaveSearchDialog(query);
+      },
+    };
+    this.optionsDropdown.setSavedSearchCallbacks(savedSearchCallbacks);
+    console.debug('[TODOseq] search dropdowns ready');
   }
 
   private handleSearchInputForSuggestions(): void {
-    if (
-      !this.searchInputEl ||
-      !this.optionsDropdown ||
-      !this.suggestionDropdown
-    )
-      return;
+    const inputEl = this.searchInputEl;
+    if (!inputEl) return;
+    if (!this.optionsDropdown || !this.suggestionDropdown) {
+      this.createSearchDropdowns(inputEl);
+    }
+    if (!this.optionsDropdown || !this.suggestionDropdown) return;
 
-    const value = this.searchInputEl.value;
-    const cursorPos = this.searchInputEl.selectionStart ?? 0;
+    const value = inputEl.value;
+    const cursorPos = inputEl.selectionStart ?? 0;
 
     // Check if we should show suggestions
     if (value.length === 0) {
@@ -1059,22 +1339,20 @@ export class TaskListView extends ItemView {
   }
 
   private handleSearchFocus(): void {
-    if (
-      !this.searchInputEl ||
-      !this.optionsDropdown ||
-      !this.suggestionDropdown
-    )
-      return;
-
-    const value = this.searchInputEl.value;
-
-    if (value.length === 0) {
-      // Show options dropdown when focusing empty input
-      void this.optionsDropdown.showOptionsDropdown().catch((error) => {
-        console.error('Error showing options dropdown:', error);
-      });
-      this.suggestionDropdown.hide();
+    const inputEl = this.searchInputEl;
+    if (!inputEl) return;
+    if (!this.optionsDropdown || !this.suggestionDropdown) {
+      this.createSearchDropdowns(inputEl);
     }
+    if (!this.optionsDropdown || !this.suggestionDropdown) return;
+
+    // Always offer the options panel (prefixes, saved searches, history) when
+    // the field is focused or clicked, regardless of the current query, so the
+    // saved-search list is always reachable.
+    void this.optionsDropdown.showOptionsDropdown().catch((error) => {
+      console.error('Error showing options dropdown:', error);
+    });
+    this.suggestionDropdown.hide();
   }
 
   /**
@@ -1174,6 +1452,36 @@ export class TaskListView extends ItemView {
       }
     }
 
+    // Apply sort-direction override if specified
+    if (search.sortDirection) {
+      this.setSortDirection(search.sortDirection);
+      this.plugin.settings.taskListSortDirection = search.sortDirection;
+      this.updateSortDirectionIcon();
+    }
+
+    // Apply grouping override if specified
+    if (search.groupBy !== undefined) {
+      this.setGroupBy(search.groupBy);
+      this.plugin.settings.taskListGroupBy = search.groupBy;
+      if (this.groupByEl) {
+        this.groupByEl.value = search.groupBy;
+      }
+    }
+
+    // Apply group-direction override if specified
+    if (search.groupDirection) {
+      this.setGroupDirection(search.groupDirection);
+      this.plugin.settings.taskListGroupDirection = search.groupDirection;
+      this.updateGroupDirectionIcon();
+    }
+    if (
+      search.sortDirection ||
+      search.groupBy !== undefined ||
+      search.groupDirection
+    ) {
+      this.debouncedSaveSettings();
+    }
+
     // Apply future task sorting override if specified
     if (search.futureTaskSorting) {
       this.plugin.settings.futureTaskSorting = search.futureTaskSorting;
@@ -1221,6 +1529,9 @@ export class TaskListView extends ItemView {
         const newSearch = createSavedSearch(savedData.name, savedData.query, {
           viewMode: savedData.viewMode,
           sortMethod: savedData.sortMethod,
+          sortDirection: this.getSortDirection(),
+          groupBy: this.getGroupBy(),
+          groupDirection: this.getGroupDirection(),
           futureTaskSorting: savedData.futureTaskSorting,
           matchCase: savedData.matchCase,
         });
@@ -1253,6 +1564,9 @@ export class TaskListView extends ItemView {
           query: savedData.query,
           viewMode: savedData.viewMode,
           sortMethod: savedData.sortMethod,
+          sortDirection: this.getSortDirection(),
+          groupBy: this.getGroupBy(),
+          groupDirection: this.getGroupDirection(),
           futureTaskSorting: savedData.futureTaskSorting,
           matchCase: savedData.matchCase,
         });
@@ -1792,24 +2106,33 @@ export class TaskListView extends ItemView {
     }
 
     const toLoad = Math.min(remaining, LOAD_BATCH_SIZE);
-    const visibleTasks = this.cachedVisibleTasks;
     const startIndex = this.loadedTaskCount;
     const endIndex = startIndex + toLoad;
-    const tasksToLoad = visibleTasks.slice(startIndex, endIndex);
 
-    // Use chunked rendering for the new batch
-    await this.renderQueue.enqueue(
-      tasksToLoad,
-      (task) => {
-        let element = this.taskElementCache.get(task);
-        if (!element) {
-          element = this.buildTaskListItem(task);
-          this.taskElementCache.set(task, element);
-        }
-        return element;
-      },
-      list,
-    );
+    const renderItems = this.cachedRenderItems;
+    if (renderItems) {
+      // Grouped: append the next header/task items in order (headers are
+      // created lazily with their group's first task).
+      await this.renderQueue.enqueue(
+        renderItems.slice(startIndex, endIndex),
+        (item) => this.buildRenderItemElement(item),
+        list,
+      );
+    } else {
+      const tasksToLoad = this.cachedVisibleTasks.slice(startIndex, endIndex);
+      await this.renderQueue.enqueue(
+        tasksToLoad,
+        (task) => {
+          let element = this.taskElementCache.get(task);
+          if (!element) {
+            element = this.buildTaskListItem(task);
+            this.taskElementCache.set(task, element);
+          }
+          return element;
+        },
+        list,
+      );
+    }
 
     // Abort if another refresh was triggered while chunking lazy load
     if (this.refreshGeneration !== currentGeneration) {
@@ -2071,94 +2394,126 @@ export class TaskListView extends ItemView {
     }
 
     if (list) {
-      // Smart diff: reuse existing DOM elements instead of full rebuild
-      // This prevents visible flicker when tasks are updated
+      const groupBy = this.getGroupBy();
+      if (groupBy === 'none') {
+        this.cachedRenderItems = null;
+        // Smart diff: reuse existing DOM elements instead of full rebuild
+        // This prevents visible flicker when tasks are updated
 
-      // Get all existing elements by their stable ID (path:line[:cellIndex])
-      const existingElements = new Map<string, HTMLElement>();
-      const existingKeys = new Set<string>();
-      list.querySelectorAll('li.todoseq-task-item').forEach((el) => {
-        const path = el.getAttribute('data-path');
-        const line = el.getAttribute('data-line');
-        const cellIndex = el.getAttribute('data-cell-index');
-        if (path && line) {
-          // Key format must match getTaskKey() in task-utils.ts
-          const key =
-            cellIndex !== null
-              ? `${path}:${line}:${cellIndex}`
-              : `${path}:${line}`;
-          existingElements.set(key, el as HTMLElement);
-          existingKeys.add(key);
-        }
-      });
+        // Get all existing elements by their stable ID (path:line[:cellIndex])
+        const existingElements = new Map<string, HTMLElement>();
+        const existingKeys = new Set<string>();
+        list.querySelectorAll('li.todoseq-task-item').forEach((el) => {
+          const path = el.getAttribute('data-path');
+          const line = el.getAttribute('data-line');
+          const cellIndex = el.getAttribute('data-cell-index');
+          if (path && line) {
+            // Key format must match getTaskKey() in task-utils.ts
+            const key =
+              cellIndex !== null
+                ? `${path}:${line}:${cellIndex}`
+                : `${path}:${line}`;
+            existingElements.set(key, el as HTMLElement);
+            existingKeys.add(key);
+          }
+        });
 
-      // Determine which visible tasks to render
-      const renderCount = Math.min(visible.length, INITIAL_LOAD_COUNT);
-      const toRender = visible.slice(0, renderCount);
+        // Determine which visible tasks to render
+        const renderCount = Math.min(visible.length, INITIAL_LOAD_COUNT);
+        const toRender = visible.slice(0, renderCount);
 
-      // Build a set of keys we're keeping
-      const keepKeys = new Set<string>();
-      toRender.forEach((t) => {
-        keepKeys.add(getTaskKey(t));
-      });
+        // Build a set of keys we're keeping
+        const keepKeys = new Set<string>();
+        toRender.forEach((t) => {
+          keepKeys.add(getTaskKey(t));
+        });
 
-      // Track which elements we've already used this render cycle
-      const usedKeys = new Set<string>();
+        // Track which elements we've already used this render cycle
+        const usedKeys = new Set<string>();
 
-      // Double-buffer: build all elements in a DocumentFragment first (no yields for refresh),
-      // then swap into DOM in a single operation to prevent flicker
-      const fragment = await this.renderQueue.renderToFragment(
-        toRender,
-        (task) => {
-          const key = getTaskKey(task);
-          let element: HTMLLIElement;
+        // Double-buffer: build all elements in a DocumentFragment first (no yields for refresh),
+        // then swap into DOM in a single operation to prevent flicker
+        const fragment = await this.renderQueue.renderToFragment(
+          toRender,
+          (task) => {
+            const key = getTaskKey(task);
+            let element: HTMLLIElement;
 
-          if (existingElements.has(key)) {
-            // Reuse existing element - but update its content with new task data
-            const existingEl = existingElements.get(key);
-            if (existingEl) {
-              element = existingEl as HTMLLIElement;
-              this.updateTaskElementContent(task, element);
-              usedKeys.add(key);
+            if (existingElements.has(key)) {
+              // Reuse existing element - but update its content with new task data
+              const existingEl = existingElements.get(key);
+              if (existingEl) {
+                element = existingEl as HTMLLIElement;
+                this.updateTaskElementContent(task, element);
+                usedKeys.add(key);
+              } else {
+                element = this.buildTaskListItem(task);
+              }
             } else {
+              // Create new element (task wasn't in DOM before)
               element = this.buildTaskListItem(task);
             }
-          } else {
-            // Create new element (task wasn't in DOM before)
-            element = this.buildTaskListItem(task);
-          }
 
-          // Update cache with the element (whether reused or new)
-          this.taskElementCache.set(task, element);
+            // Update cache with the element (whether reused or new)
+            this.taskElementCache.set(task, element);
 
-          return element;
-        },
-        false, // skip yielding during incremental refresh to prevent flicker
-      );
+            return element;
+          },
+          false, // skip yielding during incremental refresh to prevent flicker
+        );
 
-      // Abort if another refresh superseded us while building!
-      if (this.refreshGeneration !== currentGeneration) {
-        return;
-      }
+        // Abort if another refresh superseded us while building!
+        if (this.refreshGeneration !== currentGeneration) {
+          return;
+        }
 
-      // No-clear swap: create new list element, populate it, then replace old with new
-      // This prevents the brief empty flash from innerHTML = ''
-      const newList = list.cloneNode(false) as HTMLElement;
-      newList.appendChild(fragment);
-      list.parentNode?.replaceChild(newList, list);
+        // No-clear swap: create new list element, populate it, then replace old with new
+        // This prevents the brief empty flash from innerHTML = ''
+        const newList = list.cloneNode(false) as HTMLElement;
+        newList.appendChild(fragment);
+        list.parentNode?.replaceChild(newList, list);
 
-      // Note: We don't need to manually remove old elements - they're gone with the detached old list
+        // Note: We don't need to manually remove old elements - they're gone with the detached old list
 
-      // Update lazy loading state
-      this.renderQueue.clear();
-      this.resetLazyLoading();
-      this.totalTaskCount = visible.length;
-      this.isAllTasksLoaded = renderCount >= visible.length;
-      this.loadedTaskCount = renderCount;
+        // Update lazy loading state
+        this.renderQueue.clear();
+        this.resetLazyLoading();
+        this.totalTaskCount = visible.length;
+        this.isAllTasksLoaded = renderCount >= visible.length;
+        this.loadedTaskCount = renderCount;
 
-      // Set up sentinel observer for lazy loading if there are more tasks
-      if (!this.isAllTasksLoaded) {
-        this.setupSentinelObserver();
+        // Set up sentinel observer for lazy loading if there are more tasks
+        if (!this.isAllTasksLoaded) {
+          this.setupSentinelObserver();
+        }
+      } else {
+        // Grouped: build an ordered header/task plan and render the first batch.
+        const items = this.buildRenderItems(visible);
+        this.cachedRenderItems = items;
+        const renderCount = Math.min(items.length, INITIAL_LOAD_COUNT);
+        const fragment = await this.renderQueue.renderToFragment(
+          items.slice(0, renderCount),
+          (item) => this.buildRenderItemElement(item),
+          false,
+        );
+
+        if (this.refreshGeneration !== currentGeneration) {
+          return;
+        }
+
+        const newList = list.cloneNode(false) as HTMLElement;
+        newList.appendChild(fragment);
+        list.parentNode?.replaceChild(newList, list);
+
+        this.renderQueue.clear();
+        this.resetLazyLoading();
+        this.totalTaskCount = items.length;
+        this.isAllTasksLoaded = renderCount >= items.length;
+        this.loadedTaskCount = renderCount;
+
+        if (!this.isAllTasksLoaded) {
+          this.setupSentinelObserver();
+        }
       }
     }
 

@@ -14,7 +14,12 @@ import {
   readTaskBlockFromVault,
 } from '../../utils/task-sub-bullets';
 import { EmbeddedTaskItemRenderer } from './embedded-task-item-renderer';
-import { groupTasks, getNaturalGroupDirection } from '../../utils/task-group';
+import {
+  groupTasks,
+  getNaturalGroupDirection,
+  buildStateRank,
+  STATE_RANK_GROUPS,
+} from '../../utils/task-group';
 
 /**
  * Snapshot of the last rendered (non-collapsible) list for a container, used
@@ -775,13 +780,7 @@ export class EmbeddedTaskListRenderer {
    */
   private getStateRank(): (state: string) => number {
     const keywordManager = this.plugin.keywordManager;
-    const groups = [
-      'activeKeywords',
-      'inactiveKeywords',
-      'waitingKeywords',
-      'completedKeywords',
-    ] as const;
-    const order = groups.flatMap((group) =>
+    const order = STATE_RANK_GROUPS.flatMap((group) =>
       keywordManager.getKeywordsForGroup(group),
     );
     const key = order.map((keyword) => keyword.toUpperCase()).join('\u0001');
@@ -789,13 +788,7 @@ export class EmbeddedTaskListRenderer {
       return this.stateRankCache.rank;
     }
 
-    const ranks = new Map<string, number>();
-    order.forEach((keyword, index) => {
-      const normalized = keyword.toUpperCase();
-      if (!ranks.has(normalized)) ranks.set(normalized, index);
-    });
-    const rank = (state: string): number =>
-      ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rank = buildStateRank(keywordManager);
     this.stateRankCache = { key, rank };
     return rank;
   }

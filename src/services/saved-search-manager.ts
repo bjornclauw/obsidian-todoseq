@@ -34,6 +34,9 @@ export function createSavedSearch(
   options: {
     viewMode?: TodoTrackerSettings['taskListViewMode'];
     sortMethod?: SortMethod;
+    sortDirection?: SavedSearch['sortDirection'];
+    groupBy?: SavedSearch['groupBy'];
+    groupDirection?: SavedSearch['groupDirection'];
     futureTaskSorting?: TodoTrackerSettings['futureTaskSorting'];
     matchCase?: boolean;
   } = {},
@@ -44,6 +47,9 @@ export function createSavedSearch(
     query,
     viewMode: options.viewMode,
     sortMethod: options.sortMethod,
+    sortDirection: options.sortDirection,
+    groupBy: options.groupBy,
+    groupDirection: options.groupDirection,
     futureTaskSorting: options.futureTaskSorting,
     matchCase: options.matchCase,
   };

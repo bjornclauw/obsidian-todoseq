@@ -95,6 +95,66 @@
   background: var(--background-modifier-border, rgba(0, 0, 0, 0.1));
 }
 
+/* Results bar: task count + sort-direction toggle / sort / group-by controls */
+.todoseq-panel .search-results-info {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
+
+.todoseq-panel .search-results-info .search-results-result-count {
+  flex-grow: 1;
+}
+
+/* Select + embedded direction flip (uses the select's own width) */
+.todoseq-panel .todoseq-select-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.todoseq-panel .todoseq-select-control > select.dropdown {
+  padding-right: 2.6em;
+}
+
+.todoseq-panel .todoseq-direction-flip {
+  position: absolute;
+  right: 1.7em;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0;
+}
+
+.todoseq-panel .todoseq-direction-flip.todoseq-hidden {
+  display: none;
+}
+
+/* Group headers in the dedicated task list (match the embedded chrome) */
+.todoseq-panel .todoseq-task-list > li.todoseq-task-group-header {
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-2);
+  margin-top: var(--size-4-2);
+  font-family: var(--font-monospace);
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-panel .todoseq-task-list > li.todoseq-task-group-header:first-child {
+  margin-top: 0;
+}
+
 /* Drag-and-drop */
 .todoseq-panel .todoseq-task-dragging {
   opacity: 0.4;

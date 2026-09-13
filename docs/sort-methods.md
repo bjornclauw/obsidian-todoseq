@@ -59,9 +59,11 @@ Tasks are sorted by their alphabetically-first tag (the `#` is ignored for compa
 
 ### Direction and secondary keys
 
-The Task List dropdown uses each method's default direction. In `todoseq` code blocks you can
-also set an explicit direction (`asc`/`desc`) and a second key after a comma — for example
-`sort: scheduled asc, priority desc`. See [Embedded Task Lists](./embedded-task-lists.html#sort-method).
+The Task List has an ↑/↓ flip embedded in the sort dropdown: click it to reverse the current
+sort (changing the sort method resets the direction to that method's natural default). In
+`todoseq` code blocks you can also set an explicit direction (`asc`/`desc`) and a second key
+after a comma — for example `sort: scheduled asc, priority desc`. See
+[Embedded Task Lists](./embedded-task-lists.html#sort-method).
 
 ### Note on Warning Periods
 

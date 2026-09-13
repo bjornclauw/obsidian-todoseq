@@ -42,6 +42,7 @@ jest.mock('obsidian', () => ({
   Platform: { isMobile: false, isMacOS: false },
   MarkdownView: jest.fn(),
   setIcon: jest.fn(),
+  setTooltip: jest.fn(),
   Notice: jest.fn(),
   ConfirmationModal: jest.fn().mockImplementation(() => {
     const instance: any = {
@@ -293,6 +294,152 @@ describe('TaskListView', () => {
     });
   });
 
+  describe('sort direction accessors', () => {
+    it('should set and get an explicit sort direction', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['setSortDirection']('asc');
+      expect(view['getSortDirection']()).toBe('asc');
+    });
+
+    it('should fall back to the setting, then natural', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      (pluginMock.settings as any).taskListSortDirection = 'desc';
+      expect(view['getSortDirection']()).toBe('desc');
+      (pluginMock.settings as any).taskListSortDirection = 'natural';
+      expect(view['getSortDirection']()).toBe('natural');
+    });
+
+    it('should resolve the effective direction for the current method', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view.setSortMethod('sortByPriority');
+      expect(view['getEffectiveSortDirection']()).toBe('desc');
+      view['setSortDirection']('asc');
+      expect(view['getEffectiveSortDirection']()).toBe('asc');
+    });
+  });
+
+  describe('group-by accessors', () => {
+    it('should set and get the grouping field', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['setGroupBy']('folder');
+      expect(view['getGroupBy']()).toBe('folder');
+    });
+
+    it('should fall back to the setting, then none', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['contentEl'].setAttribute('data-group-by', 'bogus');
+      (pluginMock.settings as any).taskListGroupBy = 'priority';
+      expect(view['getGroupBy']()).toBe('priority');
+      (pluginMock.settings as any).taskListGroupBy = 'none';
+      expect(view['getGroupBy']()).toBe('none');
+    });
+
+    it('should set and get an explicit group direction', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['setGroupDirection']('desc');
+      expect(view['getGroupDirection']()).toBe('desc');
+    });
+
+    it('should resolve the effective group direction for the field', () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      view['setGroupBy']('priority');
+      expect(view['getEffectiveGroupDirection']()).toBe('desc');
+      view['setGroupDirection']('asc');
+      expect(view['getEffectiveGroupDirection']()).toBe('asc');
+    });
+  });
+
+  describe('buildRenderItems', () => {
+    it('should return task items only when grouping is off', () => {
+      const tasks = [
+        createBaseTask({ path: 'a.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'a.md', line: 1, text: 'B' }),
+      ];
+      view['setGroupBy']('none');
+      const items = view['buildRenderItems'](tasks);
+      expect(items).toHaveLength(2);
+      expect(items.every((item: any) => item.kind === 'task')).toBe(true);
+    });
+
+    it('should emit a header followed by its tasks for folder grouping', () => {
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'b/two.md', line: 0, text: 'B' }),
+      ];
+      view['setGroupBy']('folder');
+      const items = view['buildRenderItems'](tasks);
+      expect(items.map((item: any) => item.kind)).toEqual([
+        'header',
+        'task',
+        'header',
+        'task',
+      ]);
+      expect((items[0] as any).group.label).toBe('a/');
+      expect((items[2] as any).group.label).toBe('b/');
+    });
+
+    it('should honour an explicit group direction', () => {
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'b/two.md', line: 0, text: 'B' }),
+      ];
+      view['setGroupBy']('folder');
+      view['setGroupDirection']('desc');
+      const items = view['buildRenderItems'](tasks);
+      expect((items[0] as any).group.label).toBe('b/');
+    });
+
+    it('should duplicate a multi-tag task with distinct item keys', () => {
+      const tasks = [
+        createBaseTask({
+          path: 'a.md',
+          line: 0,
+          text: 'multi',
+          tags: ['work', 'urgent'],
+        }),
+      ];
+      view['setGroupBy']('tag');
+      const items = view['buildRenderItems'](tasks);
+      const taskItems = items.filter((item: any) => item.kind === 'task');
+      expect(taskItems).toHaveLength(2);
+      expect((taskItems[0] as any).itemKey).not.toBe(
+        (taskItems[1] as any).itemKey,
+      );
+    });
+  });
+
+  describe('buildGroupHeaderItem', () => {
+    it('should render a header li with label and count', () => {
+      const group = {
+        key: 'a/',
+        label: 'a/',
+        tasks: [createBaseTask(), createBaseTask()],
+      };
+      const li = view['buildGroupHeaderItem'](group);
+      expect(li.classList.contains('todoseq-task-group-header')).toBe(true);
+      expect(
+        li.querySelector('.todoseq-embedded-task-group-label')?.textContent,
+      ).toBe('a/');
+      expect(
+        li.querySelector('.todoseq-embedded-task-group-count')?.textContent,
+      ).toBe('2');
+    });
+  });
+
   describe('search query', () => {
     it('should set and get search query', () => {
       if (!view['contentEl']) {
@@ -307,6 +454,36 @@ describe('TaskListView', () => {
         view['contentEl'] = activeDocument.createElement('div');
       }
       expect(view['getSearchQuery']()).toBe('');
+    });
+  });
+
+  describe('search options dropdown', () => {
+    it('shows the options dropdown when the search field is focused', async () => {
+      const input = document.createElement('input');
+      input.type = 'search';
+      document.body.appendChild(input);
+      view['searchInputEl'] = input;
+
+      view['setupSearchSuggestions']();
+      input.focus();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      expect(document.querySelector('.todoseq-dropdown.show')).not.toBeNull();
+      input.remove();
+    });
+
+    it('shows the options dropdown when the search field is clicked', async () => {
+      const input = document.createElement('input');
+      input.type = 'search';
+      document.body.appendChild(input);
+      view['searchInputEl'] = input;
+
+      view['setupSearchSuggestions']();
+      input.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      expect(document.querySelector('.todoseq-dropdown.show')).not.toBeNull();
+      input.remove();
     });
   });
 

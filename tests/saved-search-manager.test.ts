@@ -73,10 +73,16 @@ describe('saved-search-manager', () => {
       const search = createSavedSearch('Test', 'scheduled:today', {
         viewMode: 'hideCompleted',
         sortMethod: 'sortByScheduled',
+        sortDirection: 'desc',
+        groupBy: 'status',
+        groupDirection: 'asc',
         futureTaskSorting: 'hideFuture',
       });
       expect(search.viewMode).toBe('hideCompleted');
       expect(search.sortMethod).toBe('sortByScheduled');
+      expect(search.sortDirection).toBe('desc');
+      expect(search.groupBy).toBe('status');
+      expect(search.groupDirection).toBe('asc');
       expect(search.futureTaskSorting).toBe('hideFuture');
     });
 
@@ -84,6 +90,9 @@ describe('saved-search-manager', () => {
       const search = createSavedSearch('Test', 'tag:work');
       expect(search.viewMode).toBeUndefined();
       expect(search.sortMethod).toBeUndefined();
+      expect(search.sortDirection).toBeUndefined();
+      expect(search.groupBy).toBeUndefined();
+      expect(search.groupDirection).toBeUndefined();
       expect(search.futureTaskSorting).toBeUndefined();
     });
 
@@ -265,7 +274,7 @@ describe('settings migration v5 - saved searches', () => {
       someSetting: 'value',
     };
     const result = migrateSettings(settings as Record<string, unknown>);
-    expect(result.settingsVersion).toBe(6);
+    expect(result.settingsVersion).toBe(7);
     expect(result.savedSearches).toBeDefined();
     const searches = result.savedSearches as SavedSearch[];
     expect(searches).toHaveLength(3);
@@ -286,7 +295,7 @@ describe('settings migration v5 - saved searches', () => {
       savedSearches: existingSearches,
     };
     const result = migrateSettings(settings as Record<string, unknown>);
-    expect(result.settingsVersion).toBe(6);
+    expect(result.settingsVersion).toBe(7);
     const searches = result.savedSearches as SavedSearch[];
     expect(searches).toHaveLength(1);
     expect(searches[0].name).toBe('Custom');
@@ -313,8 +322,8 @@ describe('settings migration v5 - saved searches', () => {
     expect(today!.sortMethod).toBe('sortByScheduled');
   });
 
-  test('getLatestSettingsVersion should return 6', () => {
-    expect(getLatestSettingsVersion()).toBe(6);
+  test('getLatestSettingsVersion should return 7', () => {
+    expect(getLatestSettingsVersion()).toBe(7);
   });
 });
 

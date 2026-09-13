@@ -613,6 +613,9 @@ A saved search captures the complete view configuration:
 - **Search query** - the full search string
 - **View mode** - optional override (show all / sort completed last / hide completed)
 - **Sort method** - optional override (scheduled / deadline / priority / urgency / etc.)
+- **Sort direction** - optional override (natural / ascending / descending)
+- **Group by** - optional override (folder / file / heading / status / priority / scheduled / deadline / closed / started / tag)
+- **Group direction** - optional override (natural / ascending / descending)
 - **Future task sorting** - optional override (show / show upcoming / sort to end / hide)
 - **Match case** - optional override (on / off)
 

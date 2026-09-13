@@ -2,22 +2,18 @@ import {
   sortTasksWithThreeBlockSystem,
   buildKeywordSortConfig,
   KeywordSortConfig,
+  SortMethod,
+  SortDirection,
+  getNaturalDirection,
 } from '../../utils/task-sort';
 import { Task } from '../../types/task';
 import TodoTracker from '../../main';
 import { KeywordManager } from '../../utils/keyword-manager';
 
+export type { SortMethod };
+
 export type TaskListViewMode =
   'showAll' | 'sortCompletedLast' | 'hideCompleted';
-export type SortMethod =
-  | 'default'
-  | 'sortByScheduled'
-  | 'sortByDeadline'
-  | 'sortByClosedDate'
-  | 'sortByStarted'
-  | 'sortByPriority'
-  | 'sortByUrgency'
-  | 'sortByKeyword';
 
 export class TaskListFilter {
   private plugin: TodoTracker;
@@ -64,7 +60,8 @@ export class TaskListFilter {
         attr === 'sortByUrgency' ||
         attr === 'sortByKeyword' ||
         attr === 'sortByClosedDate' ||
-        attr === 'sortByStarted'
+        attr === 'sortByStarted' ||
+        attr === 'sortByTag'
       )
         return attr;
     }
@@ -76,7 +73,8 @@ export class TaskListFilter {
       defaultSortMethod === 'sortByUrgency' ||
       defaultSortMethod === 'sortByKeyword' ||
       defaultSortMethod === 'sortByClosedDate' ||
-      defaultSortMethod === 'sortByStarted'
+      defaultSortMethod === 'sortByStarted' ||
+      defaultSortMethod === 'sortByTag'
     ) {
       return defaultSortMethod;
     }
@@ -98,6 +96,7 @@ export class TaskListFilter {
     tasks: Task[],
     mode: TaskListViewMode,
     sortMethod: SortMethod,
+    direction: SortDirection | 'natural' = 'natural',
   ): Task[] {
     const now = new Date();
 
@@ -130,6 +129,9 @@ export class TaskListFilter {
       keywordConfig = this.getKeywordSortConfig();
     }
 
+    const effectiveDirection: SortDirection =
+      direction === 'natural' ? getNaturalDirection(sortMethod) : direction;
+
     const sortedTasks = sortTasksWithThreeBlockSystem(
       tasks,
       now,
@@ -148,6 +150,7 @@ export class TaskListFilter {
         skipDeadlinePrewarningIfScheduled:
           this.plugin.settings.skipDeadlinePrewarningIfScheduled,
       },
+      effectiveDirection,
     );
 
     return sortedTasks;

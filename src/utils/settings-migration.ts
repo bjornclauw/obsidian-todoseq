@@ -82,6 +82,19 @@ const MIGRATIONS: SettingsMigrations[] = [
       return { ...settings };
     },
   },
+  {
+    version: 7,
+    migrate: (settings: Record<string, unknown>) => {
+      // v7: added task-list grouping + sort-direction defaults (both preserve
+      // current behaviour: no grouping, each method's natural direction).
+      return {
+        ...settings,
+        taskListGroupBy: settings['taskListGroupBy'] ?? 'none',
+        taskListSortDirection: settings['taskListSortDirection'] ?? 'natural',
+        taskListGroupDirection: settings['taskListGroupDirection'] ?? 'natural',
+      };
+    },
+  },
 ];
 
 export function migrateSettings(

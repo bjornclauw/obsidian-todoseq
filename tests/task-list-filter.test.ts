@@ -141,6 +141,7 @@ describe('TaskListFilter', () => {
         'sortByPriority',
         'sortByUrgency',
         'sortByKeyword',
+        'sortByTag',
       ] as const;
 
       for (const method of methods) {
@@ -179,6 +180,48 @@ describe('TaskListFilter', () => {
       );
       const result = filter.transformForView(tasks, 'showAll', 'sortByKeyword');
       expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('transformForView - sort direction', () => {
+    const priorityTasks = [
+      createBaseTask({ text: 'low', priority: 'low', path: 'a.md', line: 0 }),
+      createBaseTask({ text: 'high', priority: 'high', path: 'a.md', line: 1 }),
+    ];
+
+    const makeFilter = () => {
+      const pluginMock = createPluginMock();
+      return new TaskListFilter(pluginMock, (pluginMock as any).keywordManager);
+    };
+
+    it('applies an explicit ascending direction', () => {
+      const result = makeFilter().transformForView(
+        priorityTasks,
+        'showAll',
+        'sortByPriority',
+        'asc',
+      );
+      expect(result.map((t) => t.text)).toEqual(['low', 'high']);
+    });
+
+    it('applies an explicit descending direction', () => {
+      const result = makeFilter().transformForView(
+        priorityTasks,
+        'showAll',
+        'sortByPriority',
+        'desc',
+      );
+      expect(result.map((t) => t.text)).toEqual(['high', 'low']);
+    });
+
+    it("resolves 'natural' using the method's default (priority = desc)", () => {
+      const result = makeFilter().transformForView(
+        priorityTasks,
+        'showAll',
+        'sortByPriority',
+        'natural',
+      );
+      expect(result.map((t) => t.text)).toEqual(['high', 'low']);
     });
   });
 

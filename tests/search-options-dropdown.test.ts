@@ -204,6 +204,16 @@ describe('SearchOptionsDropdown - Comprehensive Tests', () => {
       expect(suggestionItems?.length).toBeGreaterThan(0);
     });
 
+    it('should include description, heading and started prefixes', async () => {
+      await dropdown.showOptionsDropdown();
+
+      const container = activeDocument.querySelector('.todoseq-dropdown');
+      const text = container?.textContent ?? '';
+      expect(text).toContain('description:');
+      expect(text).toContain('heading:');
+      expect(text).toContain('started:');
+    });
+
     it('should render search options with descriptions', async () => {
       await dropdown.showOptionsDropdown();
 

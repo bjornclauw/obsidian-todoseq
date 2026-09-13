@@ -95,14 +95,17 @@ describe('SearchOptionsDropdown - Coverage Gap Tests', () => {
       const dropdown = createDropdown();
       await dropdown.showOptionsDropdown('pat');
       const items = dropdown['currentSuggestions'];
-      expect(items.length).toBeLessThan(10);
+      expect(items.length).toBeLessThan(13);
       expect(items.some((s) => s.includes('path:'))).toBe(true);
     });
 
     it('returns all options when search term is empty', async () => {
       const dropdown = createDropdown();
       await dropdown.showOptionsDropdown('');
-      expect(dropdown['currentSuggestions'].length).toBe(10);
+      expect(dropdown['currentSuggestions'].length).toBe(13);
+      expect(dropdown['currentSuggestions']).toContain('description:');
+      expect(dropdown['currentSuggestions']).toContain('heading:');
+      expect(dropdown['currentSuggestions']).toContain('started:');
     });
 
     it('returns empty array for non-matching search term', async () => {
@@ -407,7 +410,7 @@ describe('SearchOptionsDropdown - Coverage Gap Tests', () => {
       );
 
       historyItems[0].dispatchEvent(new MouseEvent('mouseover'));
-      expect(dropdown['selectedIndex']).toBe(10);
+      expect(dropdown['selectedIndex']).toBe(13);
 
       const selectedAfter = dropdown['containerEl'].querySelectorAll(
         '.search-suggest-item:not(.mod-group).is-selected',
@@ -444,12 +447,12 @@ describe('SearchOptionsDropdown - Coverage Gap Tests', () => {
       dropdown.addToHistory('history query');
       await dropdown.showOptionsDropdown();
 
-      for (let i = 0; i <= 10; i++) {
+      for (let i = 0; i <= 13; i++) {
         dropdown.handleKeyDown(
           new KeyboardEvent('keydown', { key: 'ArrowDown' }),
         );
       }
-      expect(dropdown['selectedIndex']).toBe(10);
+      expect(dropdown['selectedIndex']).toBe(13);
 
       const enterEvent = new KeyboardEvent('keydown', {
         key: 'Enter',
@@ -505,7 +508,7 @@ describe('SearchOptionsDropdown - Coverage Gap Tests', () => {
       dropdown.addToHistory('tab history');
       await dropdown.showOptionsDropdown();
 
-      for (let i = 0; i <= 10; i++) {
+      for (let i = 0; i <= 13; i++) {
         dropdown.handleKeyDown(
           new KeyboardEvent('keydown', { key: 'ArrowDown' }),
         );
@@ -772,7 +775,7 @@ describe('SearchOptionsDropdown - Coverage Gap Tests', () => {
       dropdown.addToHistory('query2');
       await dropdown.showOptionsDropdown();
 
-      expect(dropdown['getTotalItems']()).toBe(12);
+      expect(dropdown['getTotalItems']()).toBe(15);
     });
   });
 

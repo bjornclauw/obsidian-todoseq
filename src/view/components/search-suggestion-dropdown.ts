@@ -2,7 +2,7 @@ import { Vault, App } from 'obsidian';
 import { Task } from '../../types/task';
 import { SearchSuggestions } from '../../search/search-suggestions';
 import { TodoTrackerSettings } from '../../settings/settings-types';
-import { TaskListViewMode } from '../task-list/task-list-view';
+import { TaskListViewMode } from '../task-list/task-list-filter';
 import { BaseDropdown } from './base-dropdown';
 
 export class SearchSuggestionDropdown extends BaseDropdown {
