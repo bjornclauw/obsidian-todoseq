@@ -23,6 +23,21 @@ jest.mock('obsidian', () => ({
   }),
   Notice: jest.fn(),
   Modal: class {},
+  AbstractInputSuggest: class MockAbstractInputSuggest {
+    app: unknown;
+    textInputEl: unknown;
+    constructor(app: unknown, el: unknown) {
+      this.app = app;
+      this.textInputEl = el;
+    }
+    setValue(): void {}
+    getValue(): string {
+      return '';
+    }
+    open(): void {}
+    close(): void {}
+  },
+  getAllTags: () => null,
   TFile: jest.fn(),
   WorkspaceLeaf: jest.fn(),
   requireApiVersion: jest.fn().mockReturnValue(true),

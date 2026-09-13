@@ -218,3 +218,39 @@ export function requireApiVersion(version: string): boolean {
 export function normalizePath(path: string): string {
   return path;
 }
+
+export function getAllTags(cache: unknown): string[] | null {
+  const tags = (cache as { tags?: unknown } | null)?.tags;
+  return Array.isArray(tags) ? (tags as string[]) : null;
+}
+
+export abstract class AbstractInputSuggest<T> {
+  limit = 100;
+
+  constructor(
+    public app: unknown,
+    public textInputEl: unknown,
+  ) {}
+
+  protected abstract getSuggestions(query: string): T[] | Promise<T[]>;
+
+  renderSuggestion(_value: T, _el: HTMLElement): void {}
+
+  selectSuggestion(_value: T, _evt: MouseEvent | KeyboardEvent): void {}
+
+  setValue(_value: string): void {}
+
+  getValue(): string {
+    return '';
+  }
+
+  open(): void {}
+
+  close(): void {}
+
+  onSelect(
+    _callback: (value: T, evt: MouseEvent | KeyboardEvent) => unknown,
+  ): this {
+    return this;
+  }
+}

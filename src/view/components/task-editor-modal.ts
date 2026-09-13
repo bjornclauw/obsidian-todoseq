@@ -6,6 +6,7 @@ import { DateUtils } from '../../utils/date-utils';
 import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
 import { TaskComposeFields } from '../../services/task-writer';
 import { DatePicker, DatePickerMode } from './date-picker-menu';
+import { TagInputSuggest, collectVaultTags } from './tag-input-suggest';
 
 /** Delay before focusing the task text, to let the modal finish opening. */
 const FOCUS_DELAY_MS = 50;
@@ -187,6 +188,18 @@ export class TaskEditorModal extends Modal {
     });
     textInput.value = this.options.initial.text;
 
+    // Tag autocomplete (`#`) for the task text and description fields. The
+    // vault tag list is scanned once and shared by both suggesters.
+    const hasMetadataCache = !!this.app?.metadataCache;
+    let vaultTags: string[] | null = null;
+    const getVaultTags = (): string[] => {
+      if (vaultTags === null) vaultTags = collectVaultTags(this.app);
+      return vaultTags;
+    };
+    const textTagSuggest = hasMetadataCache
+      ? new TagInputSuggest(this.app, textInput, getVaultTags)
+      : null;
+
     // State keyword
     const stateGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
     stateGroup.createEl('label', { text: 'State' });
@@ -283,6 +296,10 @@ export class TaskEditorModal extends Modal {
         attr: { type: 'text', placeholder: 'Optional notes' },
       });
       descInput.value = this.options.initial.description ?? '';
+      // Obsidian tag autocomplete (type `#` to suggest vault tags).
+      if (hasMetadataCache) {
+        new TagInputSuggest(this.app, descInput, getVaultTags);
+      }
     }
 
     // Buttons (sticky at the bottom of the scroll container)
@@ -306,16 +323,11 @@ export class TaskEditorModal extends Modal {
     textInput.addEventListener('keydown', (e: KeyboardEvent) => {
       textInput.removeClass('todoseq-task-editor-input-error');
       if (e.key === 'Enter' && !e.shiftKey) {
+        // Let the tag autocomplete consume Enter while its popover is open;
+        // otherwise submit the task.
+        if (e.defaultPrevented || textTagSuggest?.isOpen()) return;
         e.preventDefault();
         void this.submit(textInput, stateSelect, descInput);
-      }
-    });
-
-    descInput?.addEventListener('keydown', (e: KeyboardEvent) => {
-      // Descriptions are single-line, but Enter/Shift+Enter should not
-      // submit the form from this field.
-      if (e.key === 'Enter') {
-        e.preventDefault();
       }
     });
 
