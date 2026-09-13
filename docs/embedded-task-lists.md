@@ -28,6 +28,7 @@ Using the following parameters within the `todoseq` code block you define which 
 - `limit:` (optional) set the display limit to restrict the number of results shown
 - `show-completed:` (optional) one of `show`, `hide`, `sort-to-end`. Controls how completed tasks are displayed. Defaults to `show`. (`completed:` is an alternative alias)
 - `show-file:` (optional) `show`, `hide`, `true`, or `false`. Controls whether to show the source file info column. Defaults to `show` (responsive layout)
+- `show-tag:` (optional) `show`, `hide`, `true`, or `false`. Controls whether inline tags within task text are displayed. Defaults to `show`
 - `show-future:` (optional) one of `show-all`, `show-upcoming`, `hide`, `sort-to-end`. Controls how future-dated tasks are displayed. Defaults to `show-all`. (`future:` is an alternative alias)
 - `show-query:` (optional) `show`, `hide`, `true`, or `false`. Controls whether to show the search query and filter parameters in the header. Defaults to `show`
 - `wrap-content:` (optional) `true`, `false`, `wrap`, `truncate`, or `dynamic`. Controls whether task text wraps to multiple lines or truncates with ellipsis. Defaults to `dynamic` (responsive - truncates on wide screens, wraps on mobile). When wrap is enabled, file info moves to a new row with full filename
@@ -195,6 +196,22 @@ The `show-file:` parameter controls whether to display the source file informati
 ```todoseq
 search: tag:project1
 show-file: false
+```
+````
+
+### Show Tags
+
+The `show-tag:` parameter controls whether inline tags inside task text are displayed:
+
+- `true` or `show` - Show inline tags (default)
+- `false` or `hide` - Hide inline tags from the task text
+
+When hidden, tags are removed from the rendered task text (surrounding whitespace is collapsed) while links and other inline content are still rendered.
+
+````txt
+```todoseq
+search: tag:project1
+show-tag: false
 ```
 ````
 

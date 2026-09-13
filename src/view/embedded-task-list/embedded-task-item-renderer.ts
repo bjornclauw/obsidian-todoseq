@@ -606,7 +606,7 @@ export class EmbeddedTaskItemRenderer {
       if (textContainer.children.length > 1) {
         textSpan.appendText(' ');
       }
-      this.renderTaskTextWithLinks(task, textSpan);
+      this.renderTaskTextWithLinks(task, textSpan, params?.showTag !== false);
     }
 
     // Add description if enabled via code block parameter or global setting
@@ -937,8 +937,18 @@ export class EmbeddedTaskItemRenderer {
     }
   }
 
-  private renderTaskTextWithLinks(task: Task, parent: HTMLElement) {
-    const textToProcess = getTaskTextDisplay(task);
+  private renderTaskTextWithLinks(
+    task: Task,
+    parent: HTMLElement,
+    showTag = true,
+  ) {
+    const rawText = getTaskTextDisplay(task);
+    const textToProcess = showTag
+      ? rawText
+      : rawText
+          .replace(TAG_PATTERN, '')
+          .replace(/[ \t]{2,}/g, ' ')
+          .trim();
     const patterns: { type: 'wiki' | 'md' | 'url' | 'tag'; regex: RegExp }[] = [
       { type: 'wiki', regex: new RegExp(WIKI_LINK_REGEX) },
       { type: 'md', regex: new RegExp(MD_LINK_REGEX) },

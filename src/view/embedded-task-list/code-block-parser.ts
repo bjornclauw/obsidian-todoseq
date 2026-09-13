@@ -129,6 +129,7 @@ export interface TodoseqParameters {
   future?: FutureOption;
   limit?: number;
   showFile?: boolean;
+  showTag?: boolean; // show inline tags within task text (default: show)
   showUrgency?: boolean; // show the calculated urgency score next to the file info
   title?: string;
   showQuery?: boolean;
@@ -182,6 +183,7 @@ export class TodoseqCodeBlockParser {
       let future: FutureOption | undefined;
       let limit: number | undefined;
       let showFile: boolean | undefined;
+      let showTag: boolean | undefined;
       let showUrgency: boolean | undefined; // show the calculated urgency score
       let title: string | undefined;
       let showQuery: boolean | undefined;
@@ -347,6 +349,20 @@ export class TodoseqCodeBlockParser {
           } else {
             throw new Error(
               `Invalid show-file option: ${showFileValue}. Valid options: true, false, show, hide`,
+            );
+          }
+        } else if (trimmed.startsWith('show-tag:')) {
+          const showTagValue = trimmed
+            .substring('show-tag:'.length)
+            .trim()
+            .toLowerCase();
+          if (showTagValue === 'false' || showTagValue === 'hide') {
+            showTag = false;
+          } else if (showTagValue === 'true' || showTagValue === 'show') {
+            showTag = true;
+          } else {
+            throw new Error(
+              `Invalid show-tag option: ${showTagValue}. Valid options: true, false, show, hide`,
             );
           }
         } else if (trimmed.startsWith('show-urgency:')) {
@@ -565,6 +581,7 @@ export class TodoseqCodeBlockParser {
         future,
         limit,
         showFile,
+        showTag,
         showUrgency,
         title,
         showQuery,
@@ -593,6 +610,7 @@ export class TodoseqCodeBlockParser {
         secondarySortDirection: undefined,
         error: errorMessage,
         showFile: undefined,
+        showTag: undefined,
         showUrgency: undefined,
         title: undefined,
         showQuery: undefined,

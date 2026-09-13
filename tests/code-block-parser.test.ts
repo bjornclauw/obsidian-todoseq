@@ -573,6 +573,59 @@ collapse: true`;
     });
   });
 
+  describe('show-tag parameter', () => {
+    it('should parse show-tag: true', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\nshow-tag: true',
+      );
+      expect(params.showTag).toBe(true);
+      expect(params.error).toBeUndefined();
+    });
+
+    it('should parse show-tag: show as true', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\nshow-tag: show',
+      );
+      expect(params.showTag).toBe(true);
+      expect(params.error).toBeUndefined();
+    });
+
+    it('should parse show-tag: false as hidden tags', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\nshow-tag: false',
+      );
+      expect(params.showTag).toBe(false);
+      expect(params.error).toBeUndefined();
+    });
+
+    it('should parse show-tag: hide as false', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\nshow-tag: hide',
+      );
+      expect(params.showTag).toBe(false);
+      expect(params.error).toBeUndefined();
+    });
+
+    it('should be case-insensitive and tolerate whitespace', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\n  show-tag:   TRUE  ',
+      );
+      expect(params.showTag).toBe(true);
+    });
+
+    it('should default to undefined (show tags) when not specified', () => {
+      const params = TodoseqCodeBlockParser.parse('search: tag:test');
+      expect(params.showTag).toBeUndefined();
+    });
+
+    it('should error on invalid show-tag value', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'search: tag:test\nshow-tag: invalid',
+      );
+      expect(params.error).toContain('Invalid show-tag option');
+    });
+  });
+
   describe('group-by parameter', () => {
     it('should parse group-by: folder', () => {
       const params = TodoseqCodeBlockParser.parse('group-by: folder');

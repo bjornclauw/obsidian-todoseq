@@ -18,6 +18,7 @@ sort: priority
 - `show-completed:` (optional) overrides "Completed tasks" setting. `show`, `hide`, `sort-to-end`.
 - `show-future:` (optional) overrides "Future dated tasks" setting. `show-all`, `show-upcoming`, `hide`, `sort-to-end`.
 - `show-file:` (optional) `show` or `hide`. Controls whether to show the source file info column. Defaults to `true` (responsive layout).
+- `show-tag:` (optional) `show` or `hide`. Controls whether inline tags within task text are displayed. Defaults to `show`.
 - `show-query:` (optional) `show` or `hide`. Controls whether to show the search query and filter parameters in the header.
 
 ```todoseq

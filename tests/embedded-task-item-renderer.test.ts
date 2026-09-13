@@ -668,6 +668,61 @@ describe('EmbeddedTaskItemRenderer', () => {
       expect(parent.querySelector('.embedded-task-link-like')).toBeFalsy();
       expect(parent.textContent).toBe('Simple text');
     });
+
+    it('hides tags when showTag is false', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: 'Task with #tag' });
+      renderer.renderTaskTextWithLinks(task, parent, false);
+
+      expect(parent.querySelector('.todoseq-embedded-task-tag')).toBeFalsy();
+      expect(parent.textContent).toBe('Task with');
+    });
+
+    it('hides a leading tag when showTag is false', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: '#tag Task text' });
+      renderer.renderTaskTextWithLinks(task, parent, false);
+
+      expect(parent.querySelector('.todoseq-embedded-task-tag')).toBeFalsy();
+      expect(parent.textContent).toBe('Task text');
+    });
+
+    it('hides middle tags without leaving double spaces', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: 'Task #one #two text' });
+      renderer.renderTaskTextWithLinks(task, parent, false);
+
+      expect(parent.textContent).toBe('Task text');
+    });
+
+    it('still renders links when tags are hidden', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: 'See [[Some Page]] #tag' });
+      renderer.renderTaskTextWithLinks(task, parent, false);
+
+      const linkSpan = parent.querySelector('.embedded-task-link-like');
+      expect(linkSpan).toBeTruthy();
+      expect(linkSpan?.textContent).toBe('Some Page');
+      expect(parent.querySelector('.todoseq-embedded-task-tag')).toBeFalsy();
+    });
+
+    it('shows tags when showTag is true', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: 'Task with #tag' });
+      renderer.renderTaskTextWithLinks(task, parent, true);
+
+      expect(parent.querySelector('.todoseq-embedded-task-tag')).toBeTruthy();
+    });
+
+    it('shows tags by default when showTag is omitted', () => {
+      const parent = document.createElement('span');
+      const task = createBaseTask({ text: 'Task with #tag' });
+      renderer.renderTaskTextWithLinks(task, parent);
+
+      const tagSpan = parent.querySelector('.todoseq-embedded-task-tag');
+      expect(tagSpan).toBeTruthy();
+      expect(tagSpan?.textContent).toBe('#tag');
+    });
   });
 
   describe('createTaskListItem', () => {
