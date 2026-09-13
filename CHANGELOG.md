@@ -15,6 +15,7 @@
 - **Complete saved searches.** The save/edit dialog now exposes sort direction, grouping and group direction, and adds `Tag` as a sort method. Leaving a field on "Use current setting" falls back to the view at apply time, and editing a saved search no longer overwrites its grouping or directions with the current view. The built-in presets (Today, Overdue, Active) reset grouping to none.
 - **Hide tags in embedded task lists.** New `show-tag:` code block option (`show`, `hide`, `true`, `false`, default `show`). Set `show-tag: false` to remove inline tags from rendered task text; surrounding whitespace is collapsed and links are unaffected.
 - **Public API for other plugins.** TODOseq now exposes a versioned API at `app.plugins.plugins.todoseq.api` for integrations such as Calendar Period Week Notes: `getTasks()`, `onTasksChanged(callback)` (with an unsubscribe function), `toggleTask(path, line, cellIndex?)`, `setTaskState(path, line, newState, cellIndex?)`, and `rescan()`. State changes route through the same update pipeline as the plugin's views, so recurrence and CLOSED/STARTED handling apply.
+- **Calendar Period Week Notes integration.** This API is used by [Calendar Period Week Notes](https://github.com/fikte/calendar-period-week-notes) to read and complete TODOseq tasks alongside Obsidian Tasks and Todoist Sync. A pull request adding TODOseq as a task provider is pending upstream.
 
 ### Changed
 
