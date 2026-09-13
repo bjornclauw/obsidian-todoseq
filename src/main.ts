@@ -24,6 +24,7 @@ import { EventCoordinator } from './services/event-coordinator';
 import { ChangeTracker } from './services/change-tracker';
 import { SmartDateProcessor } from './services/smart-date-processor';
 import { TaskEditorController } from './services/task-editor-controller';
+import { TodoseqApi, TodoseqApiImpl } from './api/todoseq-api';
 
 export const TASK_VIEW_ICON = 'list-todo';
 
@@ -69,6 +70,9 @@ export default class TodoTracker extends Plugin {
 
   // Controller for the mobile-first task editor modal
   public taskEditorController: TaskEditorController | null = null;
+
+  // Public API for other plugins: app.plugins.plugins.todoseq.api
+  public api: TodoseqApi | null = null;
 
   // Public getter methods for internal services
   public getVaultScanner(): VaultScanner | null {
@@ -116,6 +120,9 @@ export default class TodoTracker extends Plugin {
 
     // Delegate to lifecycle manager (which initializes taskUpdateCoordinator, vaultScanner, embeddedTaskListProcessor, readerViewFormatter, and smart date processor)
     await this.lifecycleManager.onload();
+
+    // Expose the public API now that all services are initialized
+    this.api = new TodoseqApiImpl(this);
   }
 
   // Helper: refresh all open Todo views to reflect current tasks without stealing focus

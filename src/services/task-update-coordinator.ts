@@ -54,7 +54,8 @@ export type UpdateType =
 /**
  * Source of the update (for debugging/tracking)
  */
-export type UpdateSource = 'editor' | 'reader' | 'task-list' | 'embedded';
+export type UpdateSource =
+  'editor' | 'reader' | 'task-list' | 'embedded' | 'api';
 
 /**
  * Context object for a task update operation.

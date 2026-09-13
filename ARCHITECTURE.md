@@ -1462,6 +1462,13 @@ The indicator uses monospace font and appears in both the main task list and emb
 - **Search History**: Implement custom search history management
 - **Search Filters**: Extend prefix filter suggestions and behavior
 
+### 7. Public API for External Plugins
+
+- **`TodoseqApi`** (`src/api/todoseq-api.ts`) is exposed as `app.plugins.plugins.todoseq.api` after `PluginLifecycleManager.onload()` completes.
+- **Read**: `getTasks()` (delegates to `TaskStateManager`), `onTasksChanged(callback)` (wraps `TaskStateManager.subscribe`, returns an unsubscribe function).
+- **Write**: `toggleTask(path, line, cellIndex?)` and `setTaskState(path, line, newState, cellIndex?)` compute the target state via `getStateTransitionManager`/`TaskStateTransitionManager`, then call `TaskUpdateCoordinator.updateTaskByPath(..., 'api', ...)`.
+- **Maintenance**: the API is versioned (`TODOSEQ_API_VERSION`) and must stay decoupled from internal services — it depends only on the small `TodoseqApiHost` shape so it can be unit-tested without a full plugin.
+
 ## Development Guidelines
 
 ### For Developers

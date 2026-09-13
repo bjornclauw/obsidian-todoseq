@@ -32,6 +32,10 @@ export default {
           { text: 'Experimental', link: '/experimental-features' },
         ],
       },
+      {
+        text: 'Developers',
+        items: [{ text: 'Public API', link: '/api' }],
+      },
     ],
 
     socialLinks: [
