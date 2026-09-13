@@ -20,7 +20,10 @@ import {
 } from '../components/search-options-dropdown';
 import { SearchSuggestionDropdown } from '../components/search-suggestion-dropdown';
 import { SavedSearchDialog } from '../components/saved-search-dialog';
-import { SavedSearch } from '../../settings/settings-types';
+import {
+  SavedSearch,
+  TodoTrackerSettings,
+} from '../../settings/settings-types';
 import {
   createSavedSearch,
   addSavedSearch,
@@ -69,25 +72,11 @@ import {
   StateRankCache,
   GroupByField,
   TaskGroup,
+  GROUP_BY_OPTIONS,
 } from '../../utils/task-group';
 
 const INITIAL_LOAD_COUNT = 50;
 const LOAD_BATCH_SIZE = 30;
-
-/** Choices for the Group-by dropdown in the results bar. */
-const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'folder', label: 'Folder' },
-  { value: 'file', label: 'File' },
-  { value: 'heading', label: 'Heading' },
-  { value: 'status', label: 'Status' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'deadline', label: 'Deadline' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'started', label: 'Started' },
-  { value: 'tag', label: 'Tag' },
-];
 
 /**
  * A single rendered entry in the (optionally grouped) list: either a group
@@ -100,18 +89,46 @@ type TaskListRenderItem =
 
 export type { TaskListViewMode, SortMethod } from './task-list-filter';
 
+/**
+ * Session-only view preferences overridden by the active saved search.
+ * A missing key means "use the user's baseline preference".
+ */
+interface SavedSearchViewOverrides {
+  viewMode?: TaskListViewMode;
+  futureTaskSorting?: TodoTrackerSettings['futureTaskSorting'];
+  sortMethod?: SortMethod;
+  sortDirection?: SortDirection | 'natural';
+  groupBy?: GroupByField | 'none';
+  groupDirection?: SortDirection | 'natural';
+  matchCase?: boolean;
+}
+
 export class TaskListView extends ItemView {
   static viewType = 'todoseq-view';
 
   tasks: Task[];
   private defaultViewMode: TaskListViewMode;
-  private defaultSortMethod: SortMethod;
   private searchInputEl: HTMLInputElement | null = null;
   private wiredInputEl: HTMLInputElement | null = null;
   private saveSearchBtn: HTMLElement | null = null;
   private sortDirectionEl: HTMLElement | null = null;
   private groupByEl: HTMLSelectElement | null = null;
   private groupDirectionEl: HTMLElement | null = null;
+  private viewModeEl: HTMLSelectElement | null = null;
+  private sortMethodEl: HTMLSelectElement | null = null;
+  private futureTaskSortingEl: HTMLSelectElement | null = null;
+  private taskDescriptionEl: HTMLSelectElement | null = null;
+  private matchCaseEl: HTMLElement | null = null;
+  /**
+   * Session-only view overrides applied by the active saved search. `effective`
+   * values resolve as `override ?? baseline`, where the baseline is the user's
+   * persisted preference (settings). Overrides are never persisted, so applying
+   * a saved search cannot silently change the user's defaults.
+   */
+  private savedSearchOverrides: SavedSearchViewOverrides = {};
+  private overrideSourceName: string | null = null;
+  /** True once the user edits anything after applying a saved search. */
+  private savedSearchModified = false;
   private collapseAllBtn: HTMLElement | null = null;
   private _searchKeyHandler: ((e: KeyboardEvent) => void) | undefined;
   private isCaseSensitive = false;
@@ -208,7 +225,6 @@ export class TaskListView extends ItemView {
     this.taskStateManager = taskStateManager;
     this.tasks = taskStateManager.getTasks();
     this.defaultViewMode = defaultViewMode;
-    this.defaultSortMethod = plugin.settings.defaultSortMethod;
     this.keywordManager = keywordManager;
     // Capture the coordinator from the plugin (set by PluginLifecycleManager).
     // Mirrors how this.taskStateManager is passed explicitly via the constructor.
@@ -375,68 +391,64 @@ export class TaskListView extends ItemView {
     this.taskListContainer.scrollTop += scrollDelta;
   }
 
-  /** View-mode accessors persisted on the root element to avoid cross-class coupling */
-  private getViewMode(): TaskListViewMode {
-    const attr = this.contentEl.getAttr('data-view-mode');
-    if (typeof attr === 'string') {
-      // Migrate old mode names to new ones
-      if (attr === 'default') return 'showAll';
-      if (attr === 'sortCompletedLast') return 'sortCompletedLast';
-      if (attr === 'hideCompleted') return 'hideCompleted';
-      // Handle new mode names
-      if (
-        attr === 'showAll' ||
-        attr === 'sortCompletedLast' ||
-        attr === 'hideCompleted'
-      )
-        return attr;
-    }
-    // Fallback to current plugin setting from constructor if attribute not set
-    // Handle migration from old mode names
-    const defaultMode = this.defaultViewMode as string; // Treat as string for migration
-    if (defaultMode === 'default') return 'showAll';
-    if (defaultMode === 'sortCompletedLast') return 'sortCompletedLast';
-    if (defaultMode === 'hideCompleted') return 'hideCompleted';
+  // ---------------------------------------------------------------------------
+  // View preferences: baseline (settings) + session overrides (saved search).
+  // effective = override ?? baseline. Overrides are never persisted.
+  // ---------------------------------------------------------------------------
+
+  private getViewModePreference(): TaskListViewMode {
+    const mode = this.plugin.settings.taskListViewMode;
     if (
-      defaultMode === 'showAll' ||
-      defaultMode === 'sortCompletedLast' ||
-      defaultMode === 'hideCompleted'
+      mode === 'showAll' ||
+      mode === 'sortCompletedLast' ||
+      mode === 'hideCompleted'
     ) {
-      return defaultMode;
+      return mode;
     }
-    // Final safety fallback
-    return 'showAll';
+    // Fallback to the value captured when the view was created.
+    return this.defaultViewMode ?? 'showAll';
   }
+  private getSortMethodPreference(): SortMethod {
+    const persisted = this.plugin.settings.taskListSortMethod;
+    return isSortMethod(persisted) ? persisted : 'default';
+  }
+  private getSortDirectionPreference(): SortDirection | 'natural' {
+    const setting = this.plugin.settings.taskListSortDirection;
+    return setting === 'asc' || setting === 'desc' || setting === 'natural'
+      ? setting
+      : 'natural';
+  }
+
+  /** Effective view mode: saved-search override, else the user's baseline. */
+  private getViewMode(): TaskListViewMode {
+    return this.savedSearchOverrides.viewMode ?? this.getViewModePreference();
+  }
+  /** Manual change: persist to the baseline and drop the saved-search override. */
   setViewMode(mode: TaskListViewMode) {
-    this.contentEl.setAttr('data-view-mode', mode);
+    this.plugin.settings.taskListViewMode = mode;
+    delete this.savedSearchOverrides.viewMode;
   }
 
   private getSortMethod(): SortMethod {
-    const attr = this.contentEl.getAttr('data-sort-method');
-    if (isSortMethod(attr)) return attr;
-    // Fall back to the last-used task-list sort, then the configured default.
-    const persisted = this.plugin.settings.taskListSortMethod;
-    if (isSortMethod(persisted)) return persisted;
-    if (isSortMethod(this.defaultSortMethod)) return this.defaultSortMethod;
-    // Final safety fallback
-    return 'default';
+    return (
+      this.savedSearchOverrides.sortMethod ?? this.getSortMethodPreference()
+    );
   }
   setSortMethod(method: SortMethod) {
-    this.contentEl.setAttr('data-sort-method', method);
+    this.plugin.settings.taskListSortMethod = method;
+    delete this.savedSearchOverrides.sortMethod;
   }
 
-  /** Sort-direction preference: explicit asc/desc or 'natural' (per-method default). */
+  /** Sort direction: explicit asc/desc or 'natural' (per-method default). */
   private getSortDirection(): SortDirection | 'natural' {
-    const attr = this.contentEl.getAttr('data-sort-direction');
-    if (attr === 'asc' || attr === 'desc' || attr === 'natural') return attr;
-    const setting = this.plugin.settings.taskListSortDirection;
-    if (setting === 'asc' || setting === 'desc' || setting === 'natural') {
-      return setting;
-    }
-    return 'natural';
+    return (
+      this.savedSearchOverrides.sortDirection ??
+      this.getSortDirectionPreference()
+    );
   }
   private setSortDirection(direction: SortDirection | 'natural') {
-    this.contentEl.setAttr('data-sort-direction', direction);
+    this.plugin.settings.taskListSortDirection = direction;
+    delete this.savedSearchOverrides.sortDirection;
   }
 
   /** The direction actually applied after resolving 'natural' for the current method. */
@@ -456,34 +468,178 @@ export class TaskListView extends ItemView {
     this.sortDirectionEl.setAttribute('aria-label', label);
   }
 
-  /** Grouping preference for the list. */
-  private getGroupBy(): GroupByField | 'none' {
-    const attr = this.contentEl.getAttr('data-group-by');
-    if (GROUP_BY_OPTIONS.some((option) => option.value === attr)) {
-      return attr as GroupByField | 'none';
-    }
+  private getGroupByPreference(): GroupByField | 'none' {
     const setting = this.plugin.settings.taskListGroupBy;
-    if (GROUP_BY_OPTIONS.some((option) => option.value === setting)) {
-      return setting;
-    }
-    return 'none';
+    return GROUP_BY_OPTIONS.some((option) => option.value === setting)
+      ? setting
+      : 'none';
   }
-  private setGroupBy(field: GroupByField | 'none') {
-    this.contentEl.setAttr('data-group-by', field);
+  private getGroupDirectionPreference(): SortDirection | 'natural' {
+    const setting = this.plugin.settings.taskListGroupDirection;
+    return setting === 'asc' || setting === 'desc' || setting === 'natural'
+      ? setting
+      : 'natural';
   }
 
-  /** Group-direction preference: explicit asc/desc or 'natural' (per-field default). */
+  private getGroupBy(): GroupByField | 'none' {
+    return this.savedSearchOverrides.groupBy ?? this.getGroupByPreference();
+  }
+  private setGroupBy(field: GroupByField | 'none') {
+    this.plugin.settings.taskListGroupBy = field;
+    delete this.savedSearchOverrides.groupBy;
+  }
+
+  /** Group direction: explicit asc/desc or 'natural' (per-field default). */
   private getGroupDirection(): SortDirection | 'natural' {
-    const attr = this.contentEl.getAttr('data-group-direction');
-    if (attr === 'asc' || attr === 'desc' || attr === 'natural') return attr;
-    const setting = this.plugin.settings.taskListGroupDirection;
-    if (setting === 'asc' || setting === 'desc' || setting === 'natural') {
-      return setting;
-    }
-    return 'natural';
+    return (
+      this.savedSearchOverrides.groupDirection ??
+      this.getGroupDirectionPreference()
+    );
   }
   private setGroupDirection(direction: SortDirection | 'natural') {
-    this.contentEl.setAttr('data-group-direction', direction);
+    this.plugin.settings.taskListGroupDirection = direction;
+    delete this.savedSearchOverrides.groupDirection;
+  }
+
+  /** Future-dated-task handling: preference and effective value. */
+  private getFutureTaskSortingPreference(): TodoTrackerSettings['futureTaskSorting'] {
+    const setting = this.plugin.settings.futureTaskSorting;
+    return setting === 'showAll' ||
+      setting === 'showUpcoming' ||
+      setting === 'sortToEnd' ||
+      setting === 'hideFuture'
+      ? setting
+      : 'showAll';
+  }
+  private getFutureTaskSorting(): TodoTrackerSettings['futureTaskSorting'] {
+    return (
+      this.savedSearchOverrides.futureTaskSorting ??
+      this.getFutureTaskSortingPreference()
+    );
+  }
+  private setFutureTaskSorting(
+    value: TodoTrackerSettings['futureTaskSorting'],
+  ) {
+    this.plugin.settings.futureTaskSorting = value;
+    delete this.savedSearchOverrides.futureTaskSorting;
+  }
+
+  /** Effective match-case state (saved-search override aware). */
+  private isMatchCaseActive(): boolean {
+    return this.savedSearchOverrides.matchCase ?? this.isCaseSensitive;
+  }
+  private setMatchCase(value: boolean) {
+    this.isCaseSensitive = value;
+    delete this.savedSearchOverrides.matchCase;
+  }
+
+  /**
+   * Apply a saved search's view overrides for the current session only.
+   * Keys the saved search does not specify fall through to the user's baseline.
+   */
+  private applySavedSearchOverrides(search: SavedSearch): void {
+    const overrides: SavedSearchViewOverrides = {};
+    if (search.viewMode) overrides.viewMode = search.viewMode;
+    if (search.futureTaskSorting) {
+      overrides.futureTaskSorting = search.futureTaskSorting;
+    }
+    if (search.sortMethod) overrides.sortMethod = search.sortMethod;
+    if (search.sortDirection) overrides.sortDirection = search.sortDirection;
+    if (search.groupBy !== undefined) overrides.groupBy = search.groupBy;
+    if (search.groupDirection) {
+      overrides.groupDirection = search.groupDirection;
+    }
+    if (search.matchCase !== undefined) overrides.matchCase = search.matchCase;
+    this.savedSearchOverrides = overrides;
+    this.overrideSourceName = search.name;
+  }
+
+  /** Drop all saved-search overrides, restoring the user's baselines. */
+  private clearSavedSearchOverrides(): void {
+    this.savedSearchOverrides = {};
+    this.overrideSourceName = null;
+  }
+
+  /**
+   * Leave the active saved search because the user changed something manually.
+   * The changed control has already written its new value to the baseline; all
+   * other settings revert to the user's saved defaults.
+   */
+  private leaveSavedSearchIfActive(): void {
+    if (this.overrideSourceName === null) return;
+    this.savedSearchModified = true;
+    this.clearSavedSearchOverrides();
+  }
+
+  /**
+   * React to a manual change of the search text or a task-list view setting:
+   * leave any active saved search, re-sync the controls (so the defaults show)
+   * and update the save/bookmark button state.
+   */
+  private onManualPreferenceChange(): void {
+    this.leaveSavedSearchIfActive();
+    this.syncPreferenceControls();
+    this.updateSaveSearchBtnVisibility(this.getSearchQuery());
+  }
+
+  /** Push effective preference values back into the toolbar controls. */
+  syncPreferenceControls(): void {
+    if (this.viewModeEl) this.viewModeEl.value = this.getViewMode();
+    if (this.futureTaskSortingEl) {
+      this.futureTaskSortingEl.value = this.getFutureTaskSorting();
+    }
+    if (this.taskDescriptionEl) {
+      this.taskDescriptionEl.value =
+        this.plugin.settings.taskDescriptionDisplay;
+    }
+    if (this.sortMethodEl) this.sortMethodEl.value = this.getSortMethod();
+    if (this.groupByEl) this.groupByEl.value = this.getGroupBy();
+    if (this.matchCaseEl) {
+      this.matchCaseEl.toggleClass('is-active', this.isMatchCaseActive());
+    }
+    this.updateSortDirectionIcon();
+    this.updateGroupDirectionIcon();
+    this.updatePreferenceHighlights();
+  }
+
+  /** Mark controls whose value is temporarily overridden by a saved search. */
+  private updatePreferenceHighlights(): void {
+    const overrides = this.savedSearchOverrides;
+    const source = this.overrideSourceName;
+    const mark = (
+      el: HTMLElement | null,
+      overridden: boolean,
+      label: string,
+    ): void => {
+      if (!el) return;
+      el.toggleClass('todoseq-pref-overridden', overridden);
+      if (overridden && source) {
+        el.setAttribute('data-override-source', source);
+        el.setAttribute('title', `${label} set by saved search: ${source}`);
+      } else {
+        el.removeAttribute('data-override-source');
+        el.removeAttribute('title');
+      }
+    };
+    mark(this.viewModeEl, overrides.viewMode !== undefined, 'Completed tasks');
+    mark(
+      this.futureTaskSortingEl,
+      overrides.futureTaskSorting !== undefined,
+      'Future dated tasks',
+    );
+    mark(this.sortMethodEl, overrides.sortMethod !== undefined, 'Sort method');
+    mark(
+      this.sortDirectionEl,
+      overrides.sortDirection !== undefined,
+      'Sort direction',
+    );
+    mark(this.groupByEl, overrides.groupBy !== undefined, 'Grouping');
+    mark(
+      this.groupDirectionEl,
+      overrides.groupDirection !== undefined,
+      'Group direction',
+    );
+    mark(this.matchCaseEl, overrides.matchCase !== undefined, 'Match case');
   }
 
   /** The group direction applied after resolving 'natural' for the current field. */
@@ -808,6 +964,7 @@ export class TaskListView extends ItemView {
       mode,
       sortMethod,
       this.getSortDirection(),
+      this.getFutureTaskSorting(),
     );
   }
 
@@ -852,6 +1009,11 @@ export class TaskListView extends ItemView {
       void (async () => {
         inputEl.value = '';
         this.setSearchQuery('');
+        // Clearing the search also drops any saved-search overrides so the
+        // user's baselines return.
+        this.clearSavedSearchOverrides();
+        this.savedSearchModified = false;
+        this.syncPreferenceControls();
         this.updateSaveSearchBtnVisibility('');
         await this.refreshVisibleList();
       })();
@@ -861,12 +1023,13 @@ export class TaskListView extends ItemView {
       attr: { 'aria-label': 'Match case' },
     });
     setIcon(matchCase, 'uppercase-lowercase-a');
+    this.matchCaseEl = matchCase;
 
     // Toggle case sensitivity
     matchCase.addEventListener('click', () => {
       void (async () => {
-        this.isCaseSensitive = !this.isCaseSensitive;
-        matchCase.toggleClass('is-active', this.isCaseSensitive);
+        this.setMatchCase(!this.isMatchCaseActive());
+        this.onManualPreferenceChange();
         await this.refreshVisibleList();
       })();
     });
@@ -884,7 +1047,9 @@ export class TaskListView extends ItemView {
         this.searchRefreshDebounceTimer = null;
         // Update attribute and re-render list only, preserving focus
         this.setSearchQuery(inputEl.value);
-        this.updateSaveSearchBtnVisibility(inputEl.value);
+        // Editing the query means the user is building a new search: leave any
+        // active saved search and restore the defaults.
+        this.onManualPreferenceChange();
         void this.refreshVisibleList();
         // Start debounce timer for history capture
         this.handleSearchHistoryDebounce(inputEl.value);
@@ -926,9 +1091,10 @@ export class TaskListView extends ItemView {
     setIcon(this.saveSearchBtn, 'lucide-bookmark');
     this.saveSearchBtn.addEventListener('click', () => {
       const query = this.getSearchQuery();
-      const matchingSaved = query.trim()
-        ? findSavedSearchByQuery(this.plugin.settings, query)
-        : undefined;
+      const matchingSaved =
+        query.trim() && !this.savedSearchModified
+          ? findSavedSearchByQuery(this.plugin.settings, query)
+          : undefined;
       if (matchingSaved) {
         this.openEditSavedSearchDialog(matchingSaved);
       } else {
@@ -1005,6 +1171,7 @@ export class TaskListView extends ItemView {
     // Set current view mode
     const currentMode = this.getViewMode();
     dropdown.value = currentMode;
+    this.viewModeEl = dropdown;
 
     // Toggle settings section visibility
     const toggleSettings = () => {
@@ -1036,10 +1203,8 @@ export class TaskListView extends ItemView {
     dropdown.addEventListener('change', () => {
       const selectedValue = dropdown.value as TaskListViewMode;
       this.setViewMode(selectedValue);
-
-      // Persist settings directly
-      this.plugin.settings.taskListViewMode = selectedValue;
       this.debouncedSaveSettings();
+      this.onManualPreferenceChange();
 
       // Refresh the visible list - preserve scroll position
       this.refreshVisibleList(false).catch((error) => {
@@ -1092,7 +1257,8 @@ export class TaskListView extends ItemView {
     }
 
     // Set current future task sorting mode
-    futureDropdown.value = this.plugin.settings.futureTaskSorting;
+    this.futureTaskSortingEl = futureDropdown;
+    futureDropdown.value = this.getFutureTaskSorting();
 
     // Handle future task sorting changes
     futureDropdown.addEventListener('change', () => {
@@ -1100,9 +1266,9 @@ export class TaskListView extends ItemView {
         const selectedValue = futureDropdown.value as
           'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture';
 
-        // Update settings and re-render
-        this.plugin.settings.futureTaskSorting = selectedValue;
+        this.setFutureTaskSorting(selectedValue);
         this.debouncedSaveSettings();
+        this.onManualPreferenceChange();
 
         // Re-render with new future task sorting - preserve scroll position
         await this.refreshVisibleList(false);
@@ -1146,6 +1312,7 @@ export class TaskListView extends ItemView {
     }
 
     // Set current description display mode
+    this.taskDescriptionEl = descriptionsDropdown;
     descriptionsDropdown.value = this.plugin.settings.taskDescriptionDisplay;
 
     // Handle description display changes
@@ -1156,6 +1323,7 @@ export class TaskListView extends ItemView {
         // Update settings and re-render
         this.plugin.settings.taskDescriptionDisplay = selectedValue;
         this.debouncedSaveSettings();
+        this.onManualPreferenceChange();
 
         // Refresh vault scanner's keyword manager so renderer sees fresh settings
         if (this.plugin.vaultScanner) {
@@ -1217,6 +1385,7 @@ export class TaskListView extends ItemView {
     // Set current sort mode
     const currentSortMethod = this.getSortMethod();
     select.value = currentSortMethod;
+    this.sortMethodEl = select;
 
     // Direction flip, overlaid inside the select's own right padding
     const directionBtn = sortControl.createDiv({
@@ -1229,9 +1398,8 @@ export class TaskListView extends ItemView {
       const next: SortDirection =
         this.getEffectiveSortDirection() === 'asc' ? 'desc' : 'asc';
       this.setSortDirection(next);
-      this.plugin.settings.taskListSortDirection = next;
       this.debouncedSaveSettings();
-      this.updateSortDirectionIcon();
+      this.onManualPreferenceChange();
       void this.refreshVisibleList(true);
     };
     directionBtn.addEventListener('click', toggleSortDirection);
@@ -1267,13 +1435,11 @@ export class TaskListView extends ItemView {
 
       // Update the sort method (keep the current view mode)
       this.setSortMethod(sortMethod);
-      this.plugin.settings.taskListSortMethod = sortMethod;
 
       // Changing the sort resets direction to the new method's natural default
       this.setSortDirection('natural');
-      this.plugin.settings.taskListSortDirection = 'natural';
       this.debouncedSaveSettings();
-      this.updateSortDirectionIcon();
+      this.onManualPreferenceChange();
 
       // Update the dropdown to reflect the current sort method
       select.value = sortMethod;
@@ -1310,9 +1476,8 @@ export class TaskListView extends ItemView {
       const next: SortDirection =
         this.getEffectiveGroupDirection() === 'asc' ? 'desc' : 'asc';
       this.setGroupDirection(next);
-      this.plugin.settings.taskListGroupDirection = next;
       this.debouncedSaveSettings();
-      this.updateGroupDirectionIcon();
+      this.onManualPreferenceChange();
       void this.refreshVisibleList(true);
     };
     groupDirectionBtn.addEventListener('click', toggleGroupDirection);
@@ -1326,10 +1491,8 @@ export class TaskListView extends ItemView {
     groupBySelect.addEventListener('change', () => {
       const value = groupBySelect.value as GroupByField | 'none';
       this.setGroupBy(value);
-      this.plugin.settings.taskListGroupBy = value;
       // Changing the grouping resets direction to the new field's natural default
       this.setGroupDirection('natural');
-      this.plugin.settings.taskListGroupDirection = 'natural';
       if (value === 'none') {
         // No groups to collapse: reset to show everything.
         this.collapsedGroupKeys.clear();
@@ -1337,7 +1500,7 @@ export class TaskListView extends ItemView {
       }
       this.debouncedSaveSettings();
       groupBySelect.value = value;
-      this.updateGroupDirectionIcon();
+      this.onManualPreferenceChange();
       this.updateCollapseAllButton();
       // Reset to top since the layout changes fundamentally
       void this.refreshVisibleList(true);
@@ -1448,14 +1611,9 @@ export class TaskListView extends ItemView {
         // setTimeout(0) fired, skip to avoid overwriting their input
         const currentInput = this.searchInputEl?.value ?? '';
         if (currentInput !== detail.query) return;
-        this.isCaseSensitive = detail.matchCase;
+        this.setMatchCase(detail.matchCase);
         this.setSearchQuery(detail.query);
-        const matchCaseBtn = this.contentEl.querySelector(
-          '.input-right-decorator[aria-label="Match case"]',
-        );
-        if (matchCaseBtn) {
-          matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
-        }
+        this.onManualPreferenceChange();
         void this.refreshVisibleList();
       };
       window.addEventListener(
@@ -1714,7 +1872,7 @@ export class TaskListView extends ItemView {
    */
   private captureSearchToHistory(query: string): void {
     if (!this.optionsDropdown) return;
-    this.optionsDropdown.addToHistory(query, this.isCaseSensitive);
+    this.optionsDropdown.addToHistory(query, this.isMatchCaseActive());
   }
 
   /**
@@ -1731,7 +1889,9 @@ export class TaskListView extends ItemView {
   }
 
   /**
-   * Apply a saved search - sets query, view mode, sort method, and future task sorting
+   * Apply a saved search. Its view settings are applied as session-only
+   * overrides; the user's persisted preferences are left untouched and are
+   * restored when the search is cleared.
    */
   private async applySavedSearch(search: SavedSearch): Promise<void> {
     if (!this.searchInputEl) return;
@@ -1740,75 +1900,9 @@ export class TaskListView extends ItemView {
     this.searchInputEl.value = search.query;
     this.setSearchQuery(search.query);
 
-    // Apply view mode override if specified
-    if (search.viewMode) {
-      this.setViewMode(search.viewMode);
-    }
-
-    // Apply sort method override if specified
-    if (search.sortMethod) {
-      this.setSortMethod(search.sortMethod);
-      // Sync the sort dropdown in the toolbar
-      const sortDropdown = this.contentEl.querySelector(
-        '.search-results-info select',
-      ) as HTMLSelectElement;
-      if (sortDropdown) {
-        sortDropdown.value = search.sortMethod;
-      }
-    }
-
-    // Apply sort-direction override if specified
-    if (search.sortDirection) {
-      this.setSortDirection(search.sortDirection);
-      this.plugin.settings.taskListSortDirection = search.sortDirection;
-      this.updateSortDirectionIcon();
-    }
-
-    // Apply grouping override if specified
-    if (search.groupBy !== undefined) {
-      this.setGroupBy(search.groupBy);
-      this.plugin.settings.taskListGroupBy = search.groupBy;
-      if (this.groupByEl) {
-        this.groupByEl.value = search.groupBy;
-      }
-    }
-
-    // Apply group-direction override if specified
-    if (search.groupDirection) {
-      this.setGroupDirection(search.groupDirection);
-      this.plugin.settings.taskListGroupDirection = search.groupDirection;
-      this.updateGroupDirectionIcon();
-    }
-    if (
-      search.sortDirection ||
-      search.groupBy !== undefined ||
-      search.groupDirection
-    ) {
-      this.debouncedSaveSettings();
-    }
-
-    // Apply future task sorting override if specified
-    if (search.futureTaskSorting) {
-      this.plugin.settings.futureTaskSorting = search.futureTaskSorting;
-      void this.plugin.saveSettings();
-      // Sync the future task dropdown in the settings section
-      const futureDropdown = this.contentEl.querySelector(
-        '#future-tasks-dropdown',
-      ) as HTMLSelectElement;
-      if (futureDropdown) {
-        futureDropdown.value = search.futureTaskSorting;
-      }
-    }
-
-    // Apply match case (defaults to false if not set)
-    this.isCaseSensitive = search.matchCase ?? false;
-    // Sync the match case button in the search input
-    const matchCaseBtn = this.contentEl.querySelector(
-      '.input-right-decorator[aria-label="Match case"]',
-    ) as HTMLElement;
-    if (matchCaseBtn) {
-      matchCaseBtn.toggleClass('is-active', this.isCaseSensitive);
-    }
+    this.savedSearchModified = false;
+    this.applySavedSearchOverrides(search);
+    this.syncPreferenceControls();
 
     // Update save button visibility and active indicator
     this.updateSaveSearchBtnVisibility(search.query);
@@ -1828,15 +1922,18 @@ export class TaskListView extends ItemView {
       query,
       currentViewMode: this.getViewMode(),
       currentSortMethod: this.getSortMethod(),
-      currentFutureTaskSorting: this.plugin.settings.futureTaskSorting,
-      currentMatchCase: this.isCaseSensitive,
+      currentSortDirection: this.getSortDirection(),
+      currentGroupBy: this.getGroupBy(),
+      currentGroupDirection: this.getGroupDirection(),
+      currentFutureTaskSorting: this.getFutureTaskSorting(),
+      currentMatchCase: this.isMatchCaseActive(),
       onSave: (savedData) => {
         const newSearch = createSavedSearch(savedData.name, savedData.query, {
           viewMode: savedData.viewMode,
           sortMethod: savedData.sortMethod,
-          sortDirection: this.getSortDirection(),
-          groupBy: this.getGroupBy(),
-          groupDirection: this.getGroupDirection(),
+          sortDirection: savedData.sortDirection,
+          groupBy: savedData.groupBy,
+          groupDirection: savedData.groupDirection,
           futureTaskSorting: savedData.futureTaskSorting,
           matchCase: savedData.matchCase,
         });
@@ -1861,17 +1958,20 @@ export class TaskListView extends ItemView {
       existingSearch: search,
       currentViewMode: this.getViewMode(),
       currentSortMethod: this.getSortMethod(),
-      currentFutureTaskSorting: this.plugin.settings.futureTaskSorting,
-      currentMatchCase: this.isCaseSensitive,
+      currentSortDirection: this.getSortDirection(),
+      currentGroupBy: this.getGroupBy(),
+      currentGroupDirection: this.getGroupDirection(),
+      currentFutureTaskSorting: this.getFutureTaskSorting(),
+      currentMatchCase: this.isMatchCaseActive(),
       onSave: (savedData) => {
         updateSavedSearch(this.plugin.settings, search.id, {
           name: savedData.name,
           query: savedData.query,
           viewMode: savedData.viewMode,
           sortMethod: savedData.sortMethod,
-          sortDirection: this.getSortDirection(),
-          groupBy: this.getGroupBy(),
-          groupDirection: this.getGroupDirection(),
+          sortDirection: savedData.sortDirection,
+          groupBy: savedData.groupBy,
+          groupDirection: savedData.groupDirection,
           futureTaskSorting: savedData.futureTaskSorting,
           matchCase: savedData.matchCase,
         });
@@ -1936,9 +2036,10 @@ export class TaskListView extends ItemView {
     if (this.saveSearchBtn) {
       this.saveSearchBtn.toggleClass('todoseq-hidden', !hasContent);
 
-      const matchingSaved = hasContent
-        ? findSavedSearchByQuery(this.plugin.settings, query)
-        : undefined;
+      const matchingSaved =
+        hasContent && !this.savedSearchModified
+          ? findSavedSearchByQuery(this.plugin.settings, query)
+          : undefined;
 
       this.saveSearchBtn.toggleClass(
         'todoseq-save-search-btn-active',
@@ -2536,7 +2637,7 @@ export class TaskListView extends ItemView {
             const matches = await Search.evaluate(
               q,
               t,
-              this.isCaseSensitive,
+              this.isMatchCaseActive(),
               this.plugin.settings,
               this.plugin.propertySearchEngine ?? undefined,
             );
@@ -2551,8 +2652,8 @@ export class TaskListView extends ItemView {
         this.searchError = null;
       } catch {
         // If there's an error in parsing, fall back to simple search
-        const searchQuery = this.isCaseSensitive ? q : q.toLowerCase();
-        const searchText = this.isCaseSensitive
+        const searchQuery = this.isMatchCaseActive() ? q : q.toLowerCase();
+        const searchText = this.isMatchCaseActive()
           ? (text: string) => text
           : (text: string) => text.toLowerCase();
 
@@ -2944,6 +3045,9 @@ export class TaskListView extends ItemView {
           evt.preventDefault();
           input.value = '';
           this.setSearchQuery('');
+          this.clearSavedSearchOverrides();
+          this.savedSearchModified = false;
+          this.syncPreferenceControls();
           this.updateSaveSearchBtnVisibility('');
           void this.refreshVisibleList(); // re-render cleared without losing focus context
           queueMicrotask(() => input.blur());

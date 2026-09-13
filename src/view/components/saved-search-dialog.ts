@@ -2,7 +2,21 @@ import {
   SavedSearch,
   TodoTrackerSettings,
 } from '../../settings/settings-types';
-import { TaskListViewMode, SortMethod } from '../task-list/task-list-filter';
+import { TaskListViewMode } from '../task-list/task-list-filter';
+import {
+  SORT_METHODS,
+  SORT_METHOD_LABELS,
+  SortMethod,
+} from '../../utils/task-sort';
+import { GROUP_BY_OPTIONS } from '../../utils/task-group';
+
+/** Direction choices shared by the sort-direction and group-direction fields. */
+const DIRECTION_OPTIONS = [
+  { value: '', label: 'Use current setting' },
+  { value: 'natural', label: 'Default' },
+  { value: 'asc', label: 'Ascending' },
+  { value: 'desc', label: 'Descending' },
+];
 
 export interface SavedSearchDialogOptions {
   /** Existing saved search to edit (undefined for create mode) */
@@ -13,6 +27,12 @@ export interface SavedSearchDialogOptions {
   currentViewMode?: TaskListViewMode;
   /** Current sort method to pre-fill */
   currentSortMethod?: SortMethod;
+  /** Current sort direction to pre-fill */
+  currentSortDirection?: SavedSearch['sortDirection'];
+  /** Current grouping to pre-fill */
+  currentGroupBy?: SavedSearch['groupBy'];
+  /** Current group direction to pre-fill */
+  currentGroupDirection?: SavedSearch['groupDirection'];
   /** Current future task sorting to pre-fill */
   currentFutureTaskSorting?: TodoTrackerSettings['futureTaskSorting'];
   /** Current match case state to pre-fill */
@@ -129,17 +149,15 @@ export class SavedSearchDialog {
       cls: 'todoseq-saved-search-field',
     });
     sortGroup.createEl('label', { text: 'Sort tasks by' });
-    const sortSelect = sortGroup.createEl('select');
+    const sortSelect = sortGroup.createEl('select', {
+      attr: { 'data-field': 'sortMethod' },
+    });
     const sortOptions = [
       { value: '', label: 'Use current setting' },
-      { value: 'default', label: 'Default (file path)' },
-      { value: 'sortByScheduled', label: 'Scheduled date' },
-      { value: 'sortByDeadline', label: 'Deadline date' },
-      { value: 'sortByClosedDate', label: 'Closed date' },
-      { value: 'sortByStarted', label: 'Started date' },
-      { value: 'sortByPriority', label: 'Priority' },
-      { value: 'sortByUrgency', label: 'Urgency' },
-      { value: 'sortByKeyword', label: 'Keyword' },
+      ...SORT_METHODS.map((method) => ({
+        value: method,
+        label: SORT_METHOD_LABELS[method],
+      })),
     ];
     for (const opt of sortOptions) {
       sortSelect.createEl('option', {
@@ -150,6 +168,65 @@ export class SavedSearchDialog {
     sortSelect.value =
       this.options.existingSearch?.sortMethod ??
       this.options.currentSortMethod ??
+      '';
+
+    // Sort direction field
+    const sortDirectionGroup = form.createDiv({
+      cls: 'todoseq-saved-search-field',
+    });
+    sortDirectionGroup.createEl('label', { text: 'Sort direction' });
+    const sortDirectionSelect = sortDirectionGroup.createEl('select', {
+      attr: { 'data-field': 'sortDirection' },
+    });
+    for (const opt of DIRECTION_OPTIONS) {
+      sortDirectionSelect.createEl('option', {
+        attr: { value: opt.value },
+        text: opt.label,
+      });
+    }
+    sortDirectionSelect.value =
+      this.options.existingSearch?.sortDirection ??
+      this.options.currentSortDirection ??
+      '';
+
+    // Group by field
+    const groupByGroup = form.createDiv({
+      cls: 'todoseq-saved-search-field',
+    });
+    groupByGroup.createEl('label', { text: 'Group tasks by' });
+    const groupBySelect = groupByGroup.createEl('select', {
+      attr: { 'data-field': 'groupBy' },
+    });
+    groupBySelect.createEl('option', {
+      attr: { value: '' },
+      text: 'Use current setting',
+    });
+    for (const opt of GROUP_BY_OPTIONS) {
+      groupBySelect.createEl('option', {
+        attr: { value: opt.value },
+        text: opt.label,
+      });
+    }
+    groupBySelect.value =
+      this.options.existingSearch?.groupBy ?? this.options.currentGroupBy ?? '';
+
+    // Group direction field
+    const groupDirectionGroup = form.createDiv({
+      cls: 'todoseq-saved-search-field',
+    });
+    groupDirectionGroup.createEl('label', { text: 'Group direction' });
+    const groupDirectionSelect = groupDirectionGroup.createEl('select', {
+      attr: { 'data-field': 'groupDirection' },
+    });
+    for (const opt of DIRECTION_OPTIONS) {
+      groupDirectionSelect.createEl('option', {
+        attr: { value: opt.value },
+        text: opt.label,
+      });
+    }
+    groupDirectionSelect.value =
+      this.options.existingSearch?.groupDirection ??
+      this.options.currentGroupDirection ??
       '';
 
     // Completed tasks view mode field
@@ -247,6 +324,12 @@ export class SavedSearchDialog {
         viewMode: (viewModeSelect.value || undefined) as
           TaskListViewMode | undefined,
         sortMethod: (sortSelect.value || undefined) as SortMethod | undefined,
+        sortDirection: (sortDirectionSelect.value || undefined) as
+          SavedSearch['sortDirection'] | undefined,
+        groupBy: (groupBySelect.value || undefined) as
+          SavedSearch['groupBy'] | undefined,
+        groupDirection: (groupDirectionSelect.value || undefined) as
+          SavedSearch['groupDirection'] | undefined,
         futureTaskSorting: (futureSelect.value || undefined) as
           TodoTrackerSettings['futureTaskSorting'] | undefined,
         matchCase:

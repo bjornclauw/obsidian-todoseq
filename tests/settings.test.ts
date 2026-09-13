@@ -773,15 +773,6 @@ describe('TodoTrackerSettingTab', () => {
     it('uses the expected control shapes for spot-checked settings', () => {
       const defs = settingTab.getSettingDefinitions();
 
-      const defaultSort = controlOf(findSetting(defs, 'Default sort method'));
-      expect(defaultSort).toMatchObject({
-        type: 'dropdown',
-        key: 'defaultSortMethod',
-      });
-      const defaultSortOptions = defaultSort?.options as Record<string, string>;
-      expect(Object.keys(defaultSortOptions)).toHaveLength(8);
-      expect(Object.keys(defaultSortOptions)).toContain('sortByStarted');
-
       expect(
         controlOf(findSetting(defs, 'Upcoming period (days)')),
       ).toMatchObject({

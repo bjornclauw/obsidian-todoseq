@@ -35,8 +35,7 @@ export interface TodoTrackerSettings {
   includeCommentBlocks: boolean; // when true, tasks inside multiline comment blocks (%%) are included
   taskListViewMode: 'showAll' | 'sortCompletedLast' | 'hideCompleted'; // controls view transformation in the task view
   futureTaskSorting: 'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture'; // controls how future tasks are handled
-  defaultSortMethod: SortMethod; // default sort method for task list view
-  taskListSortMethod?: SortMethod; // last-used sort method for the task list view
+  taskListSortMethod?: SortMethod; // last-used sort method for the task list view (source of truth)
   taskListGroupBy: GroupByField | 'none'; // last-used grouping for the task list view
   taskListSortDirection: 'natural' | 'asc' | 'desc'; // last-used sort direction for the task list view
   taskListGroupDirection: 'natural' | 'asc' | 'desc'; // last-used group direction for the task list view
@@ -91,6 +90,7 @@ export const DEFAULT_SAVED_SEARCHES: SavedSearch[] = [
     query: 'scheduled:today',
     viewMode: 'hideCompleted',
     sortMethod: 'sortByScheduled',
+    groupBy: 'none',
     futureTaskSorting: 'hideFuture',
   },
   {
@@ -99,6 +99,7 @@ export const DEFAULT_SAVED_SEARCHES: SavedSearch[] = [
     query: 'deadline:overdue',
     viewMode: 'hideCompleted',
     sortMethod: 'sortByDeadline',
+    groupBy: 'none',
     futureTaskSorting: 'hideFuture',
   },
   {
@@ -107,6 +108,7 @@ export const DEFAULT_SAVED_SEARCHES: SavedSearch[] = [
     query: 'state:active',
     viewMode: 'sortCompletedLast',
     sortMethod: 'sortByUrgency',
+    groupBy: 'none',
     futureTaskSorting: 'hideFuture',
   },
 ];
@@ -122,7 +124,6 @@ export const DefaultSettings: TodoTrackerSettings = {
   includeCommentBlocks: false, // Disabled by default
   taskListViewMode: 'showAll',
   futureTaskSorting: 'showAll',
-  defaultSortMethod: 'default', // Default to file path sorting
   taskListGroupBy: 'none', // No grouping by default
   taskListSortDirection: 'natural', // Use each sort method's natural direction
   taskListGroupDirection: 'natural', // Use each group field's natural direction

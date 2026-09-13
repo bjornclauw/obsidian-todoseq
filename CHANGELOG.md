@@ -10,6 +10,7 @@
 - **Collapsible group headers.** In a grouped Task List, click a group header, or focus it and press Enter or Space, to hide or show its tasks. Each header shows the task count. A toolbar button collapses or expands every group, and the collapse state is remembered across sessions.
 - **Embedded list grouping and sorting.** Added a `group-by:` option that splits results into labelled sections with a task count per section. `group-by:` fields are folder, file, heading, status, priority, scheduled, deadline, closed, started and tag, with an optional `asc`/`desc`. Value fields order naturally (priority High to Low, dates chronologically, closed/started most recent first, tags alphabetically); a tag places a task in several sections, and a missing-value group comes last. `sort:` accepts an explicit direction and an optional second key (for example `sort: priority desc, scheduled`); tasks missing the sort value always sort last. Added the `description:` and `heading:` search prefixes, usable in the search field and in embedded code blocks. The `show-urgency:` option is now documented.
 - **Locale-aware dates.** Date and time display in the task list, tooltips, date picker and task editor follows Obsidian's language, including localized relative labels and month and weekday names. English near-future wording changed from "N days from now" to "In N days". Date text written into notes stays in the canonical org-mode format (`<YYYY-MM-DD Ddd>`, `[YYYY-MM-DD Ddd HH:mm]`) so notes remain portable across devices and locales.
+- **Complete saved searches.** The save/edit dialog now exposes sort direction, grouping and group direction, and adds `Tag` as a sort method. Leaving a field on "Use current setting" falls back to the view at apply time, and editing a saved search no longer overwrites its grouping or directions with the current view. The built-in presets (Today, Overdue, Active) reset grouping to none.
 
 ### Changed
 
@@ -20,6 +21,7 @@
   - In table cells, CLOSED and STARTED use the `[[YYYY-MM-DD Ddd HH:mm]]` wikilink form.
 - In an embedded task list, clicking the state keyword advances it to the next state on desktop; on mobile a tap does nothing and long-press opens the state menu. The checkbox still toggles completion, and clicking anywhere else on the row still opens the source file.
 - Embedded task lists now update changed rows in place instead of rebuilding the whole list when the same tasks are shown in the same order, so changing a task's state no longer flickers or moves the view. The state keyword briefly highlights to make the change visible, and respects reduced motion.
+- The Task List sort is now solely the last-chosen method: the separate **Default sort method** setting was removed, and a fresh install starts on the file-path default. Applying a saved search no longer overwrites the remembered sort, sort direction or grouping.
 
 ### Fixed
 
@@ -38,6 +40,7 @@
 - Fixed adding or changing a repeating date on an already-completed task being silently inert; it now advances the occurrence. Archived tasks do not recur.
 - Fixed cancelling a recurring task rolling it forward; it now stays in the cancelled state (and still records a CLOSED date).
 - Fixed reactivating an archived task dropping its SCHEDULED/DEADLINE/CLOSED/STARTED metadata, so a repeating task keeps recurring after it is un-archived.
+- Fixed saved searches silently overwriting your defaults. Applying a saved search now applies its view settings (completed tasks, future dated tasks, sort, grouping, directions and match case) as temporary session overrides; the controls are highlighted while overridden and clearing the search restores your defaults. Changing a setting in the Settings tab no longer stomps an active saved-search override, and the future-task override no longer leaks into embedded task lists. Editing the search text or changing any task-list view setting leaves the saved search: your change is kept, the other settings return to your defaults, and the bookmark changes to **Save search**.
 
 ## 0.20.0
 

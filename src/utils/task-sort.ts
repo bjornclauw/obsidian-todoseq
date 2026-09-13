@@ -55,6 +55,19 @@ export const SORT_METHODS = [
 
 export type SortMethod = (typeof SORT_METHODS)[number];
 
+/** Display labels for sort methods, shared by the settings and saved-search UIs. */
+export const SORT_METHOD_LABELS: Record<SortMethod, string> = {
+  default: 'Default (file path)',
+  sortByScheduled: 'Scheduled date',
+  sortByDeadline: 'Deadline date',
+  sortByClosedDate: 'Closed date',
+  sortByStarted: 'Started date',
+  sortByPriority: 'Priority',
+  sortByUrgency: 'Urgency',
+  sortByKeyword: 'Keyword',
+  sortByTag: 'Tag',
+};
+
 /** Narrow an unknown value to a valid task-list sort method. */
 export function isSortMethod(value: unknown): value is SortMethod {
   return (

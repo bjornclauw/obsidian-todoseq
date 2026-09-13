@@ -20,6 +20,24 @@ export type GroupByField =
   | 'started'
   | 'tag';
 
+/** Choices for a "Group by" dropdown, including the 'none' entry. */
+export const GROUP_BY_OPTIONS: readonly {
+  value: GroupByField | 'none';
+  label: string;
+}[] = [
+  { value: 'none', label: 'None' },
+  { value: 'folder', label: 'Folder' },
+  { value: 'file', label: 'File' },
+  { value: 'heading', label: 'Heading' },
+  { value: 'status', label: 'Status' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'started', label: 'Started' },
+  { value: 'tag', label: 'Tag' },
+];
+
 /**
  * A single rendered group: a stable key, a display label, and its tasks in
  * input order.

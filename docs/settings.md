@@ -552,6 +552,8 @@ The oldest entries are dropped once the limit is reached; the running total in t
 
 **Default**: Show all
 
+> **Saved-search overrides.** These task-list view settings (along with the sort method, sort direction, grouping and match case controls) can be temporarily overridden by applying a saved search. Overridden controls are highlighted in the Task List toolbar, and clearing the search restores the values above.
+
 ### Task Descriptions
 
 **Setting**: "Task descriptions" dropdown
@@ -661,22 +663,6 @@ With **Sunday start**:
 
 - Week 1: Sun Dec 31 - Sat Jan 6
 - "this week" on Jan 3 includes Dec 31 - Jan 6
-
-### Default Sort Method
-
-**Setting**: "Default sort method" (dropdown)
-
-**Description**: Choose the default sort method for the task list view.
-
-**Options:**
-
-- **Default (file path)**: Sort by file path and line number
-- **Scheduled date**: Sort by scheduled date
-- **Deadline date**: Sort by deadline date
-- **Priority**: Sort by priority (high → low)
-- **Urgency**: Sort by urgency score (high → low)
-
-**Default**: Default (file path)
 
 ## Other Settings
 

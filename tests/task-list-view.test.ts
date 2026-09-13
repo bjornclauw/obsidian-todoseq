@@ -5,7 +5,6 @@
 import {
   TaskListView,
   TaskListViewMode,
-  SortMethod,
 } from '../src/view/task-list/task-list-view';
 import { installObsidianDomMocks } from './helpers/obsidian-dom-mock';
 import { createBaseTask, createBaseSettings } from './helpers/test-helper';
@@ -296,21 +295,20 @@ describe('TaskListView', () => {
       expect(view['getSortMethod']()).toBe('sortByPriority');
     });
 
-    it('should fallback to default sort method', () => {
+    it('should fall back to the persisted task-list sort method', () => {
       if (!view['contentEl']) {
         view['contentEl'] = activeDocument.createElement('div');
       }
-      view['defaultSortMethod'] = 'sortByDeadline' as SortMethod;
-      expect(view['getSortMethod']()).toBe('sortByDeadline');
-    });
-
-    it('should fall back to the persisted task-list sort method first', () => {
-      if (!view['contentEl']) {
-        view['contentEl'] = activeDocument.createElement('div');
-      }
-      view['defaultSortMethod'] = 'sortByDeadline' as SortMethod;
       (pluginMock.settings as any).taskListSortMethod = 'sortByUrgency';
       expect(view['getSortMethod']()).toBe('sortByUrgency');
+    });
+
+    it("should fall back to 'default' when nothing is persisted", () => {
+      if (!view['contentEl']) {
+        view['contentEl'] = activeDocument.createElement('div');
+      }
+      (pluginMock.settings as any).taskListSortMethod = undefined;
+      expect(view['getSortMethod']()).toBe('default');
     });
   });
 
@@ -1554,6 +1552,317 @@ describe('TaskListView', () => {
         pluginMock.settings.savedSearches.find((s) => s.id === search.id),
       ).toBeDefined();
       expect(pluginMock.saveSettings).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saved search dialog grouping and direction', () => {
+    beforeEach(() => {
+      // Earlier tests can leave a dialog in the DOM; scope each test to its own.
+      document
+        .querySelectorAll(
+          '.todoseq-saved-search-modal, .todoseq-saved-search-backdrop',
+        )
+        .forEach((el) => el.remove());
+    });
+
+    const selectByField = (field: string): HTMLSelectElement =>
+      document.querySelector(
+        `.todoseq-saved-search-modal select[data-field="${field}"]`,
+      ) as HTMLSelectElement;
+
+    const clickButton = (cls: string) => {
+      (
+        document.querySelector(
+          `.todoseq-saved-search-modal .${cls}`,
+        ) as HTMLButtonElement | null
+      )?.click();
+    };
+
+    it('prefills group and direction fields from the saved search', () => {
+      const search = createSavedSearch('Agenda', 'state:active', {
+        sortMethod: 'sortByTag',
+        sortDirection: 'desc',
+        groupBy: 'tag',
+        groupDirection: 'asc',
+      });
+      pluginMock.settings.savedSearches = [search];
+
+      (view as any).openEditSavedSearchDialog(search);
+
+      expect(selectByField('sortMethod').value).toBe('sortByTag');
+      expect(selectByField('sortDirection').value).toBe('desc');
+      expect(selectByField('groupBy').value).toBe('tag');
+      expect(selectByField('groupDirection').value).toBe('asc');
+      clickButton('todoseq-saved-search-btn-cancel');
+    });
+
+    it('saves the chosen grouping and directions instead of the current view', () => {
+      const search = createSavedSearch('Agenda', 'state:active');
+      pluginMock.settings.savedSearches = [search];
+      // Current view prefs differ from what we choose in the dialog.
+      (view as any).setSortDirection('asc');
+      (view as any).setGroupBy('status');
+      (view as any).setGroupDirection('asc');
+
+      (view as any).openEditSavedSearchDialog(search);
+
+      selectByField('sortDirection').value = 'desc';
+      selectByField('groupBy').value = 'file';
+      selectByField('groupDirection').value = 'desc';
+      clickButton('todoseq-saved-search-btn-save');
+
+      const updated = pluginMock.settings.savedSearches.find(
+        (s) => s.id === search.id,
+      );
+      expect(updated?.sortDirection).toBe('desc');
+      expect(updated?.groupBy).toBe('file');
+      expect(updated?.groupDirection).toBe('desc');
+      expect(pluginMock.saveSettings).toHaveBeenCalled();
+    });
+
+    it('leaves overrides undefined when "Use current setting" is chosen', () => {
+      const search = createSavedSearch('Agenda', 'state:active', {
+        sortDirection: 'desc',
+        groupBy: 'file',
+        groupDirection: 'desc',
+      });
+      pluginMock.settings.savedSearches = [search];
+
+      (view as any).openEditSavedSearchDialog(search);
+
+      selectByField('sortDirection').value = '';
+      selectByField('groupBy').value = '';
+      selectByField('groupDirection').value = '';
+      clickButton('todoseq-saved-search-btn-save');
+
+      const updated = pluginMock.settings.savedSearches.find(
+        (s) => s.id === search.id,
+      );
+      expect(updated?.sortDirection).toBeUndefined();
+      expect(updated?.groupBy).toBeUndefined();
+      expect(updated?.groupDirection).toBeUndefined();
+    });
+
+    it('prefills the create dialog from the current view and offers tag sort', () => {
+      (view as any).setGroupBy('folder');
+      (view as any).setSortDirection('desc');
+      (view as any).setGroupDirection('asc');
+
+      (view as any).openSaveSearchDialog('state:active');
+
+      expect(selectByField('groupBy').value).toBe('folder');
+      expect(selectByField('sortDirection').value).toBe('desc');
+      expect(selectByField('groupDirection').value).toBe('asc');
+
+      const values = Array.from(selectByField('sortMethod').options).map(
+        (o) => o.value,
+      );
+      expect(values).toContain('sortByTag');
+
+      clickButton('todoseq-saved-search-btn-cancel');
+    });
+  });
+
+  describe('saved search view overrides', () => {
+    it('applies overrides without mutating the persisted settings', () => {
+      const search = createSavedSearch('Preset', 'state:active', {
+        viewMode: 'hideCompleted',
+        futureTaskSorting: 'hideFuture',
+        sortMethod: 'sortByPriority',
+        sortDirection: 'desc',
+        groupBy: 'file',
+        groupDirection: 'desc',
+        matchCase: true,
+      });
+
+      view['applySavedSearchOverrides'](search);
+
+      expect(view['getViewMode']()).toBe('hideCompleted');
+      expect(view['getFutureTaskSorting']()).toBe('hideFuture');
+      expect(view['getSortMethod']()).toBe('sortByPriority');
+      expect(view['getSortDirection']()).toBe('desc');
+      expect(view['getGroupBy']()).toBe('file');
+      expect(view['getGroupDirection']()).toBe('desc');
+      expect(view['isMatchCaseActive']()).toBe(true);
+
+      // The user's baselines are untouched.
+      expect(pluginMock.settings.taskListViewMode).toBe('showAll');
+      expect(pluginMock.settings.futureTaskSorting).toBe('showAll');
+      expect(pluginMock.settings.taskListGroupBy).toBe('none');
+      expect(pluginMock.settings.taskListSortMethod).toBeUndefined();
+    });
+
+    it('restores baselines when the overrides are cleared', () => {
+      (pluginMock.settings as any).taskListViewMode = 'sortCompletedLast';
+      (pluginMock.settings as any).taskListGroupBy = 'folder';
+
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', {
+          viewMode: 'hideCompleted',
+          groupBy: 'file',
+        }),
+      );
+      expect(view['getViewMode']()).toBe('hideCompleted');
+      expect(view['getGroupBy']()).toBe('file');
+
+      view['clearSavedSearchOverrides']();
+      expect(view['getViewMode']()).toBe('sortCompletedLast');
+      expect(view['getGroupBy']()).toBe('folder');
+    });
+
+    it('falls through to the baseline for keys the preset does not set', () => {
+      (pluginMock.settings as any).taskListSortMethod = 'sortByDeadline';
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', { viewMode: 'hideCompleted' }),
+      );
+      expect(view['getSortMethod']()).toBe('sortByDeadline');
+    });
+
+    it('setters drop only their own override (leave is driven by the handler)', () => {
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', {
+          viewMode: 'hideCompleted',
+          groupBy: 'file',
+        }),
+      );
+
+      view['setGroupBy']('folder');
+
+      expect(view['getGroupBy']()).toBe('folder');
+      expect(view['getViewMode']()).toBe('hideCompleted');
+      expect(pluginMock.settings.taskListGroupBy).toBe('folder');
+    });
+
+    it('leaving a saved search reverts other overrides but keeps the change', () => {
+      (pluginMock.settings as any).taskListViewMode = 'showAll';
+      (pluginMock.settings as any).taskListGroupBy = 'none';
+      (pluginMock.settings as any).futureTaskSorting = 'showAll';
+
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', {
+          viewMode: 'hideCompleted',
+          groupBy: 'file',
+          futureTaskSorting: 'hideFuture',
+        }),
+      );
+
+      // The user changes grouping, then the handler leaves the preset.
+      view['setGroupBy']('tag');
+      view['onManualPreferenceChange']();
+
+      expect(view['getGroupBy']()).toBe('tag'); // the change sticks
+      expect(pluginMock.settings.taskListGroupBy).toBe('tag');
+      expect(view['getViewMode']()).toBe('showAll'); // reverted to default
+      expect(view['getFutureTaskSorting']()).toBe('showAll');
+      expect(pluginMock.settings.taskListViewMode).toBe('showAll');
+    });
+
+    it('marks the search modified so the bookmark offers save-new', () => {
+      const saved = createSavedSearch('Preset', 'state:active');
+      pluginMock.settings.savedSearches = [saved];
+      const btn = activeDocument.createElement('div');
+      view['saveSearchBtn'] = btn;
+      view['setSearchQuery'](saved.query);
+
+      view['applySavedSearchOverrides'](saved);
+      view['updateSaveSearchBtnVisibility'](saved.query);
+      expect(btn.hasClass('todoseq-save-search-btn-active')).toBe(true);
+
+      view['onManualPreferenceChange']();
+      expect(btn.hasClass('todoseq-save-search-btn-active')).toBe(false);
+    });
+
+    it('highlights overridden controls and clears the highlight on clear', () => {
+      const viewModeEl = activeDocument.createElement('select');
+      const groupByEl = activeDocument.createElement('select');
+      view['viewModeEl'] = viewModeEl;
+      view['groupByEl'] = groupByEl;
+
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', {
+          viewMode: 'hideCompleted',
+          groupBy: 'file',
+        }),
+      );
+      view['updatePreferenceHighlights']();
+
+      expect(viewModeEl.hasClass('todoseq-pref-overridden')).toBe(true);
+      expect(groupByEl.hasClass('todoseq-pref-overridden')).toBe(true);
+      expect(viewModeEl.getAttribute('data-override-source')).toBe('Preset');
+
+      view['clearSavedSearchOverrides']();
+      view['updatePreferenceHighlights']();
+
+      expect(viewModeEl.hasClass('todoseq-pref-overridden')).toBe(false);
+      expect(groupByEl.hasClass('todoseq-pref-overridden')).toBe(false);
+      expect(viewModeEl.hasAttribute('data-override-source')).toBe(false);
+    });
+
+    it('uses the future-task override in the render transform', () => {
+      const tasks = [createBaseTask({ path: 'a.md', line: 0, text: 'A' })];
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', { futureTaskSorting: 'hideFuture' }),
+      );
+      expect(view['getFutureTaskSorting']()).toBe('hideFuture');
+      // Baseline is unchanged, so the setting stays as the user left it.
+      expect(pluginMock.settings.futureTaskSorting).toBe('showAll');
+      expect(view['transformForView'](tasks, 'showAll')).toHaveLength(1);
+    });
+  });
+
+  describe('preference control sync', () => {
+    const makeSelect = (...values: string[]): HTMLSelectElement => {
+      const el = activeDocument.createElement('select');
+      for (const value of values) {
+        el.createEl('option', { attr: { value } });
+      }
+      return el;
+    };
+
+    it('syncs the toolbar controls from settings', () => {
+      const viewModeEl = makeSelect(
+        'showAll',
+        'sortCompletedLast',
+        'hideCompleted',
+      );
+      const futureEl = makeSelect(
+        'showAll',
+        'showUpcoming',
+        'sortToEnd',
+        'hideFuture',
+      );
+      const descriptionEl = makeSelect('hide', 'show');
+      view['viewModeEl'] = viewModeEl;
+      view['futureTaskSortingEl'] = futureEl;
+      view['taskDescriptionEl'] = descriptionEl;
+
+      (pluginMock.settings as any).taskListViewMode = 'hideCompleted';
+      (pluginMock.settings as any).futureTaskSorting = 'hideFuture';
+      (pluginMock.settings as any).taskDescriptionDisplay = 'show';
+
+      view['syncPreferenceControls']();
+
+      expect(viewModeEl.value).toBe('hideCompleted');
+      expect(futureEl.value).toBe('hideFuture');
+      expect(descriptionEl.value).toBe('show');
+    });
+
+    it('keeps a saved-search override when settings are re-synced', () => {
+      const viewModeEl = makeSelect(
+        'showAll',
+        'sortCompletedLast',
+        'hideCompleted',
+      );
+      view['viewModeEl'] = viewModeEl;
+      view['applySavedSearchOverrides'](
+        createSavedSearch('Preset', 'x', { viewMode: 'sortCompletedLast' }),
+      );
+
+      (pluginMock.settings as any).taskListViewMode = 'hideCompleted';
+      view['syncPreferenceControls']();
+
+      expect(viewModeEl.value).toBe('sortCompletedLast');
+      expect(view['getViewMode']()).toBe('sortCompletedLast');
     });
   });
 });

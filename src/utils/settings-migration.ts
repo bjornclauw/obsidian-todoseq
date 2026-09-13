@@ -1,4 +1,5 @@
 import { DEFAULT_SAVED_SEARCHES } from '../settings/settings-types';
+import { isSortMethod } from './task-sort';
 
 /**
  * Settings migration utilities for TODOseq plugin.
@@ -93,6 +94,54 @@ const MIGRATIONS: SettingsMigrations[] = [
         taskListSortDirection: settings['taskListSortDirection'] ?? 'natural',
         taskListGroupDirection: settings['taskListGroupDirection'] ?? 'natural',
       };
+    },
+  },
+  {
+    version: 8,
+    migrate: (settings: Record<string, unknown>) => {
+      // v8: the Task List now always remembers the user's last-chosen sort, so
+      // the standalone "Default sort method" setting was removed. Seed the
+      // remembered value from it once, then drop the old key.
+      const migrated = { ...settings };
+      if (
+        migrated['taskListSortMethod'] === undefined &&
+        isSortMethod(migrated['defaultSortMethod'])
+      ) {
+        migrated['taskListSortMethod'] = migrated['defaultSortMethod'];
+      }
+      delete migrated['defaultSortMethod'];
+      return migrated;
+    },
+  },
+  {
+    version: 9,
+    migrate: (settings: Record<string, unknown>) => {
+      // v9: the built-in saved searches now reset grouping to 'none'. Fill it
+      // in for existing installs without overriding a custom grouping.
+      const builtInIds = new Set([
+        'default-today',
+        'default-overdue',
+        'default-active',
+      ]);
+      const rawSearches = settings['savedSearches'];
+      if (!Array.isArray(rawSearches)) {
+        return { ...settings };
+      }
+      const savedSearches: unknown[] = rawSearches.map((search: unknown) => {
+        if (search === null || typeof search !== 'object') {
+          return search;
+        }
+        const entry = search as { id?: unknown; groupBy?: unknown };
+        if (
+          typeof entry.id === 'string' &&
+          builtInIds.has(entry.id) &&
+          entry.groupBy === undefined
+        ) {
+          return { ...(search as Record<string, unknown>), groupBy: 'none' };
+        }
+        return search;
+      });
+      return { ...settings, savedSearches };
     },
   },
 ];

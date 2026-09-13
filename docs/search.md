@@ -621,8 +621,6 @@ A saved search captures the complete view configuration:
 
 When a saved search has optional settings, those override the current view settings when applied. If a setting is not specified in the saved search, the current global setting is used.
 
-When a saved search has optional settings, those override the current view settings when applied. If a setting is not specified in the saved search, the current global setting is used.
-
 ### Default Presets
 
 TODOseq ships with three default saved searches:
@@ -637,10 +635,10 @@ Default presets are fully editable and deletable, just like user-created saved s
 
 ### Saving a Search
 
-1. Type a search query in the search bar and adjust the view settings (sort, view mode, future tasks, match case) to your liking
+1. Type a search query in the search bar and adjust the view settings (sort, grouping, view mode, future tasks, match case) to your liking
 2. Click the **bookmark icon** that appears in the search input area
 3. Enter a name for the search in the dialog that opens
-4. Optionally adjust the match case setting in the dialog (On / Off / Use current setting)
+4. In the dialog, adjust the optional overrides: sort method, sort direction, grouping, group direction, completed tasks, future dated tasks and match case. Leave a field on **Use current setting** to fall back to the current view at apply time.
 5. Click **Save**
 
 The bookmark icon only appears when the search input is non-empty. If the current search matches an existing saved search, clicking the bookmark icon opens the edit dialog instead.
@@ -654,15 +652,18 @@ The bookmark icon only appears when the search input is non-empty. If the curren
 When a saved search is applied:
 
 - The search query is set in the search input
-- View mode, sort method, and future task settings are applied if specified
+- Its view settings (completed tasks, future dated tasks, sort method, sort direction, grouping, group direction and match case) are applied as **temporary session overrides**. Your saved defaults are not modified.
+- Any overridden control in the toolbar settings section is highlighted in the accent color with a "set by saved search" tooltip, so you can see why a default is not currently in effect.
 - The list immediately re-renders with the saved configuration
+
+Editing the search text or changing any of those view settings means you have left the saved search and are now building a new one. All overrides are dropped, the settings return to your saved defaults (the change you just made is kept), the highlights disappear, and the bookmark button changes to **Save search**.
 
 ### Editing a Saved Search
 
 1. Open the search dropdown
 2. Hover over a saved search to reveal the **edit** (pencil) icon
 3. Click the edit icon to open the edit dialog
-4. Modify the name, query, or any of the settings (including match case)
+4. Modify the name, query, or any of the settings (sort, direction, grouping, directions, match case)
 5. Click **Save changes**
 
 ### Deleting a Saved Search
@@ -691,7 +692,7 @@ When viewing a saved search, the bookmark icon in the search bar is highlighted 
 
 ### Clearing a Saved Search
 
-Pressing Escape or clicking the clear button exits the saved search view, just like clearing any search. The visual indicator disappears and the view returns to default.
+Pressing Escape or clicking the clear button exits the saved search view. Its temporary view overrides are removed, so every setting returns to your defaults and the control highlights disappear. The search indicator disappears as well.
 
 ## Search Logic and Behavior
 

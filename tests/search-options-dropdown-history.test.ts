@@ -55,12 +55,6 @@ interface MockSettings {
   includeCommentBlocks: boolean;
   taskListViewMode: 'showAll' | 'sortCompletedLast' | 'hideCompleted';
   futureTaskSorting: 'showAll' | 'showUpcoming' | 'sortToEnd' | 'hideFuture';
-  defaultSortMethod:
-    | 'default'
-    | 'sortByScheduled'
-    | 'sortByDeadline'
-    | 'sortByPriority'
-    | 'sortByUrgency';
   languageCommentSupport: { enabled: boolean };
   weekStartsOn: 'Monday' | 'Sunday';
   formatTaskKeywords: boolean;
@@ -75,7 +69,6 @@ function createMockSettings(): MockSettings {
     includeCommentBlocks: false,
     taskListViewMode: 'showAll',
     futureTaskSorting: 'showAll',
-    defaultSortMethod: 'default',
     languageCommentSupport: { enabled: true },
     weekStartsOn: 'Monday',
     formatTaskKeywords: true,

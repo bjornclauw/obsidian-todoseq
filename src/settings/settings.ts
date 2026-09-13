@@ -205,9 +205,9 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         // Update keyword manager with new settings before rendering
         taskListView.updateSettings();
         taskListView.updateTasks(tasks);
-        // Sync each view's mode from settings before render
-        const mode = this.plugin.settings.taskListViewMode;
-        taskListView.setViewMode(mode);
+        // Re-sync toolbar controls with settings. Saved-search overrides (if
+        // any) still win, because the view resolves effective values.
+        taskListView.syncPreferenceControls();
         // Update context menu config for settings changes
         taskListView.updateContextMenuConfig();
         // Use lighter refresh instead of full onOpen rebuild
@@ -385,25 +385,6 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
               // range warning for out-of-range commits and calls `validate` on
               // valid ones to deterministically clear that warning.
               validate: () => undefined,
-            },
-          },
-          {
-            name: 'Default sort method',
-            desc: 'Choose the default sort method for the task list.',
-            control: {
-              type: 'dropdown',
-              key: 'defaultSortMethod',
-              options: {
-                default: 'Default (file path)',
-                sortByScheduled: 'Scheduled date',
-                sortByDeadline: 'Deadline date',
-                sortByClosedDate: 'Closed date',
-                sortByStarted: 'Started date',
-                sortByPriority: 'Priority',
-                sortByUrgency: 'Urgency',
-                sortByKeyword: 'Keyword',
-              },
-              defaultValue: 'default',
             },
           },
         ],

@@ -186,6 +186,24 @@
   display: none;
 }
 
+/*
+ * A control whose value is temporarily overridden by the active saved search.
+ * Highlighted so the user can see why their default setting is not in effect;
+ * the highlight is removed when the search is cleared.
+ */
+.todoseq-panel .todoseq-pref-overridden,
+.todoseq-pref-overridden {
+  color: var(--text-accent);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.todoseq-panel .todoseq-direction-flip.todoseq-pref-overridden,
+.todoseq-direction-flip.todoseq-pref-overridden {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
 /* Off-screen probe used to measure the widest <select> option at runtime. */
 .todoseq-measure-probe {
   position: absolute;
@@ -2650,6 +2668,8 @@
   min-width: 380px;
   max-width: 480px;
   width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
   padding: 0;
 }
 

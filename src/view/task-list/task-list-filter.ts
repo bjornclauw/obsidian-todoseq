@@ -4,6 +4,7 @@ import {
   KeywordSortConfig,
   SortMethod,
   SortDirection,
+  FutureTaskSetting,
   getNaturalDirection,
   isSortMethod,
 } from '../../utils/task-sort';
@@ -49,11 +50,11 @@ export class TaskListFilter {
 
   getSortMethod(
     contentEl: HTMLElement,
-    defaultSortMethod: SortMethod,
+    fallbackSortMethod: SortMethod,
   ): SortMethod {
     const attr = contentEl.getAttr('data-sort-method');
     if (isSortMethod(attr)) return attr;
-    if (isSortMethod(defaultSortMethod)) return defaultSortMethod;
+    if (isSortMethod(fallbackSortMethod)) return fallbackSortMethod;
     return 'default';
   }
 
@@ -73,6 +74,7 @@ export class TaskListFilter {
     mode: TaskListViewMode,
     sortMethod: SortMethod,
     direction: SortDirection | 'natural' = 'natural',
+    futureTaskSorting?: FutureTaskSetting,
   ): Task[] {
     const now = new Date();
 
@@ -90,7 +92,8 @@ export class TaskListFilter {
         break;
     }
 
-    const futureSetting = this.plugin.settings.futureTaskSorting;
+    const futureSetting =
+      futureTaskSorting ?? this.plugin.settings.futureTaskSorting;
 
     let keywordConfig: KeywordSortConfig | undefined;
     if (

@@ -67,7 +67,7 @@ describe('settings-utils', () => {
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME', 'HACK'],
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -88,7 +88,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -99,7 +99,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           additionalInactiveKeywords: [],
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
     });
@@ -116,7 +116,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: true,
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -128,7 +128,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: false,
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -140,7 +140,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: true,
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -152,7 +152,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: null,
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -164,7 +164,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: { disabled: false },
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -176,7 +176,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: { enabled: 'true' },
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -188,7 +188,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
     });
@@ -208,7 +208,7 @@ describe('settings-utils', () => {
           additionalInactiveKeywords: ['FIXME'],
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -223,7 +223,7 @@ describe('settings-utils', () => {
         expect(result).toMatchObject({
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -232,25 +232,25 @@ describe('settings-utils', () => {
         const settings = {
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         };
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
       test('should not apply any migrations when settingsVersion is greater than latest', () => {
         const settings = {
           otherSetting: 'value',
-          settingsVersion: 8,
+          settingsVersion: 10,
         };
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           otherSetting: 'value',
-          settingsVersion: 8,
+          settingsVersion: 10,
         });
       });
 
@@ -261,7 +261,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -274,7 +274,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -287,7 +287,7 @@ describe('settings-utils', () => {
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -316,7 +316,7 @@ describe('settings-utils', () => {
           property3: true,
           property4: ['a', 'b'],
           property5: { nested: 'object' },
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -324,7 +324,7 @@ describe('settings-utils', () => {
         const settings = {};
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
-          settingsVersion: 7,
+          settingsVersion: 9,
           savedSearches: DEFAULT_SAVED_SEARCHES,
         });
       });
@@ -348,7 +348,7 @@ describe('settings-utils', () => {
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
           someOtherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -361,7 +361,7 @@ describe('settings-utils', () => {
         expect(result).toMatchObject({
           languageCommentSupport: false,
           someOtherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -376,7 +376,7 @@ describe('settings-utils', () => {
           additionalInactiveKeywords: ['FIXME', 'HACK'],
           languageCommentSupport: true,
           otherProperty: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -385,14 +385,14 @@ describe('settings-utils', () => {
           additionalInactiveKeywords: ['FIXME'],
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         };
         const result = migrateSettings(settings);
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
           languageCommentSupport: true,
           otherSetting: 'value',
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
 
@@ -406,7 +406,7 @@ describe('settings-utils', () => {
         // Migration should overwrite additionalInactiveKeywords
         expect(result).toMatchObject({
           additionalInactiveKeywords: ['FIXME'],
-          settingsVersion: 7,
+          settingsVersion: 9,
         });
       });
     });
@@ -418,7 +418,7 @@ describe('settings-utils', () => {
   describe('getLatestSettingsVersion', () => {
     test('should return the latest migration version', () => {
       const latestVersion = getLatestSettingsVersion();
-      expect(latestVersion).toBe(7);
+      expect(latestVersion).toBe(9);
     });
 
     test('should handle empty migrations array', () => {
@@ -427,6 +427,82 @@ describe('settings-utils', () => {
       const latestVersion = getLatestSettingsVersion();
       expect(typeof latestVersion).toBe('number');
       expect(latestVersion).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('migrateSettings version 8 - task list sort source of truth', () => {
+    test('seeds taskListSortMethod from defaultSortMethod and drops the old key', () => {
+      const settings = {
+        settingsVersion: 7,
+        defaultSortMethod: 'sortByDeadline',
+      };
+      const result = migrateSettings(settings);
+      expect(result.taskListSortMethod).toBe('sortByDeadline');
+      expect(result).not.toHaveProperty('defaultSortMethod');
+      expect(result.settingsVersion).toBe(9);
+    });
+
+    test('keeps an existing taskListSortMethod over defaultSortMethod', () => {
+      const settings = {
+        settingsVersion: 7,
+        defaultSortMethod: 'sortByDeadline',
+        taskListSortMethod: 'sortByUrgency',
+      };
+      const result = migrateSettings(settings);
+      expect(result.taskListSortMethod).toBe('sortByUrgency');
+      expect(result).not.toHaveProperty('defaultSortMethod');
+    });
+
+    test('drops defaultSortMethod even when it is not a valid sort method', () => {
+      const settings = {
+        settingsVersion: 7,
+        defaultSortMethod: 'nonsense',
+      };
+      const result = migrateSettings(settings);
+      expect(result).not.toHaveProperty('defaultSortMethod');
+      expect(result.taskListSortMethod).toBeUndefined();
+    });
+  });
+
+  describe('migrateSettings version 9 - built-in saved search grouping', () => {
+    test('sets groupBy none on built-in saved searches that lack it', () => {
+      const result = migrateSettings({
+        settingsVersion: 8,
+        savedSearches: [
+          { id: 'default-today', name: 'Today', query: 'scheduled:today' },
+          { id: 'default-overdue', name: 'Overdue', query: 'deadline:overdue' },
+          { id: 'default-active', name: 'Active', query: 'state:active' },
+        ],
+      });
+      const searches = result.savedSearches as Array<{ groupBy?: string }>;
+      expect(searches).toHaveLength(3);
+      expect(searches.every((s) => s.groupBy === 'none')).toBe(true);
+      expect(result.settingsVersion).toBe(9);
+    });
+
+    test('keeps a custom grouping on a built-in saved search', () => {
+      const result = migrateSettings({
+        settingsVersion: 8,
+        savedSearches: [
+          { id: 'default-today', name: 'Today', query: 'x', groupBy: 'tag' },
+        ],
+      });
+      const searches = result.savedSearches as Array<{ groupBy?: string }>;
+      expect(searches[0].groupBy).toBe('tag');
+    });
+
+    test('leaves user saved searches untouched', () => {
+      const result = migrateSettings({
+        settingsVersion: 8,
+        savedSearches: [{ id: 'ss-1', name: 'Mine', query: 'tag:x' }],
+      });
+      const searches = result.savedSearches as Array<{ groupBy?: string }>;
+      expect(searches[0].groupBy).toBeUndefined();
+    });
+
+    test('handles a missing savedSearches array', () => {
+      const result = migrateSettings({ settingsVersion: 8 });
+      expect(result.settingsVersion).toBe(9);
     });
   });
 
@@ -443,9 +519,9 @@ describe('settings-utils', () => {
       expect(getSettingsFingerprint(a)).not.toBe(getSettingsFingerprint(b));
     });
 
-    test('ignores non-formatting fields (defaultSortMethod, etc.)', () => {
-      const a = createBaseSettings({ defaultSortMethod: 'sortByDeadline' });
-      const b = createBaseSettings({ defaultSortMethod: 'sortByPriority' });
+    test('ignores non-formatting fields (taskListSortMethod, etc.)', () => {
+      const a = createBaseSettings({ taskListSortMethod: 'sortByDeadline' });
+      const b = createBaseSettings({ taskListSortMethod: 'sortByPriority' });
       expect(getSettingsFingerprint(a)).toBe(getSettingsFingerprint(b));
     });
 
@@ -508,10 +584,10 @@ describe('settings-utils', () => {
         expect(detector.hasChanged(changedSettings)).toBe(true);
       });
 
-      test('should NOT detect changes in defaultSortMethod', () => {
+      test('should NOT detect changes in taskListSortMethod', () => {
         const changedSettings = {
           ...baseSettings,
-          defaultSortMethod: 'sortByPriority' as const,
+          taskListSortMethod: 'sortByPriority' as const,
         };
         expect(detector.hasChanged(changedSettings)).toBe(false);
       });
@@ -545,7 +621,6 @@ describe('settings-utils', () => {
       test('should not detect changes when only non-formatting settings change', () => {
         const changedSettings: TodoTrackerSettings = {
           ...baseSettings,
-          defaultSortMethod: 'sortByPriority',
           taskListViewMode: 'sortCompletedLast',
           weekStartsOn: 'Sunday',
         };
