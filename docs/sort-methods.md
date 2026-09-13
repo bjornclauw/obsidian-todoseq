@@ -16,11 +16,11 @@ Tasks sorted by their DEADLINE date. Tasks without deadline dates appear at the 
 
 ### 4. Closed Date
 
-Tasks sorted by their CLOSED date (the date when the task was marked as completed). Tasks without a closed date appear at the end, with earlier closed dates appearing first. When two tasks have the same closed date, they are sorted by keyword group and position, then by file path and line number.
+Tasks sorted by their CLOSED date (the date when the task was marked as completed). Tasks without a closed date appear at the end, with the most recently closed first. When two tasks have the same closed date, they are sorted by keyword group and position, then by file path and line number.
 
 ### 5. Started Date
 
-Tasks sorted by their STARTED date (when the task first entered an active state). Tasks without a started date appear at the end, with earlier started dates appearing first. When two tasks have the same started date, they are sorted by keyword group and position, then by file path and line number.
+Tasks sorted by their STARTED date (when the task first entered an active state). Tasks without a started date appear at the end, with the most recently started first. When two tasks have the same started date, they are sorted by keyword group and position, then by file path and line number.
 
 ### 6. Priority
 
@@ -52,6 +52,16 @@ If you have current tasks with keywords DOING, TODO, and WAIT, they will be orde
 3. WAIT tasks (Group 3 - Waiting)
 
 Within each group, tasks follow the keyword order currently defined in settings.
+
+### 9. Tag
+
+Tasks are sorted by their alphabetically-first tag (the `#` is ignored for comparison). Tasks without a tag appear at the end. Use `sort: tag desc` to reverse the order; untagged tasks stay last.
+
+### Direction and secondary keys
+
+The Task List dropdown uses each method's default direction. In `todoseq` code blocks you can
+also set an explicit direction (`asc`/`desc`) and a second key after a comma — for example
+`sort: scheduled asc, priority desc`. See [Embedded Task Lists](./embedded-task-lists.html#sort-method).
 
 ### Note on Warning Periods
 

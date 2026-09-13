@@ -23,7 +23,12 @@
 - In an embedded task list, clicking the state keyword advances it to the next state on desktop; on mobile a tap does nothing and long-press opens the state menu. The checkbox still toggles completion, and clicking anywhere else on the row still opens the source file.
 - Fixed the note containing an embedded task list jumping (scroll position moving) when a task's state is changed. Rebuilding the list now preserves the scroll position of the containing view.
 - Embedded task lists now update changed rows in place instead of rebuilding the whole list when the same tasks are shown in the same order, so changing a task's state no longer flickers or moves the view. The state keyword briefly highlights to make the change visible, and respects reduced-motion. (Incremental handling of tasks appearing or disappearing is a later step.)
-- Added a `group-by:` option to embedded task lists that splits the results into labelled sections by `folder`, `file`, or `heading`. Sections appear in the order their first task appears and keep the current `sort:` order within each section, with a task count shown per section.
+- Added a `group-by:` option to embedded task lists that splits the results into labelled sections with a task count per section. Extended the query options:
+  - `sort:` accepts an explicit direction (`asc`/`desc`) and an optional second key after a comma, e.g. `sort: priority desc, scheduled`. Tasks missing the sort value always sort last.
+  - `group-by:` fields are `folder`, `file`, `heading` (alphabetical), `status`, `priority`, `scheduled`, `deadline`, `closed`, `started`, and `tag`, with an optional `asc`/`desc`. Value fields order naturally (priority High→Low, dates chronologically, `closed`/`started` most-recent-first, tags alphabetically); a `tag` places a task in several sections; a missing-value group comes last.
+  - New `description:` and `heading:` search prefixes, usable in the search field and in embedded code blocks.
+- Documented the embedded `show-urgency:` option.
+- Fixed changing an embedded task's date or priority moving the view: date, priority and recurrence updates from lists (and the reader) now write through the vault, like state changes already did, so the open note is not edited in place.
 
 ## 0.20.0
 

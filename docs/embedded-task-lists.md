@@ -23,7 +23,7 @@ Using the following parameters within the `todoseq` code block you define which 
 
 - `search:` any valid search string (see [search](/search.html))
 - `title:` (optional) adds a custom title displayed above the task list
-- `sort:` (optional) one of `filepath`, `scheduled`, `deadline`, `closed`, `priority`, `urgency`, or `keyword`. Default is `filepath`
+- `sort:` (optional) one of `filepath`, `scheduled`, `deadline`, `closed`, `started`, `priority`, `urgency`, `keyword`, or `tag`. Default is `filepath`
 - `group-by:` (optional) one of `folder`, `file`, or `heading`. Splits the results into labelled sections (see [Group By](#group-by))
 - `limit:` (optional) set the display limit to restrict the number of results shown
 - `show-completed:` (optional) one of `show`, `hide`, `sort-to-end`. Controls how completed tasks are displayed. Defaults to `show`. (`completed:` is an alternative alias)
@@ -40,6 +40,7 @@ Using the following parameters within the `todoseq` code block you define which 
 - `skip-scheduled-warning-if-deadline:` (optional) `true` or `false`. Overrides the global "Ignore Scheduled Delay When Deadline Is Set" setting for this code block
 - `skip-deadline-warning-if-scheduled:` (optional) `true` or `false`. Overrides the global "Ignore Deadline Advance Notice When Scheduled Is Set" setting for this code block
 - `show-description:` (optional) `show`, `hide`, `true`, or `false`. Controls how task descriptions are displayed. `show` displays the icon and description text, `hide` displays only the icon. `true` maps to `show`, `false` maps to `hide`. Defaults to `hide`
+- `show-urgency:` (optional) `show`, `hide`, `true`, or `false`. Controls whether the task's calculated urgency score is shown next to the file info. `show`/`true` displays the numeric score (with an `Urgency: …` tooltip), `hide`/`false` hides it. Defaults to `hide`. Completed tasks have no urgency score, so nothing is shown for them
 
 Example:
 
@@ -78,11 +79,18 @@ search: priority:high AND due:today
 The `sort:` parameter controls how tasks are ordered. Valid options are:
 
 - `filepath` - Sort by file path (default)
-- `scheduled` - Sort by scheduled date
-- `deadline` - Sort by deadline date
+- `scheduled` - Sort by scheduled date (soonest first)
+- `deadline` - Sort by deadline date (soonest first)
+- `closed` - Sort by closed date (most recent first)
+- `started` - Sort by started date (most recent first)
 - `priority` - Sort by priority (high → low)
 - `urgency` - Sort by urgency score (high → low)
 - `keyword` - Sort by keyword state groups
+- `tag` - Sort by the alphabetically-first tag
+
+Each key may take an explicit direction, `asc` or `desc`; the default is the field's natural
+direction (shown above). Tasks missing the sort value always come last. Add a second key
+after a comma to break ties.
 
 Example:
 
@@ -90,6 +98,13 @@ Example:
 ```todoseq
 search: scheduled:today
 sort: priority
+```
+````
+
+````txt
+```todoseq
+search: -state:completed
+sort: priority desc, scheduled
 ```
 ````
 
@@ -146,14 +161,24 @@ The `group-by:` parameter splits the results into labelled sections. Valid optio
 - `folder` - Group by the task's folder (`projects/`), with `/` for the vault root
 - `file` - Group by the source file, using the file name without its extension
 - `heading` - Group by the nearest preceding heading in the file (`(No heading)` when a task has none)
+- `status` - Group by state keyword, ordered active → inactive → waiting → completed
+- `priority` - Group by priority: High → Medium → Low → No priority
+- `scheduled` / `deadline` / `closed` / `started` - Group by the date value, chronologically
+- `tag` - Group by tag (labels shown as `#tag`), alphabetically. A task with several tags appears in **each** of its tag groups; untagged tasks go to a `No tag` group
 
-Sections appear in the order their first task appears in the results, and tasks keep the current `sort:` order within each section. `group-by:` composes with `search:`, `sort:` and `limit:` — the limit still counts tasks and is applied before grouping.
+`folder`, `file` and `heading` sections are ordered alphabetically (`(No heading)` last);
+the other fields are ordered by their own value. An optional `asc`/`desc` follows the field
+(`group-by: priority desc`); the default is the field's natural direction — `priority`
+highest-first, `closed`/`started` most-recent-first, everything else ascending — and a
+missing value (no date, no priority) always comes last. Tasks keep the current `sort:` order
+within each section. `group-by:` composes with `search:`, `sort:` and `limit:` — the limit
+still counts tasks and is applied before grouping.
 
 ````txt
 ```todoseq
 search: -state:completed
 sort: deadline
-group-by: folder
+group-by: priority desc
 ```
 ````
 
