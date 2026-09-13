@@ -760,6 +760,30 @@ describe('EmbeddedTaskListRenderer', () => {
       ).toBe('DOING');
     });
 
+    it('rebuilds when a non-state field changes so it repaints', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {};
+      const before = createBaseTask({
+        path: 'a.md',
+        line: 0,
+        priority: null,
+        text: 'Task A',
+      });
+
+      renderer.renderTaskList(container, [before], params);
+      expect(container.querySelector('.todoseq-priority-badge')).toBeNull();
+
+      const after = createBaseTask({
+        path: 'a.md',
+        line: 0,
+        priority: 'high',
+        text: 'Task A',
+      });
+      renderer.renderTaskList(container, [after], params);
+
+      expect(container.querySelector('.todoseq-priority-badge')).not.toBeNull();
+    });
+
     it('rebuilds the list when the task set changes', () => {
       const container = document.createElement('div');
       const params: TodoseqParameters = {};

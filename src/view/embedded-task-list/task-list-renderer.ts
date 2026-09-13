@@ -414,7 +414,8 @@ export class EmbeddedTaskListRenderer {
         !params.groupBy &&
         previous &&
         previous.paramsSignature === paramsSignature &&
-        this.sameTaskOrder(previous.keys, tasks)
+        this.sameTaskOrder(previous.keys, tasks) &&
+        this.sameStaticRows(previous.tasks, tasks)
       ) {
         this.updateVisibleRows(previous.tasks, tasks, container);
         this.renderedLists.set(container, {
@@ -476,6 +477,39 @@ export class EmbeddedTaskListRenderer {
     totalTasksCount?: number,
   ): string {
     return `${JSON.stringify(params)}|${totalTasksCount ?? ''}`;
+  }
+
+  /**
+   * Signature of the row content that {@link updateTaskRow} does NOT repaint —
+   * everything except state/completed and the fields that legitimately change
+   * alongside a state transition (urgency, CLOSED, STARTED). When any of these
+   * differ between renders the in-place fast path must be skipped so the row is
+   * rebuilt and the change is shown.
+   */
+  private staticRowSignature(task: Task): string {
+    return [
+      task.priority ?? '',
+      task.description ?? '',
+      task.scheduledDate ? task.scheduledDate.getTime() : '',
+      task.deadlineDate ? task.deadlineDate.getTime() : '',
+      task.subtaskCount,
+      task.subtaskCompletedCount,
+      task.repeatCount ?? '',
+      task.text,
+    ].join('\u0001');
+  }
+
+  private sameStaticRows(previous: Task[], next: Task[]): boolean {
+    if (previous.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) {
+      if (
+        this.staticRowSignature(previous[i]) !==
+        this.staticRowSignature(next[i])
+      ) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Content signature used to decide whether a row actually changed. */
