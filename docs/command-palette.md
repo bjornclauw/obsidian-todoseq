@@ -39,7 +39,7 @@ A full rescan is not typically required, unless the vault level setting for Excl
 
 ### Create or edit task
 
-Opens the Task Editor for the task at the current cursor position. If the line is not a task, the editor creates one at the cursor. The editor sets the state, priority, scheduled and deadline dates (with repeat and warning period) and a description, and writes the result through the vault.
+Opens the Task Editor for the task at the current cursor position. If the line is not a task, the editor creates one at the cursor. The editor sets the list marker (checkbox, bullet, or none), state, priority, scheduled and deadline dates (with repeat and warning period) and a description, and writes the result through the vault.
 
 The same editor is available from the ribbon button.
 

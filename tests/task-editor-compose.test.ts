@@ -108,6 +108,49 @@ describe('TaskWriter.buildNewTaskLine', () => {
       ),
     ).toBe('- [ ] TODO');
   });
+
+  it('builds a plain bullet when listMarker is bullet', () => {
+    expect(
+      TaskWriter.buildNewTaskLine(
+        {
+          text: 'Buy milk',
+          state: 'TODO',
+          priority: null,
+          listMarker: 'bullet',
+        },
+        keywordManager,
+      ),
+    ).toBe('- TODO Buy milk');
+  });
+
+  it('builds a keyword-only task when listMarker is none', () => {
+    expect(
+      TaskWriter.buildNewTaskLine(
+        { text: 'Buy milk', state: 'TODO', priority: null, listMarker: 'none' },
+        keywordManager,
+      ),
+    ).toBe('TODO Buy milk');
+  });
+
+  it('keeps the priority token for bullet and none markers', () => {
+    expect(
+      TaskWriter.buildNewTaskLine(
+        {
+          text: 'Urgent',
+          state: 'TODO',
+          priority: 'high',
+          listMarker: 'bullet',
+        },
+        keywordManager,
+      ),
+    ).toBe('- TODO [#A] Urgent');
+    expect(
+      TaskWriter.buildNewTaskLine(
+        { text: 'Urgent', state: 'TODO', priority: 'med', listMarker: 'none' },
+        keywordManager,
+      ),
+    ).toBe('TODO [#B] Urgent');
+  });
 });
 
 describe('TaskWriter.createTaskAtLine', () => {
@@ -265,6 +308,42 @@ describe('TaskWriter.createTaskAtLine', () => {
 
     const updateFn = mockApp.vault.process.mock.calls[0][1];
     expect(updateFn(content)).not.toContain('CREATED:');
+  });
+
+  it('writes a plain bullet task line when listMarker is bullet', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine(
+      'test.md',
+      0,
+      makeFields({ listMarker: 'bullet' }),
+    );
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe('- TODO Task text');
+    expect(result?.task.listMarker).toBe('- ');
+  });
+
+  it('writes a keyword-only task line when listMarker is none', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine(
+      'test.md',
+      0,
+      makeFields({ listMarker: 'none' }),
+    );
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe('TODO Task text');
+    expect(result?.task.listMarker).toBe('');
   });
 
   it('uses the editor API when the file is active in source mode', async () => {

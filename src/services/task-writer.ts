@@ -1,5 +1,6 @@
 import { App, TFile, MarkdownView, EditorPosition, Editor } from 'obsidian';
 import { Task, DateRepeatInfo, WarningPeriodInfo } from '../types/task';
+import type { TaskListMarkerStyle } from '../settings/settings-types';
 import { CHECKBOX_DETECTION_REGEX } from '../utils/patterns';
 import { KeywordManager } from '../utils/keyword-manager';
 import { DateUtils } from '../utils/date-utils';
@@ -49,6 +50,11 @@ export interface TaskComposeFields {
   deadlineRepeat: DateRepeatInfo | null;
   deadlineWarningPeriod: WarningPeriodInfo | null;
   description: string | null;
+  /**
+   * List prefix for a newly created task. Ignored when editing an existing
+   * task (its own marker is preserved). Defaults to `checkbox`.
+   */
+  listMarker?: TaskListMarkerStyle;
 }
 
 /** Result of a compose operation: the updated task snapshot and line delta. */
@@ -1458,17 +1464,44 @@ export class TaskWriter {
   }
 
   /**
-   * Build a brand-new task line in markdown checkbox format.
+   * Resolve the list prefix for a task line:
+   * - `checkbox` → `- [ ] ` / `- [x] ` (state-aware)
+   * - `bullet`   → `- `
+   * - `none`     → `` (keyword-only task)
+   */
+  private static resolveListMarkerPrefix(
+    state: string,
+    marker: TaskListMarkerStyle | undefined,
+    keywordManager: KeywordManager,
+  ): string {
+    switch (marker ?? 'checkbox') {
+      case 'bullet':
+        return '- ';
+      case 'none':
+        return '';
+      case 'checkbox':
+      default: {
+        const checkboxState = keywordManager.getCheckboxState(
+          state,
+          keywordManager.getSettings(),
+        );
+        return `- [${checkboxState}] `;
+      }
+    }
+  }
+
+  /**
+   * Build a brand-new task line. `fields.listMarker` selects the prefix
+   * (checkbox, bullet, or none); it defaults to checkbox.
    * Used by the task editor modal when creating a task.
    */
   static buildNewTaskLine(
-    fields: Pick<TaskComposeFields, 'text' | 'state' | 'priority'>,
+    fields: Pick<
+      TaskComposeFields,
+      'text' | 'state' | 'priority' | 'listMarker'
+    >,
     keywordManager: KeywordManager,
   ): string {
-    const checkboxState = keywordManager.getCheckboxState(
-      fields.state,
-      keywordManager.getSettings(),
-    );
     const priorityPart =
       fields.priority === 'high'
         ? ' [#A]'
@@ -1478,7 +1511,12 @@ export class TaskWriter {
             ? ' [#C]'
             : '';
     const textPart = fields.text ? ` ${fields.text}` : '';
-    return `- [${checkboxState}] ${fields.state}${priorityPart}${textPart}`;
+    const prefix = TaskWriter.resolveListMarkerPrefix(
+      fields.state,
+      fields.listMarker,
+      keywordManager,
+    );
+    return `${prefix}${fields.state}${priorityPart}${textPart}`;
   }
 
   /**
@@ -1719,7 +1757,11 @@ export class TaskWriter {
       line,
       rawText,
       indent: '',
-      listMarker: '- [ ] ',
+      listMarker: TaskWriter.resolveListMarkerPrefix(
+        fields.state,
+        fields.listMarker,
+        this.keywordManager,
+      ),
       text: fields.text,
       description: fields.description?.trim() || undefined,
       state: fields.state,

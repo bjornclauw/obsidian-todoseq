@@ -158,6 +158,20 @@ const MIGRATIONS: SettingsMigrations[] = [
       return { ...settings };
     },
   },
+  {
+    version: 11,
+    migrate: (settings: Record<string, unknown>) => {
+      // v11: added newTaskListMarker, the list prefix used by the task editor
+      // when creating a task. Default to a plain bullet (no checkbox).
+      if (!('newTaskListMarker' in settings)) {
+        return {
+          ...settings,
+          newTaskListMarker: 'bullet',
+        };
+      }
+      return { ...settings };
+    },
+  },
 ];
 
 export function migrateSettings(

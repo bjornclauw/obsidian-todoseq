@@ -181,6 +181,7 @@ If the current line is not a task, the editor creates one at the cursor position
 The editor provides:
 
 - **State**: the task keyword, chosen from the configured states.
+- **List marker**: for a new task, choose a checkbox (`- [ ] TODO task`), a plain bullet (`- TODO task`), or no marker (`TODO task`). The choice is remembered for the next new task.
 - **Priority**: high `[#A]`, medium `[#B]`, low `[#C]`, or none.
 - **Scheduled date** and **deadline date**: each with a date, optional time, repeat pattern, and warning period.
 - **Description**: a short context note stored on the `DESCRIPTION:` line.

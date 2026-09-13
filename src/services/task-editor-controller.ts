@@ -85,6 +85,11 @@ export class TaskEditorController {
       initial,
       keywordManager,
       weekStartsOn: this.plugin.settings.weekStartsOn,
+      listMarker: this.plugin.settings.newTaskListMarker,
+      onListMarkerChange: (value) => {
+        this.plugin.settings.newTaskListMarker = value;
+        void this.plugin.saveSettings();
+      },
       isTableTask: target.task?.isTableTask,
       onSubmit: (fields) => this.save(target, fields),
       onCancel: () => {

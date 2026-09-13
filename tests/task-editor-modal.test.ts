@@ -39,6 +39,8 @@ function openModal(
     onSubmit?: jest.Mock;
     onCancel?: jest.Mock;
     isTableTask?: boolean;
+    listMarker?: 'checkbox' | 'bullet' | 'none';
+    onListMarkerChange?: jest.Mock;
   } = {},
 ): {
   modal: TaskEditorModal;
@@ -53,6 +55,8 @@ function openModal(
     keywordManager: createTestKeywordManager(),
     weekStartsOn: 'Monday',
     isTableTask: overrides.isTableTask,
+    listMarker: overrides.listMarker,
+    onListMarkerChange: overrides.onListMarkerChange,
     onSubmit,
     onCancel,
   });
@@ -138,6 +142,57 @@ describe('TaskEditorModal (native Modal)', () => {
     expect(med.classList.contains('is-selected')).toBe(true);
     expect(none.classList.contains('is-selected')).toBe(false);
     expect(high.classList.contains('is-selected')).toBe(false);
+  });
+
+  it('renders three list-marker options and selects the provided marker', () => {
+    openModal({ listMarker: 'bullet' });
+
+    const options = document.querySelectorAll(
+      '.todoseq-task-editor-marker-row button',
+    );
+    expect(options.length).toBe(3);
+    expect(
+      query('.todoseq-marker-bullet').classList.contains('is-selected'),
+    ).toBe(true);
+    expect(
+      query('.todoseq-marker-checkbox').classList.contains('is-selected'),
+    ).toBe(false);
+  });
+
+  it('updates the marker selection and notifies the caller to persist it', () => {
+    const onListMarkerChange = jest.fn();
+    openModal({ listMarker: 'checkbox', onListMarkerChange });
+
+    query<HTMLButtonElement>('.todoseq-marker-none').click();
+
+    expect(
+      query('.todoseq-marker-none').classList.contains('is-selected'),
+    ).toBe(true);
+    expect(
+      query('.todoseq-marker-checkbox').classList.contains('is-selected'),
+    ).toBe(false);
+    expect(onListMarkerChange).toHaveBeenCalledWith('none');
+  });
+
+  it('submits the selected listMarker', async () => {
+    const onSubmit = jest.fn();
+    openModal({ onSubmit, listMarker: 'bullet' });
+
+    query<HTMLTextAreaElement>('.todoseq-task-editor-text').value = 'Buy milk';
+    query<HTMLButtonElement>('.todoseq-task-editor-btn-save').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ listMarker: 'bullet' }),
+    );
+  });
+
+  it('hides the list-marker control when editing an existing task', () => {
+    openModal({ mode: 'edit' });
+
+    expect(
+      document.querySelector('.todoseq-task-editor-marker-row'),
+    ).toBeNull();
   });
 
   it('renders the description as a single-line input', () => {

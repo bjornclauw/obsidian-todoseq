@@ -1,6 +1,14 @@
 import type { SortMethod } from '../utils/task-sort';
 import type { GroupByField } from '../utils/task-group';
 
+/**
+ * How the task editor writes the prefix of a newly created task:
+ * - `checkbox`: `- [ ] TODO text`
+ * - `bullet`:   `- TODO text`
+ * - `none`:     `TODO text`
+ */
+export type TaskListMarkerStyle = 'checkbox' | 'bullet' | 'none';
+
 export interface SavedSearch {
   id: string; // unique identifier
   name: string; // user-given label, max 50 chars
@@ -49,6 +57,8 @@ export interface TodoTrackerSettings {
 
   // Migrate to today settings
   migrateToTodayState: string; // keyword to set on source task after migrating to today
+  // Task editor settings
+  newTaskListMarker: TaskListMarkerStyle; // list prefix for tasks created by the task editor
   // Saved searches
   savedSearches: SavedSearch[];
   // Hidden setting - not exposed in UI, used to track first install
@@ -135,6 +145,7 @@ export const DefaultSettings: TodoTrackerSettings = {
   detectOrgModeFiles: false, // Experimental feature - disabled by default
   scanCodeFiles: false, // Experimental feature - disabled by default
   migrateToTodayState: '', // Default state to set on source task after migrating (empty = disabled)
+  newTaskListMarker: 'bullet', // Tasks created by the editor use a plain bullet by default
   stateTransitions: DefaultStateTransitionSettings,
   trackClosedDate: false, // Disabled by default
   trackStartedDate: false, // Disabled by default

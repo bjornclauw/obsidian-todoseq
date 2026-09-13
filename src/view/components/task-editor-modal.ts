@@ -1,5 +1,6 @@
 import { App, Modal, Platform, setIcon, setTooltip } from 'obsidian';
 import { DateRepeatInfo, WarningPeriodInfo } from '../../types/task';
+import { TaskListMarkerStyle } from '../../settings/settings-types';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { DateUtils } from '../../utils/date-utils';
 import { KeyboardInsetWatcher } from '../../utils/keyboard-inset';
@@ -44,6 +45,17 @@ const PRIORITY_OPTIONS: ReadonlyArray<{
   },
 ];
 
+/** List-prefix choices for a newly created task. */
+const LIST_MARKER_OPTIONS: ReadonlyArray<{
+  value: TaskListMarkerStyle;
+  label: string;
+  tooltip: string;
+}> = [
+  { value: 'checkbox', label: 'Checkbox', tooltip: '- [ ] TODO task' },
+  { value: 'bullet', label: 'Bullet', tooltip: '- TODO task' },
+  { value: 'none', label: 'None', tooltip: 'TODO task' },
+];
+
 /** Initial field values used to pre-fill the task editor form. */
 export interface TaskEditorInitialValues {
   text: string;
@@ -67,6 +79,13 @@ export interface TaskEditorModalOptions {
   keywordManager: KeywordManager;
   /** Controls the day the date picker's week starts on. */
   weekStartsOn: 'Monday' | 'Sunday';
+  /**
+   * List prefix for a task created by the editor. Defaults to `checkbox`.
+   * Ignored in edit mode (the existing task's marker is preserved).
+   */
+  listMarker?: TaskListMarkerStyle;
+  /** Called when the user picks a different list prefix, so it can be saved. */
+  onListMarkerChange?: (value: TaskListMarkerStyle) => void;
   /**
    * True when editing a markdown table cell task. Such tasks cannot store a
    * DESCRIPTION line and do not support recurrence, so those fields are hidden.
@@ -101,6 +120,11 @@ export class TaskEditorModal extends Modal {
   private deadlineRepeat: DateRepeatInfo | null;
   private deadlineWarningPeriod: WarningPeriodInfo | null;
   private priority: 'high' | 'med' | 'low' | null;
+  private listMarker: TaskListMarkerStyle;
+  private markerButtons: Array<{
+    value: TaskListMarkerStyle;
+    btn: HTMLButtonElement;
+  }> = [];
   private priorityButtons: Array<{
     priority: 'high' | 'med' | 'low' | null;
     btn: HTMLButtonElement;
@@ -124,6 +148,7 @@ export class TaskEditorModal extends Modal {
     this.deadlineRepeat = options.initial.deadlineRepeat;
     this.deadlineWarningPeriod = options.initial.deadlineWarningPeriod;
     this.priority = options.initial.priority;
+    this.listMarker = options.listMarker ?? 'checkbox';
   }
 
   onOpen(): void {
@@ -169,6 +194,39 @@ export class TaskEditorModal extends Modal {
       cls: 'todoseq-task-editor-state',
     });
     this.populateStateOptions(stateSelect);
+
+    // List prefix (create only): checkbox, bullet, or keyword-only. The
+    // choice is remembered by the caller so the next new task reuses it.
+    if (!isEdit) {
+      const markerGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
+      markerGroup.createEl('label', { text: 'List marker' });
+      const markerRow = markerGroup.createDiv({
+        cls: 'todoseq-task-editor-marker-row',
+        attr: { role: 'radiogroup', 'aria-label': 'List marker' },
+      });
+      for (const option of LIST_MARKER_OPTIONS) {
+        const btn = markerRow.createEl('button', {
+          cls: [
+            'todoseq-task-editor-marker-btn',
+            `todoseq-marker-${option.value}`,
+          ],
+          text: option.label,
+          attr: {
+            type: 'button',
+            role: 'radio',
+            'aria-label': option.label,
+          },
+        });
+        setTooltip(btn, option.tooltip);
+        btn.addEventListener('click', () => {
+          this.listMarker = option.value;
+          this.updateMarkerButtons();
+          this.options.onListMarkerChange?.(option.value);
+        });
+        this.markerButtons.push({ value: option.value, btn });
+      }
+      this.updateMarkerButtons();
+    }
 
     // Priority (icon flags, matching the task context menu)
     const priorityGroup = form.createDiv({
@@ -353,6 +411,7 @@ export class TaskEditorModal extends Modal {
       deadlineRepeat: this.deadlineRepeat,
       deadlineWarningPeriod: this.deadlineWarningPeriod,
       description: descInput?.value.trim() || null,
+      listMarker: this.listMarker,
     };
 
     this.submitted = true;
@@ -371,6 +430,15 @@ export class TaskEditorModal extends Modal {
   private updatePriorityButtons(): void {
     for (const { priority, btn } of this.priorityButtons) {
       const selected = priority === this.priority;
+      btn.toggleClass('is-selected', selected);
+      btn.setAttr('aria-checked', String(selected));
+    }
+  }
+
+  /** Reflect the selected list marker on the marker buttons. */
+  private updateMarkerButtons(): void {
+    for (const { value, btn } of this.markerButtons) {
+      const selected = value === this.listMarker;
       btn.toggleClass('is-selected', selected);
       btn.setAttr('aria-checked', String(selected));
     }
