@@ -98,7 +98,7 @@ export class RecurrenceCoordinator {
   /** Write surface of the interaction that scheduled the roll-forward. */
   private recurrenceSources: Map<string, UpdateSource> = new Map();
   private readonly defaultDelayMs: number;
-  private taskUpdateCoordinator: TaskUpdateCoordinator;
+  private taskUpdateCoordinator!: TaskUpdateCoordinator;
 
   constructor(
     private plugin: TodoTracker,
