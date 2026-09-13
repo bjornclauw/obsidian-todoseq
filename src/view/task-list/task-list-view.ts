@@ -92,8 +92,8 @@ const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
  * than one group (tag multi-membership).
  */
 type TaskListRenderItem =
-  | { kind: 'header'; group: TaskGroup }
-  | { kind: 'task'; task: Task; itemKey: string };
+  | { kind: 'header'; group: TaskGroup; collapsed: boolean }
+  | { kind: 'task'; task: Task; itemKey: string; groupCollapsed: boolean };
 
 export type { TaskListViewMode, SortMethod } from './task-list-filter';
 
@@ -119,6 +119,8 @@ export class TaskListView extends ItemView {
   private unsubscribeFromStateManager: (() => void) | null = null;
   private cachedVisibleTasks: Task[] = [];
   private cachedRenderItems: TaskListRenderItem[] | null = null;
+  /** Collapsed group ids (`groupBy\u0000groupKey`) for collapsible headers. */
+  private collapsedGroupKeys = new Set<string>();
   private stateRankCache: {
     key: string;
     rank: (state: string) => number;
@@ -546,6 +548,7 @@ export class TaskListView extends ItemView {
         kind: 'task',
         task,
         itemKey: getTaskKey(task),
+        groupCollapsed: false,
       }));
     }
 
@@ -554,34 +557,120 @@ export class TaskListView extends ItemView {
       field === 'status' ? { stateRank: this.getStateRank() } : undefined;
     const items: TaskListRenderItem[] = [];
     for (const group of groupTasks(tasks, field, direction, options)) {
-      items.push({ kind: 'header', group });
+      const collapsed = this.isGroupCollapsed(group.key);
+      items.push({ kind: 'header', group, collapsed });
       for (const task of group.tasks) {
         items.push({
           kind: 'task',
           task,
           itemKey: `${group.key}\u0000${getTaskKey(task)}`,
+          groupCollapsed: collapsed,
         });
       }
     }
     return items;
   }
 
+  /** Composite id so group keys don't collide across grouping fields. */
+  private groupCollapseId(groupKey: string): string {
+    return `${this.getGroupBy()}\u0000${groupKey}`;
+  }
+
+  private isGroupCollapsed(groupKey: string): boolean {
+    return this.collapsedGroupKeys.has(this.groupCollapseId(groupKey));
+  }
+
+  private setGroupCollapsed(groupKey: string, collapsed: boolean): void {
+    const id = this.groupCollapseId(groupKey);
+    if (collapsed) {
+      this.collapsedGroupKeys.add(id);
+    } else {
+      this.collapsedGroupKeys.delete(id);
+    }
+  }
+
+  /** Toggle a group's collapsed state and reflect it in the DOM subtree. */
+  private toggleGroupCollapsed(headerEl: HTMLElement): void {
+    const groupKey = headerEl.getAttribute('data-group-key');
+    if (groupKey === null) return;
+    const collapsed = !this.isGroupCollapsed(groupKey);
+    this.setGroupCollapsed(groupKey, collapsed);
+    this.applyGroupCollapsedState(headerEl, collapsed);
+  }
+
+  /** Apply collapsed styling and hide/show the rows that follow the header. */
+  private applyGroupCollapsedState(
+    headerEl: HTMLElement,
+    collapsed: boolean,
+  ): void {
+    headerEl.toggleClass('is-collapsed', collapsed);
+    headerEl.setAttribute('aria-expanded', String(!collapsed));
+    const chevron = headerEl.querySelector<HTMLElement>(
+      '.todoseq-collapse-toggle-icon',
+    );
+    if (chevron) {
+      chevron.toggleClass('is-expanded', !collapsed);
+    }
+    let sibling = headerEl.nextElementSibling as HTMLElement | null;
+    while (
+      sibling &&
+      !sibling.classList.contains('todoseq-task-group-header')
+    ) {
+      if (sibling.classList.contains('todoseq-task-item')) {
+        sibling.toggleClass('todoseq-task-item-collapsed', collapsed);
+      }
+      sibling = sibling.nextElementSibling as HTMLElement | null;
+    }
+  }
+
   /** Build a group-header list item matching the embedded group chrome. */
-  private buildGroupHeaderItem(group: TaskGroup): HTMLLIElement {
+  private buildGroupHeaderItem(
+    group: TaskGroup,
+    collapsed = false,
+  ): HTMLLIElement {
     const li = createEl('li', { cls: 'todoseq-task-group-header' });
     li.setAttribute('data-group-key', group.key);
-    const label = li.createSpan({ cls: 'todoseq-embedded-task-group-label' });
+    li.setAttribute('role', 'button');
+    li.setAttribute('tabindex', '0');
+    li.setAttribute('aria-expanded', String(!collapsed));
+    li.setAttribute(
+      'aria-label',
+      collapsed
+        ? `Expand ${group.label}, ${group.tasks.length} tasks`
+        : `Collapse ${group.label}`,
+    );
+    li.toggleClass('is-collapsed', collapsed);
+
+    const main = li.createSpan({ cls: 'todoseq-task-group-header-main' });
+    const chevron = main.createSpan({ cls: 'todoseq-collapse-toggle-icon' });
+    setIcon(chevron, 'chevron-right');
+    if (!collapsed) {
+      chevron.addClass('is-expanded');
+    }
+
+    const label = main.createSpan({ cls: 'todoseq-embedded-task-group-label' });
     label.setText(group.label);
     const count = li.createSpan({ cls: 'todoseq-embedded-task-group-count' });
     count.setText(String(group.tasks.length));
+
+    li.addEventListener('click', () => this.toggleGroupCollapsed(li));
+    li.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.toggleGroupCollapsed(li);
+      }
+    });
     return li;
   }
 
   /** Build a DOM element for a render item (header or task row). */
   private buildRenderItemElement(item: TaskListRenderItem): HTMLLIElement {
-    return item.kind === 'header'
-      ? this.buildGroupHeaderItem(item.group)
-      : this.buildTaskListItem(item.task);
+    if (item.kind === 'header') {
+      return this.buildGroupHeaderItem(item.group, item.collapsed);
+    }
+    const li = this.buildTaskListItem(item.task);
+    li.toggleClass('todoseq-task-item-collapsed', item.groupCollapsed);
+    return li;
   }
 
   /**

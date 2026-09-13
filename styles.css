@@ -137,18 +137,51 @@
 .todoseq-panel .todoseq-task-list > li.todoseq-task-group-header {
   list-style: none;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--size-4-2);
   padding: var(--size-4-1) var(--size-4-2);
   margin-top: var(--size-4-2);
   font-family: var(--font-monospace);
   font-size: 0.75rem;
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-bold);
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--background-modifier-border);
+  color: color-mix(
+    in srgb,
+    var(--text-normal) 65%,
+    var(--background-secondary)
+  );
+  background-color: var(--background-secondary);
+  border: 1px solid
+    color-mix(in srgb, var(--text-normal) 65%, var(--background-secondary));
+  cursor: pointer;
+  user-select: none;
+}
+
+.todoseq-panel .todoseq-task-list > li.todoseq-task-group-header:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.todoseq-panel .todoseq-task-list > li.todoseq-task-group-header:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.todoseq-panel .todoseq-task-group-header-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  min-width: 0;
+}
+
+.todoseq-panel .todoseq-task-group-header .todoseq-collapse-toggle-icon {
+  margin-left: 0;
+  color: inherit;
+}
+
+.todoseq-panel .todoseq-task-list > li.todoseq-task-item-collapsed {
+  display: none;
 }
 
 .todoseq-panel .todoseq-task-list > li.todoseq-task-group-header:first-child {
@@ -970,11 +1003,17 @@
   margin-top: var(--size-4-2);
   font-family: var(--font-monospace);
   font-size: 0.75rem;
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-bold);
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--background-modifier-border);
+  color: color-mix(
+    in srgb,
+    var(--text-normal) 65%,
+    var(--background-secondary)
+  );
+  background-color: var(--background-secondary);
+  border: 1px solid
+    color-mix(in srgb, var(--text-normal) 65%, var(--background-secondary));
 }
 
 .todoseq-embedded-task-list-container
@@ -983,7 +1022,8 @@
 }
 
 .todoseq-embedded-task-group-count {
-  background-color: var(--background-modifier-selection);
+  background-color: var(--background-modifier-hover);
+  color: var(--text-muted);
   padding: var(--size-2-1) var(--size-2-3);
   border-radius: var(--radius-s);
   font-weight: var(--font-normal);

@@ -431,6 +431,21 @@ describe('TaskListView', () => {
         (taskItems[1] as any).itemKey,
       );
     });
+
+    it('should flag a collapsed group and its tasks in the plan', () => {
+      const tasks = [
+        createBaseTask({ path: 'a/one.md', line: 0, text: 'A' }),
+        createBaseTask({ path: 'a/two.md', line: 1, text: 'B' }),
+      ];
+      view['setGroupBy']('folder');
+      view['setGroupCollapsed']('a', true);
+      const items = view['buildRenderItems'](tasks);
+      expect((items[0] as any).kind).toBe('header');
+      expect((items[0] as any).collapsed).toBe(true);
+      const taskItems = items.filter((item: any) => item.kind === 'task');
+      expect(taskItems).toHaveLength(2);
+      expect(taskItems.every((item: any) => item.groupCollapsed)).toBe(true);
+    });
   });
 
   describe('buildGroupHeaderItem', () => {
@@ -448,6 +463,70 @@ describe('TaskListView', () => {
       expect(
         li.querySelector('.todoseq-embedded-task-group-count')?.textContent,
       ).toBe('2');
+    });
+  });
+
+  describe('collapsible group headers', () => {
+    it('should render the header as an expanded toggle by default', () => {
+      const group = {
+        key: 'a/',
+        label: 'a/',
+        tasks: [createBaseTask()],
+      };
+      const li = view['buildGroupHeaderItem'](group);
+      expect(li.getAttribute('role')).toBe('button');
+      expect(li.getAttribute('tabindex')).toBe('0');
+      expect(li.getAttribute('aria-expanded')).toBe('true');
+      expect(li.classList.contains('is-collapsed')).toBe(false);
+      const chevron = li.querySelector('.todoseq-collapse-toggle-icon');
+      expect(chevron?.classList.contains('is-expanded')).toBe(true);
+    });
+
+    it('should render a collapsed header with the chevron rotated back', () => {
+      const group = {
+        key: 'a/',
+        label: 'a/',
+        tasks: [createBaseTask()],
+      };
+      const li = view['buildGroupHeaderItem'](group, true);
+      expect(li.getAttribute('aria-expanded')).toBe('false');
+      expect(li.classList.contains('is-collapsed')).toBe(true);
+      const chevron = li.querySelector('.todoseq-collapse-toggle-icon');
+      expect(chevron?.classList.contains('is-expanded')).toBe(false);
+    });
+
+    it('should toggle collapse and hide the following task rows', () => {
+      view['setGroupBy']('folder');
+      const container = activeDocument.createElement('div');
+      const list = activeDocument.createElement('ul');
+      list.classList.add('todoseq-task-list');
+      container.appendChild(list);
+      view['taskListContainer'] = container;
+
+      const header = view['buildGroupHeaderItem']({
+        key: 'a/',
+        label: 'a/',
+        tasks: [createBaseTask()],
+      });
+      list.appendChild(header);
+      const taskLi = activeDocument.createElement('li');
+      taskLi.classList.add('todoseq-task-item');
+      list.appendChild(taskLi);
+
+      view['toggleGroupCollapsed'](header);
+      expect(view['isGroupCollapsed']('a/')).toBe(true);
+      expect(header.getAttribute('aria-expanded')).toBe('false');
+      expect(header.classList.contains('is-collapsed')).toBe(true);
+      expect(taskLi.classList.contains('todoseq-task-item-collapsed')).toBe(
+        true,
+      );
+
+      view['toggleGroupCollapsed'](header);
+      expect(view['isGroupCollapsed']('a/')).toBe(false);
+      expect(header.getAttribute('aria-expanded')).toBe('true');
+      expect(taskLi.classList.contains('todoseq-task-item-collapsed')).toBe(
+        false,
+      );
     });
   });
 
