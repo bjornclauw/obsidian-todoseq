@@ -114,19 +114,21 @@ TODOseq supports filter keywords similar to Obsidian's general vault search for 
 
 ### Available Prefix Filters
 
-| Prefix       | Description                               | Example                   |
-| ------------ | ----------------------------------------- | ------------------------- |
-| `path:`      | Find tasks in specific file paths         | `path:Journal`            |
-| `file:`      | Find tasks in files with matching names   | `file:meeting.md`         |
-| `tag:`       | Find tasks containing specific tags       | `tag:urgent`              |
-| `state:`     | Find tasks with specific states or groups | `state:active`            |
-| `priority:`  | Find tasks with specific priorities       | `priority:high`           |
-| `content:`   | Find tasks with specific content          | `content:project`         |
-| `scheduled:` | Find tasks with scheduled dates           | `scheduled:due`           |
-| `deadline:`  | Find tasks with deadline dates            | `deadline:"this week"`    |
-| `closed:`    | Find tasks by closed date                 | `closed:yesterday`        |
-| `started:`   | Find tasks by start date                  | `started:today`           |
-| `property:`  | Find tasks based on page properties       | `property:[type:Project]` |
+| Prefix         | Description                                   | Example                   |
+| -------------- | --------------------------------------------- | ------------------------- |
+| `path:`        | Find tasks in specific file paths             | `path:Journal`            |
+| `file:`        | Find tasks in files with matching names       | `file:meeting.md`         |
+| `tag:`         | Find tasks containing specific tags           | `tag:urgent`              |
+| `state:`       | Find tasks with specific states or groups     | `state:active`            |
+| `priority:`    | Find tasks with specific priorities           | `priority:high`           |
+| `content:`     | Find tasks with specific content              | `content:project`         |
+| `description:` | Find tasks by their DESCRIPTION text          | `description:call`        |
+| `heading:`     | Find tasks by their nearest preceding heading | `heading:meeting`         |
+| `scheduled:`   | Find tasks with scheduled dates               | `scheduled:due`           |
+| `deadline:`    | Find tasks with deadline dates                | `deadline:"this week"`    |
+| `closed:`      | Find tasks by closed date                     | `closed:yesterday`        |
+| `started:`     | Find tasks by start date                      | `started:today`           |
+| `property:`    | Find tasks based on page properties           | `property:[type:Project]` |
 
 ### Using Search Filters
 

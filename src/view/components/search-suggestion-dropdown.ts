@@ -47,7 +47,11 @@ export class SearchSuggestionDropdown extends BaseDropdown {
 
     const prefixKey = prefix.endsWith(':') ? prefix.slice(0, -1) : prefix;
 
-    if (prefixKey === 'content') {
+    if (
+      prefixKey === 'content' ||
+      prefixKey === 'description' ||
+      prefixKey === 'heading'
+    ) {
       this.hide();
       return;
     }
