@@ -73,16 +73,16 @@ const LOAD_BATCH_SIZE = 30;
 
 /** Choices for the Group-by dropdown in the results bar. */
 const GROUP_BY_OPTIONS: { value: GroupByField | 'none'; label: string }[] = [
-  { value: 'none', label: 'No grouping' },
+  { value: 'none', label: 'None' },
   { value: 'folder', label: 'Folder' },
   { value: 'file', label: 'File' },
   { value: 'heading', label: 'Heading' },
   { value: 'status', label: 'Status' },
   { value: 'priority', label: 'Priority' },
-  { value: 'scheduled', label: 'Scheduled date' },
-  { value: 'deadline', label: 'Deadline date' },
-  { value: 'closed', label: 'Closed date' },
-  { value: 'started', label: 'Started date' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'started', label: 'Started' },
   { value: 'tag', label: 'Tag' },
 ];
 
@@ -1069,11 +1069,11 @@ export class TaskListView extends ItemView {
     });
 
     const sortOptions = [
-      { value: 'default', label: 'Default (file path)' },
-      { value: 'sortByScheduled', label: 'Scheduled date' },
-      { value: 'sortByDeadline', label: 'Deadline date' },
-      { value: 'sortByClosedDate', label: 'Closed date' },
-      { value: 'sortByStarted', label: 'Started date' },
+      { value: 'default', label: 'Default' },
+      { value: 'sortByScheduled', label: 'Scheduled' },
+      { value: 'sortByDeadline', label: 'Deadline' },
+      { value: 'sortByClosedDate', label: 'Closed' },
+      { value: 'sortByStarted', label: 'Started' },
       { value: 'sortByPriority', label: 'Priority' },
       { value: 'sortByUrgency', label: 'Urgency' },
       { value: 'sortByKeyword', label: 'Keyword' },
@@ -1209,8 +1209,47 @@ export class TaskListView extends ItemView {
       void this.refreshVisibleList(true);
     });
 
+    // Native <select> intrinsic sizing with appearance:none varies across
+    // Chromium builds, so measure the widest option instead of guessing in CSS.
+    this.sizeSelectToWidestOption(select);
+    this.sizeSelectToWidestOption(groupBySelect);
+
     // Keep a reference for keyboard handlers to focus later
     this.searchInputEl = inputEl;
+  }
+
+  /**
+   * Set a pixel min-width on a select so its widest option is never clipped.
+   * Native <select> auto-sizing with `appearance: none` is not stable across
+   * Chromium builds, so measure the label ourselves and supply the number.
+   */
+  private sizeSelectToWidestOption(select: HTMLSelectElement): void {
+    const doc = select.ownerDocument;
+    const win = doc?.defaultView;
+    if (!doc || !win) return;
+    const style = win.getComputedStyle(select);
+    const probe = doc.body.createSpan({ cls: 'todoseq-measure-probe' });
+    probe.setCssProps({
+      '--todoseq-probe-font': style.font,
+      '--todoseq-probe-letter-spacing': style.letterSpacing,
+    });
+
+    let widest = 0;
+    for (const option of Array.from(select.options)) {
+      probe.textContent = option.text;
+      widest = Math.max(widest, probe.offsetWidth);
+    }
+    probe.remove();
+
+    // Skip when layout is unavailable (e.g. a detached/hidden view); the CSS
+    // fallback min-width covers that case.
+    if (widest <= 0) return;
+
+    const padding =
+      parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    select.setCssProps({
+      '--todoseq-select-min-width': `${Math.ceil(widest + padding) + 2}px`,
+    });
   }
 
   /** Setup search suggestion dropdowns for prefix filter autocomplete */
