@@ -1056,7 +1056,7 @@ describe('Task Sorting System', () => {
     const closedDate2 = new Date('2024-01-15T12:00:00Z'); // middle
     const closedDate3 = new Date('2024-01-20T12:00:00Z'); // later
 
-    it('sorts by closed date (earlier dates first)', () => {
+    it('sorts by closed date (most recent first)', () => {
       const task1 = createTask({ closedDate: closedDate3, text: 'Later' });
       const task2 = createTask({ closedDate: closedDate1, text: 'Earlier' });
       const task3 = createTask({ closedDate: closedDate2, text: 'Middle' });
@@ -1073,7 +1073,7 @@ describe('Task Sorting System', () => {
       expect(mainBlock).toBeDefined();
       if (!mainBlock) throw new Error('Main block should be defined');
       const texts = mainBlock.tasks.map((t) => t.text);
-      expect(texts).toEqual(['Earlier', 'Middle', 'Later']);
+      expect(texts).toEqual(['Later', 'Middle', 'Earlier']);
     });
 
     it('tasks without closed dates appear at the end', () => {

@@ -4,10 +4,16 @@ import { TodoTrackerSettings } from '../../settings/settings-types';
 import {
   sortTasksWithThreeBlockSystem,
   SortMethod as TaskSortMethod,
+  SecondarySort,
+  getNaturalDirection,
   buildKeywordSortConfig,
   KeywordSortConfig,
 } from '../../utils/task-sort';
-import { TodoseqParameters, TodoseqCodeBlockParser } from './code-block-parser';
+import {
+  TodoseqParameters,
+  TodoseqCodeBlockParser,
+  SortOption,
+} from './code-block-parser';
 import { KeywordManager } from '../../utils/keyword-manager';
 import { PropertySearchEngine } from '../../services/property-search-engine';
 
@@ -197,6 +203,21 @@ export class EmbeddedTaskListManager {
     try {
       const now = new Date();
       const sortMethod = this.getSortMethod(params);
+      const sortDirection =
+        params.sortDirection ?? getNaturalDirection(sortMethod);
+
+      let secondary: SecondarySort | undefined;
+      if (params.secondarySortMethod) {
+        const secondaryMethod = this.getSortOptionMethod(
+          params.secondarySortMethod,
+        );
+        secondary = {
+          method: secondaryMethod,
+          direction:
+            params.secondarySortDirection ??
+            getNaturalDirection(secondaryMethod),
+        };
+      }
 
       // Use code block specific settings if provided, otherwise fall back to global settings
       const futureSetting =
@@ -210,15 +231,19 @@ export class EmbeddedTaskListManager {
           : 'showAll'; // Default embedded lists to show all unless overridden
 
       // Build keyword config if sorting by keyword, priority, urgency, scheduled, deadline, or closed date
+      const needsKeywordConfig = (method: TaskSortMethod): boolean =>
+        method === 'sortByKeyword' ||
+        method === 'sortByUrgency' ||
+        method === 'sortByPriority' ||
+        method === 'sortByScheduled' ||
+        method === 'sortByDeadline' ||
+        method === 'sortByClosedDate' ||
+        method === 'sortByStarted';
+
       let keywordConfig: KeywordSortConfig | undefined;
       if (
-        sortMethod === 'sortByKeyword' ||
-        sortMethod === 'sortByUrgency' ||
-        sortMethod === 'sortByPriority' ||
-        sortMethod === 'sortByScheduled' ||
-        sortMethod === 'sortByDeadline' ||
-        sortMethod === 'sortByClosedDate' ||
-        sortMethod === 'sortByStarted'
+        needsKeywordConfig(sortMethod) ||
+        (secondary && needsKeywordConfig(secondary.method))
       ) {
         keywordConfig = this.getKeywordSortConfig();
       }
@@ -257,6 +282,8 @@ export class EmbeddedTaskListManager {
                   : this.settings.skipDeadlinePrewarningIfScheduled,
             }
           : undefined,
+        sortDirection,
+        secondary,
       );
 
       return sorted;
@@ -286,6 +313,15 @@ export class EmbeddedTaskListManager {
    * @returns Sort method compatible with task-sort utilities
    */
   private getSortMethod(params: TodoseqParameters): TaskSortMethod {
+    return this.getSortOptionMethod(params.sortMethod);
+  }
+
+  /**
+   * Map a user-facing sort option to a task-sort method
+   * @param option The sort option from the code block
+   * @returns Sort method compatible with task-sort utilities
+   */
+  private getSortOptionMethod(option: SortOption | 'default'): TaskSortMethod {
     const sortMap: Record<string, TaskSortMethod> = {
       default: 'default',
       filepath: 'default',
@@ -296,11 +332,10 @@ export class EmbeddedTaskListManager {
       priority: 'sortByPriority',
       urgency: 'sortByUrgency',
       keyword: 'sortByKeyword',
+      tag: 'sortByTag',
     };
 
-    const result = sortMap[params.sortMethod] || 'default';
-
-    return result;
+    return sortMap[option] || 'default';
   }
 
   /**
@@ -316,7 +351,9 @@ export class EmbeddedTaskListManager {
     const searchHash = params.searchQuery
       ? this.hashString(params.searchQuery)
       : 'none';
-    const sortHash = params.sortMethod;
+    const sortHash = `${params.sortMethod}:${params.sortDirection ?? ''}:${
+      params.secondarySortMethod ?? ''
+    }:${params.secondarySortDirection ?? ''}`;
     const completedHash = params.completed || 'default';
     const futureHash = params.future || 'default';
     const limitHash = params.limit || 'none';

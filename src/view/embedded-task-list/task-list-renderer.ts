@@ -14,7 +14,7 @@ import {
   readTaskBlockFromVault,
 } from '../../utils/task-sub-bullets';
 import { EmbeddedTaskItemRenderer } from './embedded-task-item-renderer';
-import { groupTasks } from '../../utils/task-group';
+import { groupTasks, getNaturalGroupDirection } from '../../utils/task-group';
 
 /**
  * Snapshot of the last rendered (non-collapsible) list for a container, used
@@ -726,6 +726,65 @@ export class EmbeddedTaskListRenderer {
   }
 
   /**
+   * Format the sort summary value (without the "Sort: " label), including any
+   * explicit direction and an optional secondary key. Returns null when neither
+   * the primary nor secondary sort is set.
+   */
+  private sortSummaryValue(params: TodoseqParameters): string | null {
+    const keys: string[] = [];
+    if (params.sortMethod !== 'default') {
+      keys.push(this.formatSortKey(params.sortMethod, params.sortDirection));
+    }
+    if (params.secondarySortMethod) {
+      keys.push(
+        this.formatSortKey(
+          params.secondarySortMethod,
+          params.secondarySortDirection,
+        ),
+      );
+    }
+    return keys.length > 0 ? keys.join(', ') : null;
+  }
+
+  private formatSortKey(
+    field: string,
+    direction: 'asc' | 'desc' | undefined,
+  ): string {
+    return direction ? `${field} ${direction}` : field;
+  }
+
+  /**
+   * Format the group-by summary value (without the "Group: " label), including
+   * an explicit direction, or null when no grouping is set.
+   */
+  private groupSummaryValue(params: TodoseqParameters): string | null {
+    if (params.groupBy === undefined) return null;
+    return params.groupByDirection
+      ? `${params.groupBy} ${params.groupByDirection}`
+      : params.groupBy;
+  }
+
+  /**
+   * Build a ranker for `status` grouping from the effective keyword order:
+   * active → inactive → waiting → completed, with unknown states last.
+   */
+  private getStateRank(): (state: string) => number {
+    const keywordManager = this.plugin.keywordManager;
+    const order = [
+      ...keywordManager.getKeywordsForGroup('activeKeywords'),
+      ...keywordManager.getKeywordsForGroup('inactiveKeywords'),
+      ...keywordManager.getKeywordsForGroup('waitingKeywords'),
+      ...keywordManager.getKeywordsForGroup('completedKeywords'),
+    ];
+    const ranks = new Map<string, number>();
+    order.forEach((keyword, index) => {
+      const key = keyword.toUpperCase();
+      if (!ranks.has(key)) ranks.set(key, index);
+    });
+    return (state) => ranks.get(state.toUpperCase()) ?? Number.MAX_SAFE_INTEGER;
+  }
+
+  /**
    * Render a compact query summary for the collapsible header
    */
   private renderQuerySummary(
@@ -736,11 +795,13 @@ export class EmbeddedTaskListRenderer {
     if (params.searchQuery) {
       parts.push(params.searchQuery);
     }
-    if (params.sortMethod !== 'default') {
-      parts.push(`sort: ${params.sortMethod}`);
+    const sortValue = this.sortSummaryValue(params);
+    if (sortValue) {
+      parts.push(`sort: ${sortValue}`);
     }
-    if (params.groupBy !== undefined) {
-      parts.push(`group: ${params.groupBy}`);
+    const groupValue = this.groupSummaryValue(params);
+    if (groupValue) {
+      parts.push(`group: ${groupValue}`);
     }
 
     if (parts.length > 0) {
@@ -807,10 +868,11 @@ export class EmbeddedTaskListRenderer {
     }
 
     // Show sort method if specified
-    if (params.sortMethod !== 'default') {
+    const sortValue = this.sortSummaryValue(params);
+    if (sortValue) {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-sort',
-        text: `Sort: ${params.sortMethod}`,
+        text: `Sort: ${sortValue}`,
       });
     }
 
@@ -839,10 +901,11 @@ export class EmbeddedTaskListRenderer {
     }
 
     // Show group-by if specified
-    if (params.groupBy !== undefined) {
+    const groupValue = this.groupSummaryValue(params);
+    if (groupValue) {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-group',
-        text: `Group: ${params.groupBy}`,
+        text: `Group: ${groupValue}`,
       });
     }
 
@@ -928,7 +991,7 @@ export class EmbeddedTaskListRenderer {
       showQueryHeader &&
       !!(
         params.searchQuery ||
-        params.sortMethod !== 'default' ||
+        this.sortSummaryValue(params) !== null ||
         params.completed !== undefined ||
         params.future !== undefined ||
         params.limit !== undefined ||
@@ -952,10 +1015,11 @@ export class EmbeddedTaskListRenderer {
       });
     }
 
-    if (params.sortMethod !== 'default') {
+    const sortValue = this.sortSummaryValue(params);
+    if (sortValue) {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-sort',
-        text: `Sort: ${params.sortMethod}`,
+        text: `Sort: ${sortValue}`,
       });
     }
 
@@ -980,10 +1044,11 @@ export class EmbeddedTaskListRenderer {
       });
     }
 
-    if (params.groupBy !== undefined) {
+    const groupValue = this.groupSummaryValue(params);
+    if (groupValue) {
       header.createSpan({
         cls: 'todoseq-embedded-task-list-group',
-        text: `Group: ${params.groupBy}`,
+        text: `Group: ${groupValue}`,
       });
     }
   }
@@ -1118,7 +1183,18 @@ export class EmbeddedTaskListRenderer {
     params: TodoseqParameters,
   ): void {
     if (params.groupBy) {
-      for (const group of groupTasks(tasks, params.groupBy)) {
+      const direction =
+        params.groupByDirection ?? getNaturalGroupDirection(params.groupBy);
+      const options =
+        params.groupBy === 'status'
+          ? { stateRank: this.getStateRank() }
+          : undefined;
+      for (const group of groupTasks(
+        tasks,
+        params.groupBy,
+        direction,
+        options,
+      )) {
         const header = container.createDiv({
           cls: 'todoseq-embedded-task-group-header',
         });

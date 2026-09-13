@@ -170,7 +170,7 @@ describe('sortByStarted', () => {
   const make = (text: string, startedDate: Date | null): Task =>
     createBaseTask({ path: 'a.md', text, startedDate });
 
-  it('sorts by startedDate ascending', () => {
+  it('sorts by startedDate descending (most recent first)', () => {
     const sorted = sortTasksWithThreeBlockSystem(
       [make('later', later), make('earlier', earlier)],
       new Date(2026, 0, 14),
@@ -178,7 +178,7 @@ describe('sortByStarted', () => {
       'showAll',
       'sortByStarted',
     );
-    expect(sorted.map((t) => t.text)).toEqual(['earlier', 'later']);
+    expect(sorted.map((t) => t.text)).toEqual(['later', 'earlier']);
   });
 
   it('sorts tasks without startedDate last', () => {
@@ -189,7 +189,7 @@ describe('sortByStarted', () => {
       'showAll',
       'sortByStarted',
     );
-    expect(sorted.map((t) => t.text)).toEqual(['earlier', 'later', 'none']);
+    expect(sorted.map((t) => t.text)).toEqual(['later', 'earlier', 'none']);
   });
 
   it('falls back to taskComparator (path, line) when dates are equal', () => {

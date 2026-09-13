@@ -51,6 +51,25 @@ describe('EmbeddedTaskListManager', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('includes sort direction and secondary key in cache key', () => {
+      const tasks = [createBaseTask()];
+      const base: TodoseqParameters = { sortMethod: 'priority' };
+
+      const keyBase = (manager as any).generateCacheKey(tasks, base);
+      const keyDir = (manager as any).generateCacheKey(tasks, {
+        ...base,
+        sortDirection: 'asc',
+      });
+      const keySecondary = (manager as any).generateCacheKey(tasks, {
+        ...base,
+        secondarySortMethod: 'scheduled',
+      });
+
+      expect(keyBase).not.toBe(keyDir);
+      expect(keyBase).not.toBe(keySecondary);
+      expect(keyDir).not.toBe(keySecondary);
+    });
+
     it('generates different keys for different warning period overrides', () => {
       const tasks = [createBaseTask()];
       const params1: TodoseqParameters = {
@@ -189,6 +208,59 @@ describe('EmbeddedTaskListManager', () => {
 
       expect(result.tasks.length).toBe(0);
       expect(result.totalCount).toBe(0);
+    });
+
+    it('applies an explicit sort direction', async () => {
+      const tasks = [
+        createBaseTask({ path: 'a.md', line: 0, text: 'low', priority: 'low' }),
+        createBaseTask({
+          path: 'a.md',
+          line: 1,
+          text: 'high',
+          priority: 'high',
+        }),
+      ];
+
+      const natural = await manager.filterAndSortTasksWithCount(tasks, {
+        sortMethod: 'priority',
+      });
+      expect(natural.tasks.map((t) => t.text)).toEqual(['high', 'low']);
+
+      const ascending = await manager.filterAndSortTasksWithCount(tasks, {
+        sortMethod: 'priority',
+        sortDirection: 'asc',
+      });
+      expect(ascending.tasks.map((t) => t.text)).toEqual(['low', 'high']);
+    });
+
+    it('applies a secondary sort key', async () => {
+      const early = new Date('2026-03-01');
+      const late = new Date('2026-03-10');
+      const tasks = [
+        createBaseTask({
+          path: 'a.md',
+          line: 0,
+          text: 'high-late',
+          priority: 'high',
+          scheduledDate: late,
+        }),
+        createBaseTask({
+          path: 'a.md',
+          line: 1,
+          text: 'high-early',
+          priority: 'high',
+          scheduledDate: early,
+        }),
+      ];
+
+      const result = await manager.filterAndSortTasksWithCount(tasks, {
+        sortMethod: 'priority',
+        secondarySortMethod: 'scheduled',
+      });
+      expect(result.tasks.map((t) => t.text)).toEqual([
+        'high-early',
+        'high-late',
+      ]);
     });
   });
 

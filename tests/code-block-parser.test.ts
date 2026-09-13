@@ -59,11 +59,77 @@ collapse: true`;
       expect(params.error).toBeUndefined();
     });
 
+    it('should parse tag sort method', () => {
+      const source = 'sort: tag';
+      const params = TodoseqCodeBlockParser.parse(source);
+      expect(params.sortMethod).toBe('tag');
+      expect(params.error).toBeUndefined();
+    });
+
     it('should reject an invalid sort method with started in the message', () => {
       const source = 'sort: bogus';
       const params = TodoseqCodeBlockParser.parse(source);
       expect(params.error).toBeDefined();
       expect(params.error).toContain('started');
+    });
+
+    it('parses a direction on the sort key', () => {
+      const params = TodoseqCodeBlockParser.parse('sort: priority desc');
+      expect(params.sortMethod).toBe('priority');
+      expect(params.sortDirection).toBe('desc');
+    });
+
+    it('parses a secondary sort key', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'sort: priority desc, scheduled',
+      );
+      expect(params.sortMethod).toBe('priority');
+      expect(params.sortDirection).toBe('desc');
+      expect(params.secondarySortMethod).toBe('scheduled');
+      expect(params.secondarySortDirection).toBeUndefined();
+    });
+
+    it('parses directions on both sort keys', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'sort: scheduled asc, deadline desc',
+      );
+      expect(params.sortMethod).toBe('scheduled');
+      expect(params.sortDirection).toBe('asc');
+      expect(params.secondarySortMethod).toBe('deadline');
+      expect(params.secondarySortDirection).toBe('desc');
+    });
+
+    it('is case-insensitive and tolerates whitespace in sort', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        '  sort:  Priority   DESC ,  Scheduled  ',
+      );
+      expect(params.sortMethod).toBe('priority');
+      expect(params.sortDirection).toBe('desc');
+      expect(params.secondarySortMethod).toBe('scheduled');
+    });
+
+    it('leaves direction undefined for a single key without one', () => {
+      const params = TodoseqCodeBlockParser.parse('sort: priority');
+      expect(params.sortDirection).toBeUndefined();
+      expect(params.secondarySortMethod).toBeUndefined();
+    });
+
+    it('rejects an invalid sort direction', () => {
+      const params = TodoseqCodeBlockParser.parse('sort: priority sideways');
+      expect(params.error).toContain('asc');
+      expect(params.error).toContain('desc');
+    });
+
+    it('rejects more than two sort keys', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'sort: priority, scheduled, deadline',
+      );
+      expect(params.error).toBeDefined();
+    });
+
+    it('rejects an unknown secondary sort key', () => {
+      const params = TodoseqCodeBlockParser.parse('sort: priority, bogus');
+      expect(params.error).toContain('bogus');
     });
 
     it('should handle invalid parameters gracefully', () => {
@@ -561,6 +627,50 @@ collapse: true`;
     it('should parse group-by: heading', () => {
       const params = TodoseqCodeBlockParser.parse('group-by: heading');
       expect(params.groupBy).toBe('heading');
+    });
+
+    it('should parse the new group-by fields', () => {
+      for (const field of [
+        'status',
+        'priority',
+        'scheduled',
+        'deadline',
+        'closed',
+        'started',
+        'tag',
+      ]) {
+        const params = TodoseqCodeBlockParser.parse(`group-by: ${field}`);
+        expect(params.groupBy).toBe(field);
+        expect(params.error).toBeUndefined();
+      }
+    });
+
+    it('should parse a direction on the group-by field', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: priority desc');
+      expect(params.groupBy).toBe('priority');
+      expect(params.groupByDirection).toBe('desc');
+    });
+
+    it('should parse asc and tolerate whitespace/case', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        '  group-by:   Scheduled   ASC  ',
+      );
+      expect(params.groupBy).toBe('scheduled');
+      expect(params.groupByDirection).toBe('asc');
+    });
+
+    it('should reject an invalid group-by direction', () => {
+      const params = TodoseqCodeBlockParser.parse('group-by: priority up');
+      expect(params.error).toContain('Invalid group-by direction');
+      expect(params.error).toContain('asc');
+      expect(params.error).toContain('desc');
+    });
+
+    it('should reject too many group-by tokens', () => {
+      const params = TodoseqCodeBlockParser.parse(
+        'group-by: priority desc extra',
+      );
+      expect(params.error).toBeDefined();
     });
 
     it('should be case-insensitive and ignore surrounding whitespace', () => {

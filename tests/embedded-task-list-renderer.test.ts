@@ -33,6 +33,20 @@ describe('EmbeddedTaskListRenderer', () => {
         getCheckboxState: jest.fn().mockReturnValue(' '),
         isActive: jest.fn().mockReturnValue(false),
         isCompleted: jest.fn().mockReturnValue(false),
+        getKeywordsForGroup: jest.fn((group: string) => {
+          switch (group) {
+            case 'activeKeywords':
+              return ['NOW', 'DOING', 'IN-PROGRESS'];
+            case 'inactiveKeywords':
+              return ['TODO', 'LATER'];
+            case 'waitingKeywords':
+              return ['WAIT', 'WAITING'];
+            case 'completedKeywords':
+              return ['DONE', 'CANCELED', 'CANCELLED'];
+            default:
+              return [];
+          }
+        }),
       },
     };
     renderer = new (EmbeddedTaskListRenderer as any)(mockPlugin);
@@ -284,6 +298,24 @@ describe('EmbeddedTaskListRenderer', () => {
 
       const sortSpan = header.querySelector('.todoseq-embedded-task-list-sort');
       expect(sortSpan?.textContent).toBe('Sort: priority');
+    });
+
+    it('renders the sort direction and secondary key in header', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {
+        sortMethod: 'priority',
+        sortDirection: 'desc',
+        secondarySortMethod: 'scheduled',
+      };
+      const header = renderer.renderCollapsibleHeaderNoTitle(
+        container,
+        params,
+        true,
+        5,
+      );
+
+      const sortSpan = header.querySelector('.todoseq-embedded-task-list-sort');
+      expect(sortSpan?.textContent).toBe('Sort: priority desc, scheduled');
     });
 
     it('renders completed filter in header', () => {
@@ -809,7 +841,7 @@ describe('EmbeddedTaskListRenderer', () => {
     const groupLabel = (header: Element) =>
       header.querySelector('.todoseq-embedded-task-group-label')?.textContent;
 
-    it('renders one header and one list per folder group in first-appearance order', () => {
+    it('renders one header and one list per folder group, alphabetically', () => {
       const container = document.createElement('div');
       const params: TodoseqParameters = { groupBy: 'folder' };
       const tasks = [
@@ -821,17 +853,17 @@ describe('EmbeddedTaskListRenderer', () => {
       renderer.renderTaskList(container, tasks, params);
 
       expect(groupHeaders(container).map(groupLabel)).toEqual([
-        'projects/',
         'notes/',
+        'projects/',
       ]);
       const lists = container.querySelectorAll('.todoseq-embedded-task-list');
       expect(lists).toHaveLength(2);
       expect(
         lists[0].querySelectorAll('.todoseq-embedded-task-item'),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(
         lists[1].querySelectorAll('.todoseq-embedded-task-item'),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
     });
 
     it('renders a per-group task count', () => {
@@ -875,9 +907,154 @@ describe('EmbeddedTaskListRenderer', () => {
       renderer.renderTaskList(container, tasks, { groupBy: 'file' });
 
       expect(groupHeaders(container).map(groupLabel)).toEqual([
-        'roadmap',
         'notes',
+        'roadmap',
       ]);
+    });
+
+    it('groups by status', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ state: 'TODO', text: 'a' }),
+        createBaseTask({ state: 'DONE', text: 'b', completed: true }),
+        createBaseTask({ state: 'TODO', text: 'c' }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'status' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual(['TODO', 'DONE']);
+    });
+
+    it('groups by priority with friendly labels in priority order', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ priority: null }),
+        createBaseTask({ priority: 'high' }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'priority' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        'High',
+        'No priority',
+      ]);
+    });
+
+    it('orders priority groups natively, honouring asc/desc', () => {
+      const tasks = [
+        createBaseTask({ priority: null }),
+        createBaseTask({ priority: 'low' }),
+        createBaseTask({ priority: 'high' }),
+        createBaseTask({ priority: 'med' }),
+      ];
+
+      const descContainer = document.createElement('div');
+      renderer.renderTaskList(descContainer, tasks, { groupBy: 'priority' });
+      expect(groupHeaders(descContainer).map(groupLabel)).toEqual([
+        'High',
+        'Medium',
+        'Low',
+        'No priority',
+      ]);
+
+      const ascContainer = document.createElement('div');
+      renderer.renderTaskList(ascContainer, tasks, {
+        groupBy: 'priority',
+        groupByDirection: 'asc',
+      });
+      expect(groupHeaders(ascContainer).map(groupLabel)).toEqual([
+        'Low',
+        'Medium',
+        'High',
+        'No priority',
+      ]);
+    });
+
+    it('orders status groups by keyword group', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ state: 'DONE', completed: true, text: 'done' }),
+        createBaseTask({ state: 'TODO', text: 'todo' }),
+        createBaseTask({ state: 'DOING', text: 'doing' }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'status' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        'DOING',
+        'TODO',
+        'DONE',
+      ]);
+    });
+
+    it('reverses the group order when direction is desc', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ path: 'a/x.md' }),
+        createBaseTask({ path: 'b/y.md' }),
+      ];
+
+      renderer.renderTaskList(container, tasks, {
+        groupBy: 'folder',
+        groupByDirection: 'desc',
+      });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual(['b/', 'a/']);
+    });
+
+    it('groups by tag, duplicating multi-tag tasks', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ tags: ['work', 'urgent'], text: 'a' }),
+        createBaseTask({ tags: [], text: 'b' }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'tag' });
+
+      expect(groupHeaders(container).map(groupLabel)).toEqual([
+        '#urgent',
+        '#work',
+        'No tag',
+      ]);
+      const lists = container.querySelectorAll('.todoseq-embedded-task-list');
+      expect(lists).toHaveLength(3);
+      // 'a' is duplicated into both #urgent and #work; 'b' is untagged.
+      expect(
+        lists[0].querySelectorAll('.todoseq-embedded-task-item'),
+      ).toHaveLength(1);
+      expect(
+        lists[2].querySelectorAll('.todoseq-embedded-task-item'),
+      ).toHaveLength(1);
+    });
+
+    it('groups date fields with a No <field> fallback', () => {
+      const container = document.createElement('div');
+      const tasks = [
+        createBaseTask({ scheduledDate: new Date(2026, 2, 5) }),
+        createBaseTask({ scheduledDate: null }),
+      ];
+
+      renderer.renderTaskList(container, tasks, { groupBy: 'scheduled' });
+
+      const labels = groupHeaders(container).map(groupLabel);
+      expect(labels).toHaveLength(2);
+      expect(labels[1]).toBe('No scheduled');
+      expect(labels[0]).not.toBe('No scheduled');
+    });
+
+    it('shows the group direction in the header', () => {
+      const container = document.createElement('div');
+      const params: TodoseqParameters = {
+        groupBy: 'priority',
+        groupByDirection: 'desc',
+      };
+
+      renderer.renderTaskList(container, [createBaseTask()], params);
+
+      const groupSpan = container.querySelector(
+        '.todoseq-embedded-task-list-group',
+      );
+      expect(groupSpan?.textContent).toBe('Group: priority desc');
     });
 
     it('renders empty state and no group headers when there are no tasks', () => {

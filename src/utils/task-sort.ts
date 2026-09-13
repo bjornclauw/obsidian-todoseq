@@ -48,7 +48,8 @@ export type SortMethod =
   | 'sortByStarted'
   | 'sortByPriority'
   | 'sortByUrgency'
-  | 'sortByKeyword';
+  | 'sortByKeyword'
+  | 'sortByTag';
 
 /**
  * Future task display options
@@ -85,6 +86,16 @@ export const taskComparator = (a: Task, b: Task): number => {
   if (a.path === b.path) return a.line - b.line;
   return a.path.localeCompare(b.path);
 };
+
+/** Alphabetically-first tag of a task (tags are stored without the leading #). */
+function getFirstTag(task: Task): string | null {
+  if (!task.tags || task.tags.length === 0) return null;
+  let first = task.tags[0];
+  for (const tag of task.tags) {
+    if (tag.toLowerCase().localeCompare(first.toLowerCase()) < 0) first = tag;
+  }
+  return first;
+}
 
 /**
  * Classify a task into a keyword group for sorting
@@ -372,161 +383,160 @@ function classifyTask(
 }
 
 /**
- * Get sort function based on sort method
- * @param sortMethod The sort method to use
- * @param keywordConfig Optional keyword sort configuration for sortByKeyword
- * @returns Sort function
+ * Sort direction for a single sort key.
  */
-function getSortFunction(
+export type SortDirection = 'asc' | 'desc';
+
+/**
+ * An explicit secondary sort key, applied when the primary key ties.
+ */
+export interface SecondarySort {
+  method: SortMethod;
+  direction: SortDirection;
+}
+
+/**
+ * The direction a sort method uses when none is given:
+ * - `priority`/`urgency`: highest first;
+ * - `closed`/`started`: most recent first;
+ * - everything else: ascending (earliest / A→Z / keyword order).
+ */
+export function getNaturalDirection(sortMethod: SortMethod): SortDirection {
+  return sortMethod === 'sortByPriority' ||
+    sortMethod === 'sortByUrgency' ||
+    sortMethod === 'sortByClosedDate' ||
+    sortMethod === 'sortByStarted'
+    ? 'desc'
+    : 'asc';
+}
+
+/**
+ * Build a comparator for a single field, applying `direction` to the value
+ * comparison only. Missing values (no date / no priority / no urgency) always
+ * sort to the end regardless of direction and are left for the caller's
+ * tie-breakers to order.
+ */
+export function getFieldComparator(
   sortMethod: SortMethod,
+  direction: SortDirection = getNaturalDirection(sortMethod),
   keywordConfig?: KeywordSortConfig,
 ): (a: Task, b: Task) => number {
+  const dir = direction === 'desc' ? -1 : 1;
+
   switch (sortMethod) {
     case 'sortByScheduled':
       return (a, b) => {
-        if (!a.scheduledDate && !b.scheduledDate) {
-          if (keywordConfig) {
-            return keywordSortComparator(a, b, keywordConfig);
-          }
-          return taskComparator(a, b);
-        }
+        if (!a.scheduledDate && !b.scheduledDate) return 0;
         if (!a.scheduledDate) return 1;
         if (!b.scheduledDate) return -1;
-
-        const dateDiff = a.scheduledDate.getTime() - b.scheduledDate.getTime();
-        if (dateDiff !== 0) {
-          return dateDiff;
-        }
-
-        // If scheduled dates are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        return dir * (a.scheduledDate.getTime() - b.scheduledDate.getTime());
       };
 
     case 'sortByDeadline':
       return (a, b) => {
-        if (!a.deadlineDate && !b.deadlineDate) {
-          if (keywordConfig) {
-            return keywordSortComparator(a, b, keywordConfig);
-          }
-          return taskComparator(a, b);
-        }
+        if (!a.deadlineDate && !b.deadlineDate) return 0;
         if (!a.deadlineDate) return 1;
         if (!b.deadlineDate) return -1;
-
-        const dateDiff = a.deadlineDate.getTime() - b.deadlineDate.getTime();
-        if (dateDiff !== 0) {
-          return dateDiff;
-        }
-
-        // If deadline dates are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        return dir * (a.deadlineDate.getTime() - b.deadlineDate.getTime());
       };
 
     case 'sortByClosedDate':
       return (a, b) => {
-        // Tasks without closed dates go to the end
-        if (!a.closedDate && !b.closedDate) {
-          if (keywordConfig) {
-            return keywordSortComparator(a, b, keywordConfig);
-          }
-          return taskComparator(a, b);
-        }
+        if (!a.closedDate && !b.closedDate) return 0;
         if (!a.closedDate) return 1;
         if (!b.closedDate) return -1;
-
-        // Compare closed dates (earlier first)
-        const dateDiff = a.closedDate.getTime() - b.closedDate.getTime();
-        if (dateDiff !== 0) {
-          return dateDiff;
-        }
-
-        // If closed dates are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        return dir * (a.closedDate.getTime() - b.closedDate.getTime());
       };
 
     case 'sortByStarted':
       return (a, b) => {
-        // Tasks without started dates go to the end (matches sortByClosedDate convention)
-        if (!a.startedDate && !b.startedDate) {
-          if (keywordConfig) {
-            return keywordSortComparator(a, b, keywordConfig);
-          }
-          return taskComparator(a, b);
-        }
+        if (!a.startedDate && !b.startedDate) return 0;
         if (!a.startedDate) return 1;
         if (!b.startedDate) return -1;
-
-        // Compare started dates (earlier first)
-        const dateDiff = a.startedDate.getTime() - b.startedDate.getTime();
-        if (dateDiff !== 0) {
-          return dateDiff;
-        }
-
-        // If started dates are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        return dir * (a.startedDate.getTime() - b.startedDate.getTime());
       };
 
     case 'sortByPriority':
       return (a, b) => {
-        const priorityOrder = { high: 3, med: 2, low: 1, null: 0 };
-        const aPriority = a.priority ? priorityOrder[a.priority] : 0;
-        const bPriority = b.priority ? priorityOrder[b.priority] : 0;
-
-        if (aPriority !== bPriority) {
-          return bPriority - aPriority; // Higher priority first
-        }
-
-        // If priorities are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        const priorityOrder = { high: 3, med: 2, low: 1 };
+        const aMissing = a.priority === null || a.priority === undefined;
+        const bMissing = b.priority === null || b.priority === undefined;
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        return dir * (priorityOrder[a.priority!] - priorityOrder[b.priority!]);
       };
 
     case 'sortByUrgency':
       return (a, b) => {
-        // Handle null urgency values - sort to end
-        if (a.urgency === null && b.urgency === null) {
-          return taskComparator(a, b);
-        }
-        if (a.urgency === null) return 1;
-        if (b.urgency === null) return -1;
-
-        // Sort by urgency descending (higher urgency first)
-        if (a.urgency !== b.urgency) {
-          return b.urgency - a.urgency;
-        }
-
-        // If urgencies are equal, use keyword sort as secondary
-        if (keywordConfig) {
-          return keywordSortComparator(a, b, keywordConfig);
-        }
-        return taskComparator(a, b);
+        const aMissing = a.urgency === null || a.urgency === undefined;
+        const bMissing = b.urgency === null || b.urgency === undefined;
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        return dir * (a.urgency! - b.urgency!);
       };
 
     case 'sortByKeyword':
-      if (keywordConfig) {
-        return (a, b) => keywordSortComparator(a, b, keywordConfig);
-      }
-      // Fallback to default if no config provided
-      return taskComparator;
+      return keywordConfig
+        ? (a, b) => keywordSortComparator(a, b, keywordConfig)
+        : taskComparator;
+
+    case 'sortByTag':
+      return (a, b) => {
+        const aTag = getFirstTag(a);
+        const bTag = getFirstTag(b);
+        if (!aTag && !bTag) return 0;
+        if (!aTag) return 1;
+        if (!bTag) return -1;
+        return dir * aTag.toLowerCase().localeCompare(bTag.toLowerCase());
+      };
 
     case 'default':
-    default:
-      return taskComparator;
+      return direction === 'desc'
+        ? (a, b) => -taskComparator(a, b)
+        : taskComparator;
   }
+}
+
+/**
+ * Get a sort function for a primary method plus an optional secondary key.
+ * Composition order: primary field → secondary field (if any) → keyword
+ * tie-break (if a keyword config is available) → shared task comparator
+ * (path + line).
+ *
+ * @param sortMethod The primary sort method
+ * @param keywordConfig Optional keyword configuration for keyword tie-breaking
+ * @param direction Direction for the primary key (defaults to the natural direction)
+ * @param secondary Optional explicit secondary key
+ */
+export function getSortFunction(
+  sortMethod: SortMethod,
+  keywordConfig?: KeywordSortConfig,
+  direction: SortDirection = getNaturalDirection(sortMethod),
+  secondary?: SecondarySort,
+): (a: Task, b: Task) => number {
+  const primary = getFieldComparator(sortMethod, direction, keywordConfig);
+  const secondaryComparator = secondary
+    ? getFieldComparator(secondary.method, secondary.direction, keywordConfig)
+    : undefined;
+
+  return (a, b) => {
+    const primaryResult = primary(a, b);
+    if (primaryResult !== 0) return primaryResult;
+
+    if (secondaryComparator) {
+      const secondaryResult = secondaryComparator(a, b);
+      if (secondaryResult !== 0) return secondaryResult;
+    }
+
+    if (keywordConfig) {
+      const keywordResult = keywordSortComparator(a, b, keywordConfig);
+      if (keywordResult !== 0) return keywordResult;
+    }
+
+    return taskComparator(a, b);
+  };
 }
 
 /**
@@ -542,6 +552,8 @@ function getSortFunction(
  * @param futureSetting Future task display setting
  * @param completedSetting Completed task display setting
  * @param sortMethod User-selected sort method
+ * @param direction Direction for the primary key (defaults to the natural direction)
+ * @param secondary Optional explicit secondary sort key
  * @returns Array of task blocks in order
  */
 export function sortTasksInBlocks(
@@ -552,6 +564,8 @@ export function sortTasksInBlocks(
   sortMethod: SortMethod = 'default',
   keywordConfig?: KeywordSortConfig,
   warningPeriodSettings?: WarningPeriodSettings,
+  direction: SortDirection = getNaturalDirection(sortMethod),
+  secondary?: SecondarySort,
 ): TaskBlock[] {
   // Classify all tasks - don't sort yet
   const classified: Record<TaskCategory, Task[]> = {
@@ -567,7 +581,12 @@ export function sortTasksInBlocks(
   }
 
   // Get the sort function once
-  const sortFunction = getSortFunction(sortMethod, keywordConfig);
+  const sortFunction = getSortFunction(
+    sortMethod,
+    keywordConfig,
+    direction,
+    secondary,
+  );
 
   const blocks: TaskBlock[] = [];
 
@@ -670,6 +689,8 @@ export function sortTasksWithThreeBlockSystem(
   sortMethod: SortMethod = 'default',
   keywordConfig?: KeywordSortConfig,
   warningPeriodSettings?: WarningPeriodSettings,
+  direction: SortDirection = getNaturalDirection(sortMethod),
+  secondary?: SecondarySort,
 ): Task[] {
   const blocks = sortTasksInBlocks(
     tasks,
@@ -679,6 +700,8 @@ export function sortTasksWithThreeBlockSystem(
     sortMethod,
     keywordConfig,
     warningPeriodSettings,
+    direction,
+    secondary,
   );
   return flattenBlocks(blocks);
 }

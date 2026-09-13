@@ -1,4 +1,6 @@
 import { Search } from '../../search/search';
+import { SortDirection } from '../../utils/task-sort';
+import { GroupByField } from '../../utils/task-group';
 
 /**
  * Valid sort options for embedded task lists
@@ -11,7 +13,8 @@ export type SortOption =
   | 'started'
   | 'priority'
   | 'urgency'
-  | 'keyword';
+  | 'keyword'
+  | 'tag';
 
 /**
  * Valid completed task display options
@@ -27,7 +30,7 @@ export type FutureOption =
 /**
  * Valid grouping options for embedded task lists (location grouping)
  */
-export type GroupByOption = 'folder' | 'file' | 'heading';
+export type GroupByOption = GroupByField;
 
 /**
  * Parsed parameters from a todoseq code block
@@ -35,11 +38,14 @@ export type GroupByOption = 'folder' | 'file' | 'heading';
 export interface TodoseqParameters {
   searchQuery: string;
   sortMethod: SortOption | 'default';
+  sortDirection?: SortDirection;
+  secondarySortMethod?: SortOption;
+  secondarySortDirection?: SortDirection;
   completed?: CompletedOption;
   future?: FutureOption;
   limit?: number;
   showFile?: boolean;
-  showUrgency?: boolean; // undocumented option for debugging
+  showUrgency?: boolean; // show the calculated urgency score next to the file info
   title?: string;
   showQuery?: boolean;
   wrapContent?: boolean | 'dynamic';
@@ -55,6 +61,7 @@ export interface TodoseqParameters {
   skipDeadlineWarningIfScheduled?: boolean;
   showDescription?: 'hide' | 'show';
   groupBy?: GroupByOption;
+  groupByDirection?: SortDirection;
   error?: string;
 }
 
@@ -84,11 +91,14 @@ export class TodoseqCodeBlockParser {
       const lines = source.split('\n');
       let searchQuery = '';
       let sortMethod: SortOption | 'default' = 'default';
+      let sortDirection: SortDirection | undefined;
+      let secondarySortMethod: SortOption | undefined;
+      let secondarySortDirection: SortDirection | undefined;
       let completed: CompletedOption | undefined;
       let future: FutureOption | undefined;
       let limit: number | undefined;
       let showFile: boolean | undefined;
-      let showUrgency: boolean | undefined; // undocumented option
+      let showUrgency: boolean | undefined; // show the calculated urgency score
       let title: string | undefined;
       let showQuery: boolean | undefined;
       let wrapContent: boolean | 'dynamic' | undefined;
@@ -103,6 +113,9 @@ export class TodoseqCodeBlockParser {
       let skipDeadlineWarningIfScheduled: boolean | undefined;
       let showDescription: 'hide' | 'show' | undefined;
       let groupBy: GroupByOption | undefined;
+      let groupByDirection: SortDirection | undefined;
+
+      const validDirections: SortDirection[] = ['asc', 'desc'];
 
       // Parse each line for parameters
       for (const line of lines) {
@@ -111,10 +124,7 @@ export class TodoseqCodeBlockParser {
         if (trimmed.startsWith('search:')) {
           searchQuery = trimmed.substring('search:'.length).trim();
         } else if (trimmed.startsWith('sort:')) {
-          const sortValue = trimmed
-            .substring('sort:'.length)
-            .trim()
-            .toLowerCase();
+          const sortValue = trimmed.substring('sort:'.length).trim();
           // Map old sort values to new ones for backward compatibility
           const sortMap: Record<string, SortOption | 'default'> = {
             default: 'default',
@@ -131,27 +141,93 @@ export class TodoseqCodeBlockParser {
             keywords: 'keyword',
             closed: 'closed',
             started: 'started',
+            tag: 'tag',
+            tags: 'tag',
           };
-          const mappedSort = sortMap[sortValue];
-          if (mappedSort) {
-            sortMethod = mappedSort;
-          } else {
+          const sortKeys = sortValue
+            .split(',')
+            .map((part) => part.trim())
+            .filter((part) => part.length > 0);
+          if (sortKeys.length === 0 || sortKeys.length > 2) {
             throw new Error(
-              `Invalid sort method: ${sortValue}. Valid options: filepath, scheduled, deadline, closed, started, priority, urgency, keyword`,
+              'Invalid sort value. Use up to two keys, e.g. "sort: priority desc, scheduled"',
             );
           }
+          const parseSortKey = (
+            part: string,
+          ): { method: SortOption | 'default'; direction?: SortDirection } => {
+            const tokens = part.toLowerCase().split(/\s+/);
+            if (tokens.length > 2) {
+              throw new Error(
+                `Invalid sort key: ${part}. Expected "<field> [asc|desc]"`,
+              );
+            }
+            const mappedSort = sortMap[tokens[0]];
+            if (!mappedSort) {
+              throw new Error(
+                `Invalid sort method: ${tokens[0]}. Valid options: filepath, scheduled, deadline, closed, started, priority, urgency, keyword, tag`,
+              );
+            }
+            if (tokens.length === 2) {
+              const dir = tokens[1] as SortDirection;
+              if (!validDirections.includes(dir)) {
+                throw new Error(
+                  `Invalid sort direction: ${tokens[1]}. Valid options: asc, desc`,
+                );
+              }
+              return { method: mappedSort, direction: dir };
+            }
+            return { method: mappedSort };
+          };
+
+          const primary = parseSortKey(sortKeys[0]);
+          sortMethod = primary.method;
+          sortDirection = primary.direction;
+
+          if (sortKeys.length === 2) {
+            const secondary = parseSortKey(sortKeys[1]);
+            if (secondary.method === 'default') {
+              throw new Error(
+                'Invalid secondary sort method: default. Use a real field',
+              );
+            }
+            secondarySortMethod = secondary.method;
+            secondarySortDirection = secondary.direction;
+          }
         } else if (trimmed.startsWith('group-by:')) {
-          const groupValue = trimmed
-            .substring('group-by:'.length)
-            .trim()
-            .toLowerCase();
-          const validGroupBy: GroupByOption[] = ['folder', 'file', 'heading'];
-          if (validGroupBy.includes(groupValue as GroupByOption)) {
-            groupBy = groupValue as GroupByOption;
-          } else {
+          const groupValue = trimmed.substring('group-by:'.length).trim();
+          const tokens = groupValue.toLowerCase().split(/\s+/);
+          const validGroupBy: GroupByOption[] = [
+            'folder',
+            'file',
+            'heading',
+            'status',
+            'priority',
+            'scheduled',
+            'deadline',
+            'closed',
+            'started',
+            'tag',
+          ];
+          if (tokens.length === 0 || tokens.length > 2) {
             throw new Error(
-              `Invalid group-by option: ${groupValue}. Valid options: folder, file, heading`,
+              'Invalid group-by value. Expected "<field> [asc|desc]"',
             );
+          }
+          if (!validGroupBy.includes(tokens[0] as GroupByOption)) {
+            throw new Error(
+              `Invalid group-by option: ${tokens[0]}. Valid options: folder, file, heading, status, priority, scheduled, deadline, closed, started, tag`,
+            );
+          }
+          groupBy = tokens[0] as GroupByOption;
+          if (tokens.length === 2) {
+            const dir = tokens[1] as SortDirection;
+            if (!validDirections.includes(dir)) {
+              throw new Error(
+                `Invalid group-by direction: ${tokens[1]}. Valid options: asc, desc`,
+              );
+            }
+            groupByDirection = dir;
           }
         } else if (trimmed.startsWith('show-completed:')) {
           const completedValue = trimmed
@@ -455,6 +531,9 @@ export class TodoseqCodeBlockParser {
       return {
         searchQuery,
         sortMethod,
+        sortDirection,
+        secondarySortMethod,
+        secondarySortDirection,
         completed,
         future,
         limit,
@@ -474,6 +553,7 @@ export class TodoseqCodeBlockParser {
         skipDeadlineWarningIfScheduled,
         showDescription,
         groupBy,
+        groupByDirection,
       };
     } catch (error) {
       const errorMessage =
@@ -481,6 +561,9 @@ export class TodoseqCodeBlockParser {
       return {
         searchQuery: '',
         sortMethod: 'default',
+        sortDirection: undefined,
+        secondarySortMethod: undefined,
+        secondarySortDirection: undefined,
         error: errorMessage,
         showFile: undefined,
         showUrgency: undefined,
@@ -498,6 +581,7 @@ export class TodoseqCodeBlockParser {
         skipDeadlineWarningIfScheduled: undefined,
         showDescription: undefined,
         groupBy: undefined,
+        groupByDirection: undefined,
       };
     }
   }
@@ -558,6 +642,7 @@ export class TodoseqCodeBlockParser {
       priority: 'sortByPriority',
       urgency: 'sortByUrgency',
       keyword: 'sortByKeyword',
+      tag: 'sortByTag',
     };
 
     return sortMap[params.sortMethod] || 'default';
