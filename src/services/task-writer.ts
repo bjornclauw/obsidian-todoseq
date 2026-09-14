@@ -1523,15 +1523,20 @@ export class TaskWriter {
    * Create a new task at the given line in the given file.
    *
    * If the target line is blank, the task block replaces it. Otherwise the
-   * block is inserted at the line, pushing existing content down. The task
-   * block includes the task line followed by DESCRIPTION/SCHEDULED/DEADLINE
-   * metadata lines.
+   * block is inserted at the line, pushing existing content down — unless
+   * `replaceExistingLine` is set, in which case the plain text line is
+   * replaced by the block (used when the editor prefilled the task text from
+   * the cursor line). The task block includes the task line followed by
+   * DESCRIPTION/SCHEDULED/DEADLINE metadata lines.
    */
   async createTaskAtLine(
     path: string,
     line: number,
     fields: TaskComposeFields,
-    options: { recordCompletion?: boolean } = {},
+    options: {
+      recordCompletion?: boolean;
+      replaceExistingLine?: boolean;
+    } = {},
   ): Promise<TaskComposeResult | null> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
@@ -1542,14 +1547,15 @@ export class TaskWriter {
       fields,
       options.recordCompletion ?? false,
     );
+    const replaceExistingLine = options.replaceExistingLine ?? false;
     const editor = this.getSourceModeEditorForPath(path);
     let lineDelta: number;
 
     if (editor) {
       const currentLine = editor.getLine(line) ?? '';
-      const replacingBlank = currentLine.trim() === '';
+      const replacingLine = replaceExistingLine || currentLine.trim() === '';
       const from: EditorPosition = { line, ch: 0 };
-      if (replacingBlank) {
+      if (replacingLine) {
         editor.replaceRange(block.join('\n'), from, {
           line,
           ch: currentLine.length,
@@ -1557,21 +1563,22 @@ export class TaskWriter {
       } else {
         editor.replaceRange(`${block.join('\n')}\n`, from, from);
       }
-      // Replacing a blank line consumes one line; inserting adds them all.
-      lineDelta = replacingBlank ? block.length - 1 : block.length;
+      // Replacing a single line consumes one line; inserting adds them all.
+      lineDelta = replacingLine ? block.length - 1 : block.length;
     } else {
       lineDelta = 0;
       await this.app.vault.process(file, (data) => {
         const lines = data.split('\n');
         const index = Math.max(0, Math.min(line, lines.length));
-        const replacingBlank =
-          lines[index] !== undefined && lines[index].trim() === '';
-        if (replacingBlank) {
+        const replacingLine =
+          replaceExistingLine ||
+          (lines[index] !== undefined && lines[index].trim() === '');
+        if (replacingLine) {
           lines.splice(index, 1, ...block);
         } else {
           lines.splice(index, 0, ...block);
         }
-        lineDelta = replacingBlank ? block.length - 1 : block.length;
+        lineDelta = replacingLine ? block.length - 1 : block.length;
         return lines.join('\n');
       });
     }

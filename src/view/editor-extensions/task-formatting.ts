@@ -50,6 +50,13 @@ const PRIORITY_TOKEN_REGEX_GLOBAL = new RegExp(
 const TABLE_CELL_STYLE_DEBOUNCE_DELAY = 50;
 
 /**
+ * Maximum distance (in lines) between a task line and the metadata lines
+ * (DESCRIPTION/CREATED/STARTED/SCHEDULED/DEADLINE/CLOSED) that follow it.
+ * Six metadata lines plus a small gap for blank lines.
+ */
+const MAX_METADATA_LINE_GAP = 8;
+
+/**
  * Priority type definition
  */
 type PriorityLevel = 'high' | 'med' | 'low';
@@ -704,8 +711,8 @@ export class TaskKeywordDecorator {
     // Check if this line is immediately after the task line (with possible empty lines in between)
     const linesSinceTask = lineNumber - this.previousTaskLine;
 
-    // Only consider lines that are close to the task line (within 5 lines)
-    if (linesSinceTask > 5) {
+    // Only consider lines that are close to the task line
+    if (linesSinceTask > MAX_METADATA_LINE_GAP) {
       // Too far from task line, reset tracking
       this.previousTaskLine = null;
       this.previousTaskIndent = '';

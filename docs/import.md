@@ -27,19 +27,19 @@ A `🛫` start date is written as the task's scheduled date when the task has no
 
 ### What gets converted
 
-| Obsidian Tasks | TODOseq |
-|----------------|---------|
-| `- [ ]` / `- [x]` / `- [/]` / `- [-]` | `[ ]` / `[x]` with `TODO` / `DONE` / `DOING` / `CANCELED` |
-| `⏳ 2026-01-15` or `[scheduled:: 2026-01-15]` | `SCHEDULED: <2026-01-15 Thu>` |
-| `📅 2026-01-20` or `[due:: 2026-01-20]` | `DEADLINE: <2026-01-20 Tue>` |
-| `🛫 2026-01-10` or `[start:: 2026-01-10]` | `SCHEDULED: <2026-01-10 Sat>` (only when no scheduled date exists) |
-| `➕ 2026-01-01` or `[created:: 2026-01-01]` | `CREATED: [2026-01-01 Thu]` |
-| `✅ 2026-01-18` or `[completion:: 2026-01-18]` | `CLOSED: [2026-01-18 Sun]` |
-| `❌ 2026-01-18` or `[cancelled:: 2026-01-18]` | `CLOSED: [2026-01-18 Sun]` + `CANCELED` |
-| `🔁 every week` or `[recurrence:: every week]` | `+1w` on the scheduled/deadline date |
-| `🔁 every week when done` | `.+1w` |
-| `🔁 every 2 weeks` | `+2w` |
-| `⏫ 🔼 🔽 ⏬` or `[priority:: highest]` | `[#A]` / `[#B]` / `[#C]` (using your chosen mapping) |
+| Obsidian Tasks                                 | TODOseq                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `- [ ]` / `- [x]` / `- [/]` / `- [-]`          | `[ ]` / `[x]` with `TODO` / `DONE` / `DOING` / `CANCELED`          |
+| `⏳ 2026-01-15` or `[scheduled:: 2026-01-15]`  | `SCHEDULED: <2026-01-15 Thu>`                                      |
+| `📅 2026-01-20` or `[due:: 2026-01-20]`        | `DEADLINE: <2026-01-20 Tue>`                                       |
+| `🛫 2026-01-10` or `[start:: 2026-01-10]`      | `SCHEDULED: <2026-01-10 Sat>` (only when no scheduled date exists) |
+| `➕ 2026-01-01` or `[created:: 2026-01-01]`    | `CREATED: [2026-01-01 Thu]`                                        |
+| `✅ 2026-01-18` or `[completion:: 2026-01-18]` | `CLOSED: [2026-01-18 Sun]`                                         |
+| `❌ 2026-01-18` or `[cancelled:: 2026-01-18]`  | `CLOSED: [2026-01-18 Sun]` + `CANCELED`                            |
+| `🔁 every week` or `[recurrence:: every week]` | `+1w` on the scheduled/deadline date                               |
+| `🔁 every week when done`                      | `.+1w`                                                             |
+| `🔁 every 2 weeks`                             | `+2w`                                                              |
+| `⏫ 🔼 🔽 ⏬` or `[priority:: highest]`        | `[#A]` / `[#B]` / `[#C]` (using your chosen mapping)               |
 
 Unsupported metadata (for example `every weekday`, or a recurrence with no date to attach to) is listed as a warning in the preview and left untouched in the file.
 

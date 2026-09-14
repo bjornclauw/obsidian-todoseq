@@ -7,12 +7,17 @@ import {
   TaskEditorModal,
 } from '../view/components/task-editor-modal';
 import { isTaskMetadataLine } from '../utils/task-metadata';
+import { stripMarkdownPrefixes } from '../utils/patterns';
 
 /** A resolved target for the task editor: an existing task or a new-task line. */
 interface TaskEditorTarget {
   path: string;
   line: number;
   task: Task | null;
+  /** Text prefilled from the cursor line when creating a task on plain text. */
+  prefillText?: string;
+  /** Replace the (non-blank) plain text cursor line when saving the new task. */
+  replaceLine?: boolean;
 }
 
 /**
@@ -68,7 +73,7 @@ export class TaskEditorController {
           description: target.task.description ?? null,
         }
       : {
-          text: '',
+          text: target.prefillText ?? '',
           state: keywordManager.getDefaultInactive(),
           priority: null,
           scheduledDate: null,
@@ -155,6 +160,18 @@ export class TaskEditorController {
           }
         }
       }
+
+      // The cursor may sit on plain text the user just typed: offer it as the
+      // prefill for a new task and replace that line when the task is saved.
+      const lineText = editor.getLine(cursorLine) ?? '';
+      const prefillText = stripMarkdownPrefixes(lineText).trim();
+      return {
+        path,
+        line: cursorLine,
+        task: null,
+        prefillText,
+        replaceLine: prefillText !== '',
+      };
     }
 
     return { path, line: cursorLine, task: null };
@@ -233,7 +250,10 @@ export class TaskEditorController {
           target.path,
           target.line,
           writeFields,
-          { recordCompletion },
+          {
+            recordCompletion,
+            replaceExistingLine: target.replaceLine ?? false,
+          },
         );
         if (recordCompletion && result) {
           this.plugin.taskUpdateCoordinator?.scheduleRecurrenceIfRecurring(

@@ -188,6 +188,23 @@ describe('TaskWriter.createTaskAtLine', () => {
     expect(result?.lineDelta).toBe(1);
   });
 
+  it('replaces the target line when replaceExistingLine is set', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = 'line 0\nplain text note\nline 2';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine('test.md', 1, makeFields(), {
+      replaceExistingLine: true,
+    });
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe('line 0\n- [ ] TODO Task text\nline 2');
+    // One-line block replacing the single plain text line adds no lines.
+    expect(result?.lineDelta).toBe(0);
+  });
+
   it('writes description, scheduled and deadline lines in order', async () => {
     const { writer, mockApp } = createWriter();
     const content = '';

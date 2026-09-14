@@ -396,9 +396,7 @@ describe('ImportTasksModal', () => {
     expect(query('.todoseq-import-options-card').textContent).toContain(
       'State mapping',
     );
-    expect(query('.todoseq-import-options-card').textContent).toContain(
-      'Open',
-    );
+    expect(query('.todoseq-import-options-card').textContent).toContain('Open');
 
     const archive = folderCheckbox('archive');
     archive.checked = false;

@@ -5,6 +5,14 @@ import {
 } from './helpers/test-helper';
 import { TaskComposeFields } from '../src/services/task-writer';
 import { TFile } from 'obsidian';
+import { TaskEditorModal } from '../src/view/components/task-editor-modal';
+
+jest.mock('../src/view/components/task-editor-modal', () => ({
+  TaskEditorModal: jest.fn().mockImplementation(() => ({
+    open: jest.fn(),
+    close: jest.fn(),
+  })),
+}));
 
 function makeFields(
   overrides: Partial<TaskComposeFields> = {},
@@ -81,7 +89,12 @@ describe('TaskEditorController', () => {
     };
   }
 
-  type SaveTarget = { path: string; line: number; task: unknown };
+  type SaveTarget = {
+    path: string;
+    line: number;
+    task: unknown;
+    replaceLine?: boolean;
+  };
 
   function save(
     controller: TaskEditorController,
@@ -197,6 +210,89 @@ describe('TaskEditorController', () => {
 
       expect(target.task).toBeNull();
     });
+
+    it('prefills from the plain text cursor line and marks it for replacement', () => {
+      const { controller } = createHarness(['Just some paragraph text']);
+
+      const target = (
+        controller as unknown as {
+          resolveTarget: (
+            path: string,
+            line: number,
+          ) => {
+            prefillText: string;
+            replaceLine: boolean;
+          };
+        }
+      ).resolveTarget('test.md', 0);
+
+      expect(target.prefillText).toBe('Just some paragraph text');
+      expect(target.replaceLine).toBe(true);
+    });
+
+    it('strips the list marker from a prefilled list line', () => {
+      const { controller } = createHarness(['- [ ] Buy groceries']);
+
+      const target = (
+        controller as unknown as {
+          resolveTarget: (
+            path: string,
+            line: number,
+          ) => {
+            prefillText: string;
+            replaceLine: boolean;
+          };
+        }
+      ).resolveTarget('test.md', 0);
+
+      expect(target.prefillText).toBe('Buy groceries');
+      expect(target.replaceLine).toBe(true);
+    });
+
+    it('does not prefill or replace on a blank cursor line', () => {
+      const { controller } = createHarness(['']);
+
+      const target = (
+        controller as unknown as {
+          resolveTarget: (
+            path: string,
+            line: number,
+          ) => {
+            prefillText: string;
+            replaceLine: boolean;
+          };
+        }
+      ).resolveTarget('test.md', 0);
+
+      expect(target.prefillText).toBe('');
+      expect(target.replaceLine).toBe(false);
+    });
+  });
+
+  describe('openFromActiveEditor', () => {
+    it('prefills the modal text with the plain text under the cursor', () => {
+      const { controller } = createHarness(['Buy groceries tomorrow']);
+      (TaskEditorModal as unknown as jest.Mock).mockClear();
+
+      controller.openFromActiveEditor();
+
+      const options = (TaskEditorModal as unknown as jest.Mock).mock
+        .calls[0][1];
+      expect(options.mode).toBe('create');
+      expect(options.initial.text).toBe('Buy groceries tomorrow');
+    });
+
+    it('uses an empty text when the cursor is on a blank line', () => {
+      const { controller } = createHarness(['']);
+      (TaskEditorModal as unknown as jest.Mock).mockClear();
+
+      controller.openFromActiveEditor();
+
+      const options = (TaskEditorModal as unknown as jest.Mock).mock
+        .calls[0][1];
+      expect(options.mode).toBe('create');
+      expect(options.initial.text).toBe('');
+    });
   });
 
   describe('save', () => {
@@ -213,10 +309,27 @@ describe('TaskEditorController', () => {
         'test.md',
         0,
         expect.objectContaining({ text: 'Task text' }),
-        { recordCompletion: false },
+        { recordCompletion: false, replaceExistingLine: false },
       );
       expect(vaultScanner.processIncrementalChange).toHaveBeenCalled();
       expect(plugin.refreshAllTaskListViews).toHaveBeenCalled();
+    });
+
+    it('replaces the plain text cursor line when saving a prefilled task', async () => {
+      const { controller, plugin } = createHarness(['']);
+
+      await save(
+        controller,
+        { path: 'test.md', line: 0, task: null, replaceLine: true },
+        makeFields(),
+      );
+
+      expect(plugin.taskEditor.createTaskAtLine).toHaveBeenCalledWith(
+        'test.md',
+        0,
+        expect.objectContaining({ text: 'Task text' }),
+        { recordCompletion: false, replaceExistingLine: true },
+      );
     });
 
     it('rethrows a save failure so the modal can stay open', async () => {

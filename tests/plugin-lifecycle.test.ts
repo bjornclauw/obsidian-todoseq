@@ -463,9 +463,7 @@ describe('PluginLifecycleManager', () => {
       await lifecycleManager.onUserEnable();
 
       expect(leafMock.loadIfDeferred).toHaveBeenCalled();
-      expect(
-        viewInstance.reinitializeSearchWiringIfStale,
-      ).toHaveBeenCalled();
+      expect(viewInstance.reinitializeSearchWiringIfStale).toHaveBeenCalled();
     });
 
     it('skips leaves whose view is not a TaskListView', async () => {
