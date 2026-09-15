@@ -198,22 +198,20 @@ export class FrameWidget extends WidgetType {
     switch (payload.variant) {
       case 'completed':
         if (payload.expanded) {
-          this.buildActive(frame, payload);
-          this.appendClosedChip(frame, payload);
+          this.buildActive(frame, payload, true);
         } else {
           this.buildCompleted(frame, payload);
         }
         break;
       case 'recurring-completed':
         if (payload.expanded) {
-          this.buildActive(frame, payload);
-          this.appendClosedChip(frame, payload);
+          this.buildActive(frame, payload, true);
         } else {
           this.buildRecurring(frame, payload);
         }
         break;
       default:
-        this.buildActive(frame, payload);
+        this.buildActive(frame, payload, payload.expanded);
         break;
     }
 
@@ -283,23 +281,17 @@ export class FrameWidget extends WidgetType {
     }
   }
 
-  private appendClosedChip(frame: HTMLElement, payload: FramePayload): void {
-    const t = payload.task;
-    if (t.closedDate) {
-      frame.appendChild(
-        chip(
-          'todoseq-chip-closed',
-          'check-circle',
-          DateUtils.formatDateForDisplay(t.closedDate, true),
-          payload.tooltips.closed ?? 'Closed',
-          'closed',
-          payload.taskLine,
-        ),
-      );
-    }
-  }
-
-  private buildActive(frame: HTMLElement, payload: FramePayload): void {
+  /**
+   * Render the full chip row in its fixed logical order: dates first
+   * (scheduled, deadline, closed), then the bookkeeping fields, then the
+   * description. `includeHidden` controls the CREATED/STARTED chips, which are
+   * collapsed behind the "N hidden" toggle unless the frame is expanded.
+   */
+  private buildActive(
+    frame: HTMLElement,
+    payload: FramePayload,
+    includeHidden: boolean,
+  ): void {
     const t = payload.task;
     if (t.scheduledDate) {
       frame.appendChild(
@@ -325,19 +317,31 @@ export class FrameWidget extends WidgetType {
         ),
       );
     }
-    if (t.description) {
+    if (t.closedDate) {
       frame.appendChild(
         chip(
-          'todoseq-chip-desc',
-          'text',
-          t.description,
-          payload.tooltips.description ?? t.description,
-          'description',
+          'todoseq-chip-closed',
+          'check-circle',
+          DateUtils.formatDateForDisplay(t.closedDate, true),
+          payload.tooltips.closed ?? 'Closed',
+          'closed',
           payload.taskLine,
         ),
       );
     }
-    if (t.startedDate) {
+    if (includeHidden && t.createdDate) {
+      frame.appendChild(
+        chip(
+          'todoseq-chip-created',
+          'calendar-plus',
+          DateUtils.formatDateForDisplay(t.createdDate),
+          'Created',
+          'created',
+          payload.taskLine,
+        ),
+      );
+    }
+    if (includeHidden && t.startedDate) {
       frame.appendChild(
         chip(
           'todoseq-chip-started',
@@ -349,14 +353,14 @@ export class FrameWidget extends WidgetType {
         ),
       );
     }
-    if (t.createdDate) {
+    if (t.description) {
       frame.appendChild(
         chip(
-          'todoseq-chip-created',
-          'calendar-plus',
-          DateUtils.formatDateForDisplay(t.createdDate),
-          'Created',
-          'created',
+          'todoseq-chip-desc',
+          'text',
+          t.description,
+          payload.tooltips.description ?? t.description,
+          'description',
           payload.taskLine,
         ),
       );
@@ -412,12 +416,13 @@ export class FrameWidget extends WidgetType {
     payload: FramePayload,
     view: EditorView,
   ): void {
-    // Only completed/recurring frames hide fields; active frames show every
-    // field they have as its own chip.
-    if (payload.variant === 'active') {
-      return;
-    }
-    const hidden = payload.metadataLineCount;
+    // Active frames only hide CREATED/STARTED; finished frames collapse every
+    // field except the completion summary.
+    const hidden =
+      payload.variant === 'active'
+        ? (payload.task.createdDate ? 1 : 0) +
+          (payload.task.startedDate ? 1 : 0)
+        : payload.metadataLineCount;
     if (hidden <= 0) {
       return;
     }

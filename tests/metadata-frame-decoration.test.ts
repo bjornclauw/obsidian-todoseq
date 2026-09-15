@@ -207,6 +207,30 @@ describe('computeMetadataFrameDecorations', () => {
     });
     expect(collectWidgets(decorations)).toHaveLength(0);
   });
+
+  it('does not frame when the metadata frame setting is off', () => {
+    const text = ['- [ ] TODO Task', '  SCHEDULED: <2026-09-14 Mon>'].join(
+      '\n',
+    );
+    const settings = { ...DefaultSettings, metadataFrame: false };
+    const parser = TaskParser.create(
+      createTestKeywordManager(settings),
+      null as never,
+      undefined,
+      settings,
+    );
+
+    const { decorations } = computeMetadataFrameDecorations({
+      doc: makeFakeDoc(text),
+      expanded: new Set<string>(),
+      sourceRevealed: new Set<string>(),
+      livePreview: true,
+      settings,
+      parser,
+      getPath: () => 'test.md',
+    });
+    expect(collectWidgets(decorations)).toHaveLength(0);
+  });
 });
 
 describe('TaskKeywordDecorator frame suppression', () => {

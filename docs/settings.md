@@ -29,6 +29,14 @@ Access TODOseq settings through Obsidian's settings interface:
 
 Task keywords (`TODO`, `DOING`, `DONE`, etc.) appear in bold font. All task states use your Obsidian theme's accent color. See [Editor Integration](editor.md) and [Reader View](reader.md) documentation for full details.
 
+### Metadata Frame
+
+**Setting**: "Metadata frame" toggle (in TODOseq settings)
+
+**Description**: Render the metadata lines below a task (scheduled, deadline, closed, created, started and description) as a compact icon chip frame in Live Preview. The underlying text is never modified; the `<>` chip reveals the raw block, and `CREATED`/`STARTED` stay behind the "N hidden" toggle. See [Editor Integration → Metadata Frame](editor.md#metadata-frame) for details.
+
+**Default**: Enabled
+
 ## Task Recognition Settings
 
 ### Task Keywords

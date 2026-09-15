@@ -1,6 +1,6 @@
 # Plan: Virtual metadata frame + work logging
 
-Status: **Phase 1 implemented (uncommitted), Phase 2 + 3 not started.**
+Status: **Phase 1 implemented and committed (docs + tests done), Phase 2 + 3 not started.**
 
 This document is the working plan for turning a task's plain-text metadata block
 into a virtual UI layer, and for adding per-task work logging. It captures the
@@ -29,6 +29,8 @@ phases.
 | Frame adjacency        | Blank lines between the task and its metadata are absorbed into the hidden range, so the frame hugs the task                                                                |
 | Raw reveal             | Explicit `<>` source toggle per task (like Obsidian's edit-block-button), **not** cursor-driven; toggling shows the raw block plus an inline `<>` chip to restore the frame |
 | Hidden count           | Counts metadata lines only (blank lines excluded)                                                                                                                           |
+| Chip order             | Fixed: SCHEDULED → DEADLINE → CLOSED → CREATED → STARTED → DESCRIPTION, with the controls (expand toggle, `<>`) last                                                        |
+| Hidden fields          | CREATED and STARTED sit behind the existing "N hidden" toggle (active frames included); finished frames keep collapsing everything except the completion summary            |
 | Active-session keyword | `TIMER:`                                                                                                                                                                    |
 | Work-log callout       | `[!work]`                                                                                                                                                                   |
 | Chip dates             | Humanized via `DateUtils.formatDateForDisplay` (locale-aware), exact value in tooltip                                                                                       |
@@ -73,7 +75,10 @@ What shipped:
 
 Tests: `tests/metadata-block.test.ts`,
 `tests/metadata-frame-decoration.test.ts`,
-`tests/metadata-frame-controller.test.ts` (28 cases total).
+`tests/metadata-frame-controller.test.ts`,
+`tests/metadata-frame-widget.test.ts` (chip order, hidden counts, `eq`
+identity, chip/source effects) and `tests/metadata-frame-state.test.ts`
+(StateField toggle survival/recompute).
 
 ### Known Phase 1 follow-ups
 
@@ -92,12 +97,14 @@ Bugs / rough edges to resolve before committing:
       had heading frames sitting flush under the heading.
 - [ ] Frames are skipped inside quote/callout blocks (deliberate for v1) — decide
       whether to support them.
-- [ ] Docs: add the setting to `docs/editor.md` and a `CHANGELOG.md` entry.
 - [ ] Product consideration: the setting defaults to on, which changes the
       editor for existing users on upgrade.
 
 Resolved:
 
+- [x] Docs: the setting is documented in `docs/editor.md`
+      ([Metadata Frame](docs/editor.md)) and `docs/settings.md`, with a
+      `CHANGELOG.md` entry under Unreleased.
 - [x] Frame stretched to the full editor width — block widgets are direct
       children of `.cm-content`, which Obsidian lays out as a column, so the
       frame needs an explicit `width: fit-content` to shrink-wrap.

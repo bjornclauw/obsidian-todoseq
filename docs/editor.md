@@ -30,6 +30,44 @@ DONE [#C] Fix critical bug in payment processing
 - SCHEDULED and DEADLINE date lines are formatted with special styling (CLOSED, STARTED and CREATED date lines too)
 - The styling is applied in real-time as you type
 
+## Metadata Frame
+
+In Live Preview, TODOseq can collapse the metadata lines below a task into a compact row of icon chips, so a task and its dates read as a single block instead of a wall of text. Enable or disable it with the **Metadata frame** setting (on by default). Source mode always shows the raw lines.
+
+```markdown
+- [ ] TODO Ship the release
+      SCHEDULED: <2026-09-14 Mon>
+      DEADLINE: <2026-09-16 Wed>
+      DESCRIPTION: coordinate with QA
+      STARTED: [2026-09-14 Mon 09:09]
+```
+
+renders as a frame with `SCHEDULED`, `DEADLINE`, `DESCRIPTION` (and an "N hidden" toggle for `CREATED`/`STARTED`) chips beneath the task.
+
+**It is presentation only.** The frame never changes the note. The raw text is reachable at any time:
+
+- Click the `<>` chip on the frame to reveal the underlying metadata; an inline `<>` chip on the task line restores the frame.
+- The `▸ N hidden` chip (or `◂ collapse`) expands and collapses the `CREATED` and `STARTED` chips.
+- Finished tasks collapse to their completion summary; a recurring task keeps its next occurrence and repeat count.
+
+**Chip actions** open the same surfaces as the rest of the plugin:
+
+| Chip                     | Action                       |
+| ------------------------ | ---------------------------- |
+| `SCHEDULED` / `DEADLINE` | Open the date picker         |
+| `STARTED` / `CLOSED`     | Open the task state menu     |
+| `DESCRIPTION`            | Open the task editor         |
+| `CREATED` / repeat count | Informational (tooltip only) |
+
+**Scope and limitations:**
+
+- Frames apply to list and heading tasks only. Table-cell tasks, tasks inside quotes/callouts, and tasks inside code blocks keep their normal styling.
+- A frame needs at least one metadata field; a task with none is left untouched.
+- Dates in the frame are shown in your locale via Obsidian's language; hover a chip for the exact stored value.
+- The `[!repeats]` callout is excluded from the frame and folds natively.
+
+See [Settings → Metadata Frame](settings.md#metadata-frame) for the toggle.
+
 ## Interactive Task Management
 
 TODOseq provides several ways to interact with tasks directly in the editor:
