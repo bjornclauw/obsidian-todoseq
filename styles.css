@@ -3699,3 +3699,138 @@
     grid-template-columns: 3em minmax(220px, 1fr) 3em minmax(220px, 1fr);
   }
 }
+
+/* ==========================================================================
+   Virtual metadata frame (Live Preview)
+   Renders a task's metadata block as a compact icon frame. The frame is a
+   CodeMirror replace-widget; the underlying markdown is never modified and
+   the raw text is shown whenever the cursor is inside the block.
+   ========================================================================== */
+
+.todoseq-metadata-frame {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  /* Block widgets are direct children of .cm-content. Obsidian lays that
+     container out as a block, so without an explicit fit-content width the
+     frame stretches across the whole editor. The left offset is measured from
+     the task line at render time and set inline (see metadata-frame.ts); this
+     rule provides the first-paint fallback. */
+  width: fit-content;
+  max-width: calc(100% - var(--todoseq-frame-indent, 28px));
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  box-sizing: border-box;
+  cursor: default;
+}
+
+/* Obsidian's editor stylesheet sets `margin: 0 !important` on `.cm-content`
+   children, which beats even an inline `margin-left`. The indent therefore
+   needs `!important` and a higher specificity than
+   `.markdown-source-view.mod-cm6 .cm-content > *`. The value comes from the
+   inline `--todoseq-frame-indent` set by metadata-frame.ts. */
+.markdown-source-view .cm-editor .cm-content > .todoseq-metadata-frame {
+  margin-left: var(--todoseq-frame-indent, 28px) !important;
+}
+
+.todoseq-frame-completed,
+.todoseq-frame-recurring-completed {
+  opacity: 0.75;
+  background: transparent;
+}
+
+.todoseq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.todoseq-chip:hover,
+.todoseq-chip:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.todoseq-chip-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.todoseq-chip-icon svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.todoseq-chip-label {
+  overflow: hidden;
+  max-width: 260px;
+  text-overflow: ellipsis;
+}
+
+.todoseq-chip-scheduled {
+  color: var(--color-blue, #3498db);
+}
+
+.todoseq-chip-deadline {
+  color: var(--color-orange, #e67e22);
+}
+
+.todoseq-chip-closed {
+  color: var(--color-green, var(--text-success, #4ddb75));
+}
+
+.todoseq-chip-started {
+  color: var(--color-purple, #9b59b6);
+}
+
+.todoseq-chip-desc .todoseq-chip-label,
+.todoseq-chip-created .todoseq-chip-label,
+.todoseq-chip-repeats .todoseq-chip-label,
+.todoseq-chip-expand {
+  color: var(--text-muted);
+}
+
+.todoseq-chip-expand {
+  border-style: dashed;
+  font-size: var(--font-ui-smaller);
+}
+
+/* `<>` source toggle: icon-only, pushed to the end of the frame; also used as
+   an inline widget on the task line while the raw metadata is revealed. */
+.todoseq-chip-source {
+  padding: 1px 5px;
+  color: var(--text-faint);
+}
+
+.todoseq-metadata-frame .todoseq-chip-source {
+  margin-left: auto;
+}
+
+.todoseq-chip-source:hover,
+.todoseq-chip-source:focus-visible {
+  color: var(--text-normal);
+}
+
+/* Mobile: larger touch targets */
+body.is-mobile .todoseq-chip {
+  padding: 3px 10px;
+  font-size: var(--font-ui-small);
+}
+
+body.is-mobile .todoseq-chip-icon svg {
+  width: 15px;
+  height: 15px;
+}

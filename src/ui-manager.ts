@@ -37,6 +37,7 @@ export class UIManager {
       taskKeywordPlugin(
         this.plugin.settings,
         () => this.plugin.vaultScanner?.getParser() ?? null,
+        () => this.plugin.app.workspace.getActiveFile()?.path ?? null,
       ),
       dateAutocompleteExtension(this.plugin.settings),
     ]);
@@ -793,6 +794,118 @@ export class UIManager {
           // Small delay to allow the editor to fully load
           window.setTimeout(() => {
             setupContextMenuListeners();
+          }, 100);
+        }
+      }),
+    );
+  }
+
+  /**
+   * Route clicks on the virtual metadata frame chips to their edit surfaces.
+   * Uses the same attach/re-attach lifecycle as the keyword context menu.
+   */
+  setupMetadataFrameClickHandler(): void {
+    const attachedEditors = new Set<HTMLElement>();
+
+    const setupChipListeners = () => {
+      const leaves = this.plugin.app.workspace.getLeavesOfType('markdown');
+      leaves.forEach((leaf) => {
+        const view = leaf.view;
+        if (view instanceof MarkdownView && view.editor) {
+          const cmEditor = (view.editor as { cm?: EditorView })?.cm;
+          if (cmEditor && cmEditor.dom) {
+            const editorContent = cmEditor.dom;
+            if (attachedEditors.has(editorContent)) {
+              return;
+            }
+            attachedEditors.add(editorContent);
+
+            const clickHandler = (evt: MouseEvent) => {
+              const target = evt.target as HTMLElement | null;
+              if (!target) return;
+              const chip = target.closest<HTMLElement>(
+                '.todoseq-chip[data-todoseq-action]',
+              );
+              if (!chip) return;
+
+              const handled =
+                this.plugin.metadataFrameController?.handleChipClick(
+                  evt,
+                  chip,
+                ) ?? false;
+              if (handled) {
+                evt.preventDefault();
+                evt.stopPropagation();
+              }
+            };
+
+            // Keyboard parity for the chip buttons (Enter/Space).
+            const keyHandler = (evt: KeyboardEvent) => {
+              if (evt.key !== 'Enter' && evt.key !== ' ') return;
+              const target = evt.target as HTMLElement | null;
+              if (!target) return;
+              const chip = target.closest<HTMLElement>(
+                '.todoseq-chip[data-todoseq-action]',
+              );
+              if (!chip) return;
+
+              const rect = chip.getBoundingClientRect();
+              const handled =
+                this.plugin.metadataFrameController?.handleChipClick(
+                  {
+                    clientX: rect.left,
+                    clientY: rect.bottom,
+                    preventDefault: () => evt.preventDefault(),
+                    stopPropagation: () => evt.stopPropagation(),
+                  },
+                  chip,
+                ) ?? false;
+              if (handled) {
+                evt.preventDefault();
+                evt.stopPropagation();
+              }
+            };
+
+            this.registeredEventListeners.push({
+              target: editorContent,
+              type: 'click',
+              handler: clickHandler,
+              options: { capture: true },
+            });
+            editorContent.addEventListener('click', clickHandler, {
+              capture: true,
+            });
+            this.registeredEventListeners.push({
+              target: editorContent,
+              type: 'keydown',
+              handler: keyHandler,
+            });
+            editorContent.addEventListener('keydown', keyHandler);
+          }
+        }
+      });
+    };
+
+    setupChipListeners();
+
+    let chipLayoutDebounceTimer: number | null = null;
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on('layout-change', () => {
+        if (chipLayoutDebounceTimer !== null) {
+          window.clearTimeout(chipLayoutDebounceTimer);
+        }
+        chipLayoutDebounceTimer = window.setTimeout(() => {
+          chipLayoutDebounceTimer = null;
+          setupChipListeners();
+        }, 50);
+      }),
+    );
+
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on('file-open', (file) => {
+        if (file instanceof TFile && file.extension === 'md') {
+          window.setTimeout(() => {
+            setupChipListeners();
           }, 100);
         }
       }),

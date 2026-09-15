@@ -7,6 +7,7 @@ import {
   WidgetType,
 } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
+import { StateField } from '@codemirror/state';
 import { TodoTrackerSettings } from '../../settings/settings-types';
 import { TaskParser } from '../../parser/task-parser';
 import { getPriorityLevelName } from '../../utils/task-format';
@@ -34,6 +35,10 @@ import {
   isSeparatorCell,
   getCellTaskLine,
 } from '../../utils/task-line-utils';
+import {
+  createMetadataFrameField,
+  MetadataFrameFieldValue,
+} from './metadata-frame-field';
 
 /**
  * Cached regex for priority tokens with global flag.
@@ -126,10 +131,14 @@ export class TaskKeywordDecorator {
   private cachedKeywordRegex: RegExp | null = null;
   private cachedKeywords: string[] = [];
 
+  // 1-based lines hidden by a metadata frame (owned by the frame StateField).
+  private blockedFrameLines: ReadonlySet<number> = new Set<number>();
+
   constructor(
     private view: EditorView,
     settings: TodoTrackerSettings,
     parser: TaskParser,
+    private frameField: StateField<MetadataFrameFieldValue> | null = null,
   ) {
     this.settings = settings;
     this.parser = parser;
@@ -208,8 +217,18 @@ export class TaskKeywordDecorator {
       this.previousTaskLine = null;
       this.previousTaskIndent = '';
 
+      // Lines hidden by a metadata frame are rendered by the frame widget;
+      // skip their per-line decorations entirely.
+      this.blockedFrameLines = this.frameField
+        ? (this.view.state.field(this.frameField, false)?.blockedLines ??
+          new Set<number>())
+        : new Set<number>();
+
       // Iterate through all lines in the document
       for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber++) {
+        if (this.blockedFrameLines.has(lineNumber)) {
+          continue;
+        }
         const line = doc.line(lineNumber);
         const lineText = line.text;
 
@@ -1075,8 +1094,13 @@ export class TaskKeywordDecorator {
 export const taskKeywordPlugin = (
   settings: TodoTrackerSettings,
   getParser: () => TaskParser | null,
+  getPath: () => string | null = () => null,
 ) => {
-  return ViewPlugin.fromClass(
+  // Block decorations (the metadata frames) must be provided by a state-level
+  // decoration source, not a ViewPlugin, so the frame lives in its own field.
+  const frameField = createMetadataFrameField(settings, getParser, getPath);
+
+  const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
       private settings: TodoTrackerSettings;
@@ -1135,6 +1159,7 @@ export const taskKeywordPlugin = (
             view,
             this.settings,
             parser,
+            frameField,
           );
           this.decorations = decorator.getDecorations();
         }
@@ -1564,4 +1589,6 @@ export const taskKeywordPlugin = (
       decorations: (value) => value.decorations,
     },
   );
+
+  return [frameField, plugin];
 };

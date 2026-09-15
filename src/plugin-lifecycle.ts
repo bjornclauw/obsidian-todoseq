@@ -3,6 +3,7 @@ import { VaultScanner } from './services/vault-scanner';
 import { SmartDateProcessor } from './services/smart-date-processor';
 import { TaskWriter } from './services/task-writer';
 import { EditorKeywordMenu } from './view/editor-extensions/editor-keyword-menu';
+import { MetadataFrameController } from './view/editor-extensions/metadata-frame-controller';
 import { StatusBarManager } from './view/editor-extensions/status-bar';
 import { TaskListView } from './view/task-list/task-list-view';
 import { TodoTrackerSettingTab } from './settings/settings';
@@ -138,6 +139,9 @@ export class PluginLifecycleManager {
     );
     this.plugin.taskEditorController = new TaskEditorController(this.plugin);
     this.plugin.editorKeywordMenu = new EditorKeywordMenu(this.plugin);
+    this.plugin.metadataFrameController = new MetadataFrameController(
+      this.plugin,
+    );
     this.plugin.statusBarManager = new StatusBarManager(this.plugin);
     this.plugin.statusBarManager.setupStatusBarItem();
 
@@ -544,6 +548,9 @@ export class PluginLifecycleManager {
     // Setup right-click event handlers for task keywords
     this.plugin.uiManager.setupTaskKeywordContextMenu();
 
+    // Setup click handlers for the virtual metadata frame chips
+    this.plugin.uiManager.setupMetadataFrameClickHandler();
+
     // Conditional ribbon icon - only show on mobile devices
     if (Platform.isMobile) {
       // workaround obsidianmd/ui/sentence-case -- "Open TODOseq"
@@ -682,6 +689,7 @@ export class PluginLifecycleManager {
     // Clear any remaining references
     this.plugin.taskEditor = null;
     this.plugin.editorKeywordMenu = null;
+    this.plugin.metadataFrameController = null;
     this.plugin.taskEditorController?.cleanup();
     this.plugin.taskEditorController = null;
     this.plugin.taskFormatters.clear();

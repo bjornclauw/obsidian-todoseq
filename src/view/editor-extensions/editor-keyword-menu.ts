@@ -23,11 +23,20 @@ export class EditorKeywordMenu {
 
   /**
    * Open context menu at mouse event location for changing task keyword state
+   * @param lineOverride Explicit 1-based source line, used when the clicked
+   * element lives inside a replace widget where posAtDOM cannot resolve the
+   * original line (e.g. the metadata frame chips).
    */
   public openStateMenuAtMouseEvent(
     state: string,
     keywordElement: HTMLElement,
-    evt: MouseEvent,
+    evt: {
+      clientX: number;
+      clientY: number;
+      preventDefault(): void;
+      stopPropagation(): void;
+    },
+    lineOverride?: number,
   ): void {
     evt.preventDefault();
     evt.stopPropagation();
@@ -37,7 +46,12 @@ export class EditorKeywordMenu {
 
     // Use the shared menu builder
     const menu = this.menuBuilder.buildStateMenu(state, (newState: string) => {
-      this.updateTaskKeywordState(state, keywordElement, newState);
+      this.updateTaskKeywordState(
+        state,
+        keywordElement,
+        newState,
+        lineOverride,
+      );
     });
 
     // Show menu at mouse position
@@ -51,8 +65,10 @@ export class EditorKeywordMenu {
     state: string,
     keywordElement: HTMLElement,
     newState: string,
+    lineOverride?: number,
   ): void {
-    const currentLine = this.plugin.uiManager.getLineForElement(keywordElement);
+    const currentLine =
+      lineOverride ?? this.plugin.uiManager.getLineForElement(keywordElement);
 
     if (currentLine !== null) {
       const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);

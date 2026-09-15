@@ -84,6 +84,7 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
     (value: unknown) => Promise<void> | void
   > = {
     formatTaskKeywords: () => this.plugin.updateTaskFormatting(),
+    metadataFrame: () => this.plugin.updateTaskFormatting(),
     includeCalloutBlocks: () => this.rescanAndRefresh(),
     includeCommentBlocks: () => this.rescanAndRefresh(),
     includeCodeBlocks: (value) => {
@@ -268,6 +269,11 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         name: 'Format task keywords',
         desc: 'Highlight task keywords (todo, doing, etc.) in bold with accent color in the editor.',
         control: { type: 'toggle', key: 'formatTaskKeywords' },
+      },
+      {
+        name: 'Metadata frame',
+        desc: 'Render the metadata below a task (scheduled, deadline, description, started) as a compact icon frame in Live Preview. The underlying text is never modified and returns whenever the cursor is placed inside the block.',
+        control: { type: 'toggle', key: 'metadataFrame' },
       },
       {
         type: 'group',

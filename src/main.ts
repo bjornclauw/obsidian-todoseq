@@ -8,6 +8,7 @@ import {
 } from './settings/settings-types';
 import { TaskWriter } from './services/task-writer';
 import { EditorKeywordMenu } from './view/editor-extensions/editor-keyword-menu';
+import { MetadataFrameController } from './view/editor-extensions/metadata-frame-controller';
 import { VaultScanner } from './services/vault-scanner';
 import { StatusBarManager } from './view/editor-extensions/status-bar';
 import { EditorController } from './services/editor-controller';
@@ -52,6 +53,7 @@ export default class TodoTracker extends Plugin {
   public vaultScanner: VaultScanner | null = null;
   public taskEditor: TaskWriter | null = null;
   public editorKeywordMenu: EditorKeywordMenu | null = null;
+  public metadataFrameController: MetadataFrameController | null = null;
   public taskFormatters: Map<string, unknown> = new Map();
   public statusBarManager: StatusBarManager | null = null;
   public readerViewFormatter: ReaderViewFormatter | null = null;

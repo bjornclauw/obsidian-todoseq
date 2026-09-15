@@ -76,6 +76,7 @@ jest.mock('../src/main', () => ({
     uiManager = {
       setupTaskFormatting: jest.fn(),
       setupTaskKeywordContextMenu: jest.fn(),
+      setupMetadataFrameClickHandler: jest.fn(),
       showTasks: jest.fn().mockResolvedValue(undefined),
       refreshOpenTaskListViews: jest.fn().mockResolvedValue(undefined),
       cleanup: jest.fn(),
@@ -263,6 +264,7 @@ describe('PluginLifecycleManager', () => {
       uiManager: {
         setupTaskFormatting: jest.fn(),
         setupTaskKeywordContextMenu: jest.fn(),
+        setupMetadataFrameClickHandler: jest.fn(),
         showTasks: jest.fn().mockResolvedValue(undefined),
         refreshOpenTaskListViews: jest.fn().mockResolvedValue(undefined),
         cleanup: jest.fn(),
