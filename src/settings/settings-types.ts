@@ -52,6 +52,7 @@ export interface TodoTrackerSettings {
   weekStartsOn: 'Monday' | 'Sunday'; // controls which day the week starts on for date filtering
   formatTaskKeywords: boolean; // format task keywords in editor
   metadataFrame: boolean; // render task metadata as a virtual icon frame in Live Preview
+  trackWorkLog: boolean; // enable play/pause work sessions with a [!work] log
   additionalFileExtensions: string[]; // additional file extensions to scan for tasks (e.g., ['.org', '.txt']) - hidden from UI, managed by detectOrgModeFiles
   detectOrgModeFiles: boolean; // experimental: when enabled, adds .org to additionalFileExtensions and registers org-mode parser
   scanCodeFiles: boolean; // experimental: when enabled, scans code files for TODO-style comments
@@ -143,6 +144,7 @@ export const DefaultSettings: TodoTrackerSettings = {
   weekStartsOn: 'Monday', // Default to Monday as requested
   formatTaskKeywords: true, // Default to enabled
   metadataFrame: true, // Virtual icon frame for task metadata in Live Preview
+  trackWorkLog: true, // Work sessions + [!work] log enabled by default
   additionalFileExtensions: [], // No additional extensions by default - managed by detectOrgModeFiles
   detectOrgModeFiles: false, // Experimental feature - disabled by default
   scanCodeFiles: false, // Experimental feature - disabled by default

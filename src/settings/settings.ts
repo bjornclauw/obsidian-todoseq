@@ -85,6 +85,7 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
   > = {
     formatTaskKeywords: () => this.plugin.updateTaskFormatting(),
     metadataFrame: () => this.plugin.updateTaskFormatting(),
+    trackWorkLog: () => this.plugin.updateTaskFormatting(),
     includeCalloutBlocks: () => this.rescanAndRefresh(),
     includeCommentBlocks: () => this.rescanAndRefresh(),
     includeCodeBlocks: (value) => {
@@ -274,6 +275,11 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         name: 'Metadata frame',
         desc: 'Render the metadata below a task (scheduled, deadline, description, started) as a compact icon frame in Live Preview. The underlying text is never modified and returns whenever the cursor is placed inside the block.',
         control: { type: 'toggle', key: 'metadataFrame' },
+      },
+      {
+        name: 'Track work time',
+        desc: 'Show a play/pause control on task metadata frames and record work sessions in a `[!work]` callout.',
+        control: { type: 'toggle', key: 'trackWorkLog' },
       },
       {
         type: 'group',

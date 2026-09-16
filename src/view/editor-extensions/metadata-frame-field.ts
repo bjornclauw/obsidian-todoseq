@@ -1,4 +1,9 @@
-import { EditorState, RangeSetBuilder, StateField } from '@codemirror/state';
+import {
+  EditorState,
+  RangeSetBuilder,
+  StateField,
+  Transaction,
+} from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import { editorLivePreviewField } from 'obsidian';
 import { TaskParser } from '../../parser/task-parser';
@@ -23,10 +28,10 @@ export interface MetadataFrameFieldValue {
   decorations: DecorationSet;
   /** 1-based line numbers hidden by a frame (skipped by the ViewPlugin). */
   blockedLines: ReadonlySet<number>;
-  /** Expanded frame keys (1-based task line numbers), per editor state. */
-  expanded: ReadonlySet<string>;
-  /** Keys whose raw metadata is revealed instead of framed. */
-  sourceRevealed: ReadonlySet<string>;
+  /** Expanded frames, keyed by the task line's document start offset. */
+  expanded: ReadonlySet<number>;
+  /** Revealed frames, keyed by the task line's document start offset. */
+  sourceRevealed: ReadonlySet<number>;
 }
 
 /** Minimal document shape the frame computation needs (CodeMirror Text fits). */
@@ -38,8 +43,8 @@ export interface FrameDoc {
 
 export interface FrameComputationInput {
   doc: FrameDoc;
-  expanded: ReadonlySet<string>;
-  sourceRevealed: ReadonlySet<string>;
+  expanded: ReadonlySet<number>;
+  sourceRevealed: ReadonlySet<number>;
   livePreview: boolean;
   settings: TodoTrackerSettings;
   parser: TaskParser | null;
@@ -130,10 +135,12 @@ export function computeMetadataFrameDecorations(
       continue;
     }
 
+    const lineFrom = doc.line(lineNumber).from;
+
     // The source toggle reveals the raw metadata for this task. When
     // revealed, no frame is rendered and the per-line styling applies as
     // before; a small toggle widget on the task line brings the frame back.
-    if (input.sourceRevealed.has(String(lineNumber))) {
+    if (input.sourceRevealed.has(lineFrom)) {
       builder.add(
         doc.line(lineNumber).to,
         doc.line(lineNumber).to,
@@ -173,7 +180,8 @@ export function computeMetadataFrameDecorations(
       taskLine: lineNumber,
       metadataLineCount: scan.metadataCount,
       tooltips,
-      expanded: input.expanded.has(String(lineNumber)),
+      expanded: input.expanded.has(lineFrom),
+      workLogEnabled: !!settings.trackWorkLog,
     });
 
     builder.add(
@@ -227,8 +235,8 @@ export function createMetadataFrameField(
     create(state) {
       return computeMetadataFrameDecorations({
         doc: state.doc,
-        expanded: new Set<string>(),
-        sourceRevealed: new Set<string>(),
+        expanded: new Set<number>(),
+        sourceRevealed: new Set<number>(),
         livePreview: isLivePreview(state),
         settings,
         parser: getParser(),
@@ -242,13 +250,24 @@ export function createMetadataFrameField(
 
       for (const effect of tr.effects) {
         if (effect.is(toggleMetadataFrameEffect)) {
-          expanded = toggleKey(expanded, effect.value);
+          expanded = toggleAt(expanded, lineStart(tr.startState, effect.value));
           toggled = true;
         }
         if (effect.is(toggleMetadataFrameSourceEffect)) {
-          sourceRevealed = toggleKey(sourceRevealed, effect.value);
+          sourceRevealed = toggleAt(
+            sourceRevealed,
+            lineStart(tr.startState, effect.value),
+          );
           toggled = true;
         }
+      }
+
+      // Remap stored positions so a toggle follows its task when lines are
+      // inserted or removed above it. Snapping to the containing line start
+      // keeps the key on a line boundary even when an edit lands on it.
+      if (tr.docChanged) {
+        expanded = remapPositions(tr, expanded);
+        sourceRevealed = remapPositions(tr, sourceRevealed);
       }
 
       if (tr.docChanged || toggled) {
@@ -271,13 +290,38 @@ export function createMetadataFrameField(
   return field;
 }
 
-/** Return a copy of `keys` with `key` added or removed. */
-function toggleKey(keys: ReadonlySet<string>, key: string): Set<string> {
-  const next = new Set(keys);
-  if (next.has(key)) {
-    next.delete(key);
+/** Document start offset of a 1-based line, clamped to the document bounds. */
+function lineStart(state: EditorState, line: number): number {
+  const clamped = Math.min(Math.max(1, Math.trunc(line) || 1), state.doc.lines);
+  return state.doc.line(clamped).from;
+}
+
+/**
+ * Map stored task positions through a transaction so they track their task
+ * across edits, snapping each to the start of the line it now sits on.
+ */
+function remapPositions(
+  tr: Transaction,
+  positions: ReadonlySet<number>,
+): Set<number> {
+  const next = new Set<number>();
+  for (const pos of positions) {
+    const mapped = tr.changes.mapPos(pos, 1);
+    next.add(tr.state.doc.lineAt(mapped).from);
+  }
+  return next;
+}
+
+/** Return a copy of `positions` with `position` added or removed. */
+function toggleAt(
+  positions: ReadonlySet<number>,
+  position: number,
+): Set<number> {
+  const next = new Set(positions);
+  if (next.has(position)) {
+    next.delete(position);
   } else {
-    next.add(key);
+    next.add(position);
   }
   return next;
 }

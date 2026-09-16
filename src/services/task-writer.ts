@@ -16,6 +16,13 @@ import {
   parseRepeatLogTotal,
 } from '../utils/repeat-log';
 import {
+  buildWorkLogEntry,
+  buildWorkLogTitle,
+  isWorkLogLine,
+  parseWorkLogEntry,
+  parseWorkLogTotal,
+} from '../utils/work-log';
+import {
   findDateLine,
   findDescriptionLine,
   findDescriptionLineIn,
@@ -68,6 +75,23 @@ interface ScannedRepeatLogBlock {
   metadata: string[];
   entries: string[];
   titleLine: string | null;
+  start: number;
+  endBefore: number;
+}
+
+/** Matches an active work-session `TIMER:` line (optionally quoted/indented). */
+const TIMER_LINE_RE = /^\s*(?:>\s*)*TIMER:\s*/i;
+
+/** Result of scanning a task's metadata block for TIMER/[!work] handling. */
+interface ScannedWorkBlock {
+  /** Metadata lines excluding the TIMER line and the [!work] callout. */
+  metadata: string[];
+  /** Existing work-log entries, newest first as stored. */
+  entries: string[];
+  /** Running total from an existing [!work] title, if any. */
+  total: number | null;
+  /** Whether an active TIMER line exists. */
+  hasTimer: boolean;
   start: number;
   endBefore: number;
 }
@@ -290,6 +314,210 @@ export class TaskWriter {
       { line: endBefore, ch: 0 },
     );
     return lineDelta;
+  }
+
+  /** Whether work logging is enabled in settings. */
+  private isWorkLogEnabled(): boolean {
+    return !!this.settings?.trackWorkLog;
+  }
+
+  /**
+   * Scan a task's block for a TIMER line and the `[!work]` callout. Works over
+   * a line accessor so the editor path never snapshots the whole buffer.
+   */
+  private scanWorkBlock(
+    getLine: (index: number) => string | undefined,
+    lineCount: number,
+    taskLine: number,
+  ): ScannedWorkBlock {
+    const start = taskLine + 1;
+    const metadata: string[] = [];
+    let entries: string[] = [];
+    let total: number | null = null;
+    let hasTimer = false;
+    let last = taskLine;
+
+    for (let i = start; i < lineCount; i++) {
+      const line = getLine(i);
+      if (line === undefined || line.trim() === '') {
+        continue;
+      }
+      if (!isTaskMetadataLine(line)) {
+        break;
+      }
+      if (TIMER_LINE_RE.test(line)) {
+        hasTimer = true;
+      } else {
+        const workTotal = parseWorkLogTotal(line);
+        if (workTotal !== null) {
+          total = workTotal;
+          entries = [];
+        } else if (isWorkLogLine(line)) {
+          entries.push(line);
+        } else {
+          metadata.push(line);
+        }
+      }
+      last = i;
+    }
+
+    return {
+      metadata,
+      entries,
+      total,
+      hasTimer,
+      start,
+      endBefore: Math.max(start, last + 1),
+    };
+  }
+
+  /** Indent for new work-log lines, matching the task's metadata. */
+  private workIndent(scanned: ScannedWorkBlock, task: Task): string {
+    const first = scanned.metadata[0] ?? scanned.entries[0] ?? '';
+    return getLineIndent(first) || getDateLineIndent(task);
+  }
+
+  /** Sum the durations of hand-typed entries when no title total exists. */
+  private sumWorkEntries(entries: string[]): number | null {
+    if (entries.length === 0) {
+      return null;
+    }
+    return entries.reduce(
+      (sum, line) => sum + (parseWorkLogEntry(line)?.minutes ?? 0),
+      0,
+    );
+  }
+
+  /**
+   * Rebuild the task's metadata region from a builder, preferring the Editor
+   * API for the active file and falling back to a vault write. The builder
+   * returns null to leave the task untouched.
+   */
+  private async applyWorkRegion(
+    task: Task,
+    build: (
+      scanned: ScannedWorkBlock,
+      indent: string,
+    ) => { region: string[]; lineDelta: number } | null,
+  ): Promise<{ task: Task; lineDelta: number } | null> {
+    const file = this.app.vault.getAbstractFileByPath(task.path);
+    if (!(file instanceof TFile)) {
+      return null;
+    }
+
+    const editor = this.getEditorForTask(task);
+    if (editor) {
+      const scanned = this.scanWorkBlock(
+        (i) => editor.getLine(i),
+        editor.lineCount(),
+        task.line,
+      );
+      const built = build(scanned, this.workIndent(scanned, task));
+      if (!built) {
+        return null;
+      }
+      const { start, endBefore } = scanned;
+      // `replaceRange` to {line: endBefore, ch: 0} consumes the newline that
+      // terminated the last replaced line; re-add it when content follows.
+      const suffix = endBefore < editor.lineCount() ? '\n' : '';
+      const prefix = this.leadingNewlineForInsert(editor, start);
+      editor.replaceRange(
+        `${prefix}${built.region.join('\n')}${suffix}`,
+        { line: start, ch: 0 },
+        { line: endBefore, ch: 0 },
+      );
+      return { task, lineDelta: built.lineDelta };
+    }
+
+    let lineDelta = 0;
+    await this.app.vault.process(file, (data) => {
+      const lines = data.split('\n');
+      const scanned = this.scanWorkBlock(
+        (i) => lines[i],
+        lines.length,
+        task.line,
+      );
+      const built = build(scanned, this.workIndent(scanned, task));
+      if (!built) {
+        return data;
+      }
+      lines.splice(
+        scanned.start,
+        scanned.endBefore - scanned.start,
+        ...built.region,
+      );
+      lineDelta = built.lineDelta;
+      return lines.join('\n');
+    });
+    return { task, lineDelta };
+  }
+
+  /**
+   * Start a work session: write a `TIMER:` line. No-op when work logging is
+   * disabled or the task already has a running session.
+   */
+  async startWorkSession(
+    task: Task,
+  ): Promise<{ task: Task; lineDelta: number } | null> {
+    if (!this.isWorkLogEnabled() || task.timerStart) {
+      return null;
+    }
+    return this.applyWorkRegion(task, (scanned, indent) => {
+      if (scanned.hasTimer) {
+        return null;
+      }
+      const timerLine = `${indent}TIMER: ${DateUtils.formatTimerDate(
+        new Date(),
+      )}`;
+      const total = scanned.total ?? this.sumWorkEntries(scanned.entries);
+      const region = [
+        ...scanned.metadata,
+        timerLine,
+        ...(total !== null
+          ? [buildWorkLogTitle(total, indent), ...scanned.entries]
+          : []),
+      ];
+      return {
+        region,
+        lineDelta: region.length - (scanned.endBefore - scanned.start),
+      };
+    });
+  }
+
+  /**
+   * Pause the running work session: append a start–stop entry, refresh the
+   * running total and remove the `TIMER:` line. No-op when not running.
+   */
+  async pauseWorkSession(
+    task: Task,
+  ): Promise<{ task: Task; lineDelta: number } | null> {
+    if (!this.isWorkLogEnabled() || !task.timerStart) {
+      return null;
+    }
+    const startedAt = task.timerStart;
+    const stoppedAt = new Date();
+    return this.applyWorkRegion(task, (scanned, indent) => {
+      if (!scanned.hasTimer) {
+        return null;
+      }
+      const minutes = Math.max(
+        1,
+        Math.round((stoppedAt.getTime() - startedAt.getTime()) / 60000),
+      );
+      const total =
+        (scanned.total ?? this.sumWorkEntries(scanned.entries) ?? 0) + minutes;
+      const entry = buildWorkLogEntry(minutes, startedAt, stoppedAt, indent);
+      const region = [
+        ...scanned.metadata,
+        buildWorkLogTitle(total, indent),
+        entry,
+        ...scanned.entries,
+      ];
+      return {
+        region,
+        lineDelta: region.length - (scanned.endBefore - scanned.start),
+      };
+    });
   }
 
   /**

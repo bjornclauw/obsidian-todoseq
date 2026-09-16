@@ -876,6 +876,8 @@ export class TaskUpdateCoordinator {
         // silently inert). Archived tasks are intentionally excluded.
         this.handleRecurrenceForCompletedTask(updatedTask, context.source);
       }
+
+      await this.autoCloseWorkSession(taskEditor, currentTask, context);
     };
 
     // Run doAsyncWork regardless of whether the previous file update
@@ -993,6 +995,32 @@ export class TaskUpdateCoordinator {
         const _exhaustiveCheck: never = context.type;
         throw new Error(`Unknown update type: ${String(_exhaustiveCheck)}`);
       }
+    }
+  }
+
+  /**
+   * Close a running work session when its task is completed (including a
+   * recurring completion) so no orphan `TIMER:` line is left behind.
+   */
+  private async autoCloseWorkSession(
+    taskEditor: TaskWriter,
+    task: Task,
+    context: ProcessingContext,
+  ): Promise<void> {
+    if (!this.plugin.settings?.trackWorkLog || !task.timerStart) {
+      return;
+    }
+    const completed =
+      context.type === 'recurrence' ||
+      (context.type === 'state' &&
+        this.keywordManager.isCompleted(context.originalNewState));
+    if (!completed) {
+      return;
+    }
+    try {
+      await taskEditor.pauseWorkSession(task);
+    } catch (error) {
+      console.debug('[TODOseq] Failed to auto-close work session:', error);
     }
   }
 

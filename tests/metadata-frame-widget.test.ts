@@ -221,6 +221,61 @@ describe('FrameWidget identity (eq)', () => {
   });
 });
 
+describe('FrameWidget work chip', () => {
+  function workWidget(overrides: Parameters<typeof createBaseTask>[0] = {}) {
+    return new FrameWidget({
+      variant: 'active',
+      task: createBaseTask({
+        scheduledDate: new Date(2026, 8, 14),
+        ...overrides,
+      }),
+      taskLine: 1,
+      metadataLineCount: 1,
+      tooltips: {},
+      expanded: false,
+      workLogEnabled: true,
+    });
+  }
+
+  it('shows a play chip with the running total when stopped', () => {
+    const frame = workWidget({ workLogTotalMinutes: 195 }).toDOM(
+      makeView() as never,
+    );
+    expect(
+      frame.querySelector('[data-todoseq-action="work-start"]'),
+    ).not.toBeNull();
+    expect(frame.textContent).toContain('3h 15m');
+  });
+
+  it('shows a pause chip with elapsed and total while running', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 8, 14, 10, 2));
+    const widget = workWidget({
+      timerStart: new Date(2026, 8, 14, 9, 32),
+      workLogTotalMinutes: 60,
+    });
+    const frame = widget.toDOM(makeView() as never);
+
+    expect(
+      frame.querySelector('[data-todoseq-action="work-pause"]'),
+    ).not.toBeNull();
+    expect(frame.textContent).toContain('30m');
+    expect(frame.textContent).toContain('1h');
+
+    widget.destroy();
+    jest.useRealTimers();
+  });
+
+  it('shows no work chip when work logging is off', () => {
+    const frame = makeWidget({ workLogTotalMinutes: 195 }).toDOM(
+      makeView() as never,
+    );
+    expect(
+      frame.querySelector('[data-todoseq-action="work-start"]'),
+    ).toBeNull();
+  });
+});
+
 describe('FrameWidget chip effects', () => {
   it('dispatches the expand effect with the task line on the expand chip', () => {
     const view = makeView();
@@ -236,7 +291,7 @@ describe('FrameWidget chip effects', () => {
     const effects = dispatchedEffects(view.dispatch);
     expect(effects).toHaveLength(1);
     expect(effects[0].is(toggleMetadataFrameEffect)).toBe(true);
-    expect(effects[0].value).toBe('1');
+    expect(effects[0].value).toBe(1);
   });
 
   it('dispatches the source effect with the task line on the source chip', () => {
@@ -253,7 +308,7 @@ describe('FrameWidget chip effects', () => {
     const effects = dispatchedEffects(view.dispatch);
     expect(effects).toHaveLength(1);
     expect(effects[0].is(toggleMetadataFrameSourceEffect)).toBe(true);
-    expect(effects[0].value).toBe('1');
+    expect(effects[0].value).toBe(1);
   });
 
   it('restores the frame from the inline source-toggle widget', () => {
@@ -266,6 +321,6 @@ describe('FrameWidget chip effects', () => {
     expect(view.dispatch).toHaveBeenCalledTimes(1);
     const effects = dispatchedEffects(view.dispatch);
     expect(effects[0].is(toggleMetadataFrameSourceEffect)).toBe(true);
-    expect(effects[0].value).toBe('7');
+    expect(effects[0].value).toBe(7);
   });
 });

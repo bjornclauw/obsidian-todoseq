@@ -37,6 +37,14 @@ Task keywords (`TODO`, `DOING`, `DONE`, etc.) appear in bold font. All task stat
 
 **Default**: Enabled
 
+### Track work time
+
+**Setting**: "Track work time" toggle (in TODOseq settings)
+
+**Description**: Show a play/pause control on task metadata frames and record work sessions in a `[!work]` callout. See [Editor Integration → Work Logging](editor.md#work-logging) for details.
+
+**Default**: Enabled
+
 ## Task Recognition Settings
 
 ### Task Keywords

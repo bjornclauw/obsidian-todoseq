@@ -4,19 +4,22 @@ import { StateEffect } from '@codemirror/state';
 import { Task } from '../../types/task';
 import { FrameVariant } from '../../utils/metadata-block';
 import { DateUtils } from '../../utils/date-utils';
+import { formatDuration } from '../../utils/work-log';
 
 /**
- * Toggle a frame's expansion state (payload = 1-based task line key).
- * Dispatched by the expand chip; handled by the metadata frame StateField.
+ * Toggle a frame's expansion state (payload = 1-based task line number).
+ * Dispatched by the expand chip; handled by the metadata frame StateField,
+ * which resolves the line to a document position so the state follows the
+ * task across edits.
  */
-export const toggleMetadataFrameEffect = StateEffect.define<string>();
+export const toggleMetadataFrameEffect = StateEffect.define<number>();
 
 /**
  * Toggle the raw metadata source for one task (payload = 1-based task line
- * key). Dispatched by the `<>` source chip, mirroring Obsidian's
+ * number). Dispatched by the `<>` source chip, mirroring Obsidian's
  * edit-block-button on rendered blocks.
  */
-export const toggleMetadataFrameSourceEffect = StateEffect.define<string>();
+export const toggleMetadataFrameSourceEffect = StateEffect.define<number>();
 
 /**
  * Minimum left offset of a frame, matching the approved mockup. Measured task
@@ -56,7 +59,7 @@ function sourceToggleChip(
     evt.preventDefault();
     evt.stopPropagation();
     view.dispatch({
-      effects: toggleMetadataFrameSourceEffect.of(String(taskLine)),
+      effects: toggleMetadataFrameSourceEffect.of(taskLine),
     });
   };
   el.addEventListener('click', activate);
@@ -112,6 +115,8 @@ export interface FramePayload {
   };
   /** Ephemeral expansion flag so a completed block can show its raw fields. */
   expanded: boolean;
+  /** Whether work logging is enabled (shows the play/pause chip). */
+  workLogEnabled?: boolean;
 }
 
 /** Stable identity of a frame payload for CodeMirror's eq() check. */
@@ -131,6 +136,8 @@ export function frameSignature(payload: FramePayload): string {
     iso(t.startedDate),
     iso(t.closedDate),
     iso(t.createdDate),
+    iso(t.timerStart),
+    t.workLogTotalMinutes ?? '',
     t.description ?? '',
     t.repeatCount ?? '',
   ].join('\u0000');
@@ -170,12 +177,22 @@ function chip(
  * cursor into the block reveals the raw text instead.
  */
 export class FrameWidget extends WidgetType {
+  /** Interval ids for live work-session ticks (cleared on destroy). */
+  private workTickIds: number[] = [];
+
   constructor(private payload: FramePayload) {
     super();
   }
 
   eq(other: FrameWidget): boolean {
     return frameSignature(other.payload) === frameSignature(this.payload);
+  }
+
+  destroy(): void {
+    for (const id of this.workTickIds) {
+      window.clearInterval(id);
+    }
+    this.workTickIds = [];
   }
 
   ignoreEvent(): boolean {
@@ -365,6 +382,56 @@ export class FrameWidget extends WidgetType {
         ),
       );
     }
+    if (payload.variant === 'active' && payload.workLogEnabled === true) {
+      this.appendWorkChip(frame, payload);
+    }
+  }
+
+  /** Label text for the work chip: elapsed and/or running total. */
+  private workLabelText(payload: FramePayload, running: boolean): string {
+    const t = payload.task;
+    const total = t.workLogTotalMinutes ?? 0;
+    if (!running) {
+      return total > 0 ? formatDuration(total) : '';
+    }
+    const elapsed = t.timerStart
+      ? Math.max(0, Math.round((Date.now() - t.timerStart.getTime()) / 60000))
+      : 0;
+    return total > 0
+      ? `${formatDuration(elapsed)} \u00b7 ${formatDuration(total)}`
+      : formatDuration(elapsed);
+  }
+
+  /**
+   * Play/pause chip. While a session runs, a 30s interval refreshes only this
+   * chip's label (one interval per running frame, cleared on destroy).
+   */
+  private appendWorkChip(frame: HTMLElement, payload: FramePayload): void {
+    const running = !!payload.task.timerStart;
+    const chipEl = chip(
+      running ? 'todoseq-chip-work-running' : 'todoseq-chip-work',
+      running ? 'pause' : 'play',
+      this.workLabelText(payload, running),
+      running ? 'Pause work session' : 'Start work session',
+      running ? 'work-pause' : 'work-start',
+      payload.taskLine,
+    );
+    frame.appendChild(chipEl);
+
+    if (
+      running &&
+      typeof window !== 'undefined' &&
+      typeof window.setInterval === 'function'
+    ) {
+      const labelEl = chipEl.querySelector<HTMLElement>('.todoseq-chip-label');
+      this.workTickIds.push(
+        window.setInterval(() => {
+          if (labelEl) {
+            labelEl.textContent = this.workLabelText(payload, true);
+          }
+        }, 30000),
+      );
+    }
   }
 
   private buildCompleted(frame: HTMLElement, payload: FramePayload): void {
@@ -445,7 +512,7 @@ export class FrameWidget extends WidgetType {
       evt.preventDefault();
       evt.stopPropagation();
       view.dispatch({
-        effects: toggleMetadataFrameEffect.of(String(payload.taskLine)),
+        effects: toggleMetadataFrameEffect.of(payload.taskLine),
       });
     });
     el.addEventListener('keydown', (evt) => {
@@ -455,7 +522,7 @@ export class FrameWidget extends WidgetType {
       evt.preventDefault();
       evt.stopPropagation();
       view.dispatch({
-        effects: toggleMetadataFrameEffect.of(String(payload.taskLine)),
+        effects: toggleMetadataFrameEffect.of(payload.taskLine),
       });
     });
     frame.appendChild(el);

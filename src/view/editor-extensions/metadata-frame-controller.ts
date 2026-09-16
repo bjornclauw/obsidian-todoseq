@@ -46,7 +46,13 @@ export class MetadataFrameController {
     }
     const line0 = lineRaw - 1;
 
-    const task = this.resolveTask(view, line0);
+    let task = this.resolveTask(view, line0);
+    // Work-session state (TIMER) lives in the live buffer the frame renders
+    // from, but the state manager may lag behind by a scan. Re-read it from the
+    // buffer so pause/start always sees the current timer.
+    if (action === 'work-start' || action === 'work-pause') {
+      task = this.parseTaskFromEditor(view, line0) ?? task;
+    }
     if (!task) {
       return false;
     }
@@ -66,6 +72,16 @@ export class MetadataFrameController {
         return true;
       case 'description':
         this.openTaskEditor(view, line0);
+        return true;
+      case 'work-start':
+        void this.plugin.taskEditor?.startWorkSession(task).catch((error) => {
+          console.debug('Failed to start work session', error);
+        });
+        return true;
+      case 'work-pause':
+        void this.plugin.taskEditor?.pauseWorkSession(task).catch((error) => {
+          console.debug('Failed to pause work session', error);
+        });
         return true;
       default:
         // 'created' / 'repeats' chips are informational only.
@@ -105,28 +121,29 @@ export class MetadataFrameController {
     if (!path) {
       return null;
     }
-
-    const fromState = this.plugin.taskStateManager?.findTaskByPathAndLine(
-      path,
-      line0,
+    return (
+      this.plugin.taskStateManager?.findTaskByPathAndLine(path, line0) ??
+      this.parseTaskFromEditor(view, line0)
     );
-    if (fromState) {
-      return fromState;
-    }
+  }
 
+  /**
+   * Parse the task straight from the live editor buffer (the click may land
+   * before the incremental scan caught up with recent edits).
+   */
+  private parseTaskFromEditor(view: MarkdownView, line0: number): Task | null {
+    const path = view.file?.path;
     const parser = this.plugin.vaultScanner?.getParser();
-    if (!parser) {
+    if (!path || !parser) {
       return null;
     }
 
-    // Parse straight from the live editor buffer (the click may land before
-    // the incremental scan caught up with recent edits).
     const lineCount = view.editor.lineCount();
     const lines = new Array<string>(lineCount);
     for (let i = 0; i < lineCount; i++) {
       lines[i] = view.editor.getLine(i);
     }
-    if (line0 >= lines.length) {
+    if (line0 < 0 || line0 >= lines.length) {
       return null;
     }
     const candidate = lines[line0];

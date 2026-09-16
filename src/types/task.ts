@@ -20,6 +20,8 @@ export interface Task {
   closedDate: Date | null; // closed date from CLOSED: line (when task was marked as completed)
   startedDate: Date | null; // started date from STARTED: line (when the task last entered an active state)
   createdDate?: Date | null; // created date from CREATED: line (written once when the task is created)
+  timerStart?: Date | null; // active work-session start from a TIMER: line (null when not running)
+  workLogTotalMinutes?: number | null; // running total from the [!work] callout title
   scheduledWarningPeriod: WarningPeriodInfo | null; // Warning period for scheduled date (delayed notice). isFirstOnly indicates --Nd syntax.
   deadlineWarningPeriod: WarningPeriodInfo | null; // Warning period for deadline date (advance notice). isFirstOnly indicates --Nd syntax.
   tail?: string; // trailing end characters after the task text (e.g., " */")

@@ -21,6 +21,8 @@ export interface CoordinatorTaskEditorMock {
   updateTaskStartedDate: jest.Mock;
   updateTaskRecurrence: jest.Mock;
   applyRecurrenceUpdate: jest.Mock;
+  startWorkSession: jest.Mock;
+  pauseWorkSession: jest.Mock;
 }
 
 export interface CoordinatorHarness {
@@ -105,6 +107,8 @@ export function createCoordinatorHarness(
     updateTaskStartedDate: jest.fn(),
     updateTaskRecurrence: jest.fn(),
     applyRecurrenceUpdate: jest.fn(),
+    startWorkSession: jest.fn(),
+    pauseWorkSession: jest.fn(),
   };
 
   const mockApp = {

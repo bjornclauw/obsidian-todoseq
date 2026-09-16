@@ -42,6 +42,23 @@ describe('scanMetadataBlock', () => {
     expect(result?.metadataCount).toBe(6);
     expect(result?.repeatTitleIndex).toBeNull();
     expect(result?.repeatTotal).toBeNull();
+    expect(result?.workTitleIndex).toBeNull();
+    expect(result?.workTotalMinutes).toBeNull();
+  });
+
+  it('excludes the [!work] callout from the frame range', () => {
+    const lines = [
+      '- [ ] DOING Fix the export bug',
+      '  TIMER: [2026-09-14 Mon 10:02]',
+      '  > [!work]- Total: 3h 15m (latest 50)',
+      '  > - 45m · 2026-09-14 09:00–09:45',
+      '  > - 1h 30m · 2026-09-13 14:10–15:40',
+    ];
+    const result = scanLines(lines, 0);
+    expect(result?.start).toBe(1);
+    expect(result?.end).toBe(1);
+    expect(result?.workTitleIndex).toBe(2);
+    expect(result?.workTotalMinutes).toBe(195);
   });
 
   it('excludes the [!repeats] callout from the frame range', () => {

@@ -1,6 +1,11 @@
 import { MarkdownView, TFile } from 'obsidian';
 import { MetadataFrameController } from '../src/view/editor-extensions/metadata-frame-controller';
-import { createBaseTask } from './helpers/test-helper';
+import { TaskParser } from '../src/parser/task-parser';
+import { DefaultSettings } from '../src/settings/settings-types';
+import {
+  createBaseTask,
+  createTestKeywordManager,
+} from './helpers/test-helper';
 
 jest.mock('../src/view/components/date-picker-menu', () => ({
   DatePicker: jest.fn().mockImplementation(() => ({
@@ -48,6 +53,8 @@ function createHarness() {
   const updateTask = jest.fn().mockResolvedValue(undefined);
   const openStateMenuAtMouseEvent = jest.fn();
   const openFromActiveEditor = jest.fn();
+  const startWorkSession = jest.fn().mockResolvedValue(undefined);
+  const pauseWorkSession = jest.fn().mockResolvedValue(undefined);
 
   const plugin = {
     app: {
@@ -63,6 +70,7 @@ function createHarness() {
     taskUpdateCoordinator: { updateTask },
     editorKeywordMenu: { openStateMenuAtMouseEvent },
     taskEditorController: { openFromActiveEditor },
+    taskEditor: { startWorkSession, pauseWorkSession },
     settings: { weekStartsOn: 'Monday' },
   };
 
@@ -76,6 +84,8 @@ function createHarness() {
     updateTask,
     openStateMenuAtMouseEvent,
     openFromActiveEditor,
+    startWorkSession,
+    pauseWorkSession,
   };
 }
 
@@ -184,6 +194,61 @@ describe('MetadataFrameController', () => {
       chip,
       expect.anything(),
       task.line + 1,
+    );
+  });
+
+  it('starts a work session for the work-start chip', () => {
+    const { controller, chipFor, startWorkSession, task } = createHarness();
+    expect(
+      controller.handleChipClick(
+        mouseEvent() as never,
+        chipFor('work-start') as never,
+      ),
+    ).toBe(true);
+    expect(startWorkSession).toHaveBeenCalledWith(task);
+  });
+
+  it('pauses a work session for the work-pause chip', () => {
+    const { controller, chipFor, pauseWorkSession, task } = createHarness();
+    expect(
+      controller.handleChipClick(
+        mouseEvent() as never,
+        chipFor('work-pause') as never,
+      ),
+    ).toBe(true);
+    expect(pauseWorkSession).toHaveBeenCalledWith(task);
+  });
+
+  it('reads the running timer from the live buffer for work actions', () => {
+    const { controller, plugin, editor, chipFor, pauseWorkSession, task } =
+      createHarness();
+
+    // The stored task is stale (started but the scan has not caught up).
+    plugin.taskStateManager.findTaskByPathAndLine.mockReturnValue(task);
+    expect(task.timerStart).toBeUndefined();
+
+    const settings = { ...DefaultSettings };
+    const parser = TaskParser.create(
+      createTestKeywordManager(settings),
+      null as never,
+      undefined,
+      settings,
+    );
+    plugin.vaultScanner.getParser.mockReturnValue(parser);
+
+    const lines = ['- [ ] DOING Task', '  TIMER: [2026-09-14 Mon 10:02]'];
+    editor.lineCount = () => lines.length;
+    editor.getLine.mockImplementation((i: number) => lines[i] ?? '');
+
+    controller.handleChipClick(
+      mouseEvent() as never,
+      chipFor('work-pause', 1) as never,
+    );
+
+    expect(pauseWorkSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timerStart: new Date(2026, 8, 14, 10, 2),
+      }),
     );
   });
 

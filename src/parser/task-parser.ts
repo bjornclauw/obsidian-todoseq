@@ -13,6 +13,7 @@ import {
 import { getDailyNoteInfo } from '../utils/daily-note-utils';
 import { extractDateMetadata } from '../utils/date-repeater';
 import { parseRepeatLogTotal } from '../utils/repeat-log';
+import { parseWorkLogTotal } from '../utils/work-log';
 import {
   getIndentLength,
   parseTableCells,
@@ -803,6 +804,22 @@ export class TaskParser implements ITaskParser {
   }
 
   /**
+   * Parse the start timestamp from a `TIMER:` line (the active work-session
+   * marker), or null when the line is not a timer line.
+   */
+  parseTimerLine(line: string): Date | null {
+    const match = line.match(/^\s*(?:>\s*)*TIMER:\s*(.+)$/i);
+    if (!match) {
+      return null;
+    }
+    let content = match[1].trim();
+    if (content.startsWith('[') && content.endsWith(']')) {
+      content = '<' + content.slice(1, -1) + '>';
+    }
+    return DateParser.parseDate(content);
+  }
+
+  /**
    * Extract scheduled, deadline, and closed dates from lines following a task
    * @param lines Array of lines in the file
    * @param startIndex Index to start searching from
@@ -825,6 +842,8 @@ export class TaskParser implements ITaskParser {
     deadlineWarningPeriod: WarningPeriodInfo | null;
     description: string | null;
     repeatCount: number | null;
+    timerStart: Date | null;
+    workLogTotalMinutes: number | null;
   } {
     let scheduledDate: Date | null = null;
     let scheduledDateRepeat: DateRepeatInfo | null = null;
@@ -837,6 +856,8 @@ export class TaskParser implements ITaskParser {
     let deadlineWarningPeriod: WarningPeriodInfo | null = null;
     let description: string | null = null;
     let repeatCount: number | null = null;
+    let timerStart: Date | null = null;
+    let workLogTotalMinutes: number | null = null;
 
     let scheduledFound = false;
     let deadlineFound = false;
@@ -917,6 +938,21 @@ export class TaskParser implements ITaskParser {
           );
         }
       } else {
+        // Check for a TIMER: line (the active work-session marker).
+        const timerStartValue = this.parseTimerLine(nextLine);
+        if (timerStartValue !== null) {
+          timerStart = timerStartValue;
+          continue;
+        }
+
+        // Check for the work-log callout title so the running total is
+        // available even though the log sits after the date lines.
+        const workTotal = parseWorkLogTotal(nextLine);
+        if (workTotal !== null) {
+          workLogTotalMinutes = workTotal;
+          continue;
+        }
+
         // Check for the recurring-completion log callout title so the running
         // total is available even though the log sits after the date lines.
         const repeatTotal = parseRepeatLogTotal(nextLine);
@@ -961,6 +997,8 @@ export class TaskParser implements ITaskParser {
       deadlineWarningPeriod,
       description,
       repeatCount,
+      timerStart,
+      workLogTotalMinutes,
     };
   }
 
@@ -1890,6 +1928,8 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       repeatCount,
+      timerStart,
+      workLogTotalMinutes,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -1902,6 +1942,8 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.repeatCount = repeatCount;
+    task.timerStart = timerStart;
+    task.workLogTotalMinutes = workLogTotalMinutes;
 
     // Extract subtasks from lines following date lines
     // Footnote tasks don't have checkboxes
@@ -2029,6 +2071,8 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       repeatCount,
+      timerStart,
+      workLogTotalMinutes,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -2041,6 +2085,8 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.repeatCount = repeatCount;
+    task.timerStart = timerStart;
+    task.workLogTotalMinutes = workLogTotalMinutes;
 
     // Extract subtasks from lines following date lines
     // Check if parent task has a checkbox (use CHECKBOX_DETECTION_REGEX to detect
@@ -2159,6 +2205,8 @@ export class TaskParser implements ITaskParser {
       deadlineWarningPeriod,
       description,
       repeatCount,
+      timerStart,
+      workLogTotalMinutes,
     } = this.extractTaskDates(lines, index + 1, indent);
 
     task.scheduledDate = scheduledDate;
@@ -2172,6 +2220,8 @@ export class TaskParser implements ITaskParser {
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
     task.repeatCount = repeatCount;
+    task.timerStart = timerStart;
+    task.workLogTotalMinutes = workLogTotalMinutes;
 
     // Calculate urgency for non-completed tasks
     if (!task.completed) {
@@ -2314,6 +2364,8 @@ export class TaskParser implements ITaskParser {
       deadlineWarningPeriod,
       description,
       repeatCount,
+      timerStart,
+      workLogTotalMinutes,
     } = this.extractTaskDates(lines, index + 1, taskDetails.indent);
 
     task.scheduledDate = scheduledDate;
@@ -2327,6 +2379,8 @@ export class TaskParser implements ITaskParser {
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
     task.repeatCount = repeatCount;
+    task.timerStart = timerStart;
+    task.workLogTotalMinutes = workLogTotalMinutes;
 
     // Extract subtasks from lines following date lines
     // Check if parent task has a checkbox (use CHECKBOX_DETECTION_REGEX to detect

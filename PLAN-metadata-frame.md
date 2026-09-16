@@ -1,6 +1,7 @@
 # Plan: Virtual metadata frame + work logging
 
-Status: **Phase 1 implemented and committed (docs + tests done), Phase 2 + 3 not started.**
+Status: **Phase 1 implemented and committed (docs + tests done). Phase 2
+(work logging) implemented. Phase 3 not started.**
 
 This document is the working plan for turning a task's plain-text metadata block
 into a virtual UI layer, and for adding per-task work logging. It captures the
@@ -90,9 +91,6 @@ Bugs / rough edges to resolve before committing:
 - [ ] Add an integration test (Playwright harness) covering frame render +
       source reveal, since the editor layer currently has no real-Obsidian
       coverage.
-- [ ] Expand/source keys are the 1-based task line number, so they go stale
-      after edits above the task (ephemeral by design; consider a
-      position-mapped key).
 - [ ] Heading tasks currently use the same left offset as list tasks; the mockup
       had heading frames sitting flush under the heading.
 - [ ] Frames are skipped inside quote/callout blocks (deliberate for v1) — decide
@@ -102,6 +100,12 @@ Bugs / rough edges to resolve before committing:
 
 Resolved:
 
+- [x] Expand/source keys went stale after edits above the task — the field now
+      keys `expanded`/`sourceRevealed` by the task line's document start offset
+      and remaps them with `tr.changes.mapPos` on every edit (snapping back to
+      the containing line start), so a toggle follows its task. The effect
+      payload is the 1-based line number; the field resolves and stores the
+      offset.
 - [x] Docs: the setting is documented in `docs/editor.md`
       ([Metadata Frame](docs/editor.md)) and `docs/settings.md`, with a
       `CHANGELOG.md` entry under Unreleased.
@@ -132,7 +136,24 @@ Resolved:
       made the frame vanish while editing the task text — replaced by the
       explicit `<>` source toggle.
 
-## Phase 2 — Work logging (not started)
+## Phase 2 — Work logging (implemented)
+
+Status: implemented. `src/utils/work-log.ts` (parse/build), parser fields
+(`Task.timerStart`, `Task.workLogTotalMinutes`), `[!work]` block scanning,
+`TaskWriter.startWorkSession` / `pauseWorkSession`, the `trackWorkLog` setting,
+and the frame play/pause chip (with a 30s live tick). Entries are never
+truncated (no limit), and the chip shows elapsed + total while running.
+
+Done since the first pass:
+
+- Auto-close a running session when the task is completed, via
+  `TaskUpdateCoordinator.autoCloseWorkSession` (covers state and recurrence
+  completions).
+
+Still open:
+
+- Integration test covering play/pause end-to-end in a real vault.
+- Reader-view parity (Phase 3).
 
 Goal: play/pause a work session on a task, store sessions in a `[!work]` callout,
 and show the total in the frame.

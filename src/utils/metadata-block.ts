@@ -1,6 +1,7 @@
 import { KeywordSettings, KeywordManager } from './keyword-manager';
 import { isTaskMetadataLine } from './task-metadata';
 import { parseRepeatLogTotal, isRepeatLogLine } from './repeat-log';
+import { isWorkLogLine, parseWorkLogTotal } from './work-log';
 
 /** Which virtual frame variant a task's metadata block renders as. */
 export type FrameVariant = 'active' | 'completed' | 'recurring-completed';
@@ -30,6 +31,10 @@ export interface MetadataBlockScan {
   repeatTitleIndex: number | null;
   /** Running completion total parsed from the `[!repeats]` title. */
   repeatTotal: number | null;
+  /** Index of the `[!work]` callout title, when one follows the block. */
+  workTitleIndex: number | null;
+  /** Running work total (minutes) parsed from the `[!work]` title. */
+  workTotalMinutes: number | null;
 }
 
 export const DEFAULT_METADATA_MAX_GAP = 8;
@@ -61,6 +66,8 @@ export function scanMetadataBlock(
   let metadataCount = 0;
   let repeatTitleIndex: number | null = null;
   let repeatTotal: number | null = null;
+  let workTitleIndex: number | null = null;
+  let workTotalMinutes: number | null = null;
 
   for (let i = taskLine + 1; i - taskLine - 1 < maxGap; i++) {
     const line = getLine(i);
@@ -93,6 +100,14 @@ export function scanMetadataBlock(
         }
         break;
       }
+      if (isWorkLogLine(line)) {
+        const total = parseWorkLogTotal(line);
+        if (workTitleIndex === null && total !== null) {
+          workTitleIndex = i;
+          workTotalMinutes = total;
+        }
+        break;
+      }
       if (start === -1) {
         start = i;
       }
@@ -116,6 +131,8 @@ export function scanMetadataBlock(
     metadataCount,
     repeatTitleIndex,
     repeatTotal,
+    workTitleIndex,
+    workTotalMinutes,
   };
 }
 

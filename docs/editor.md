@@ -68,6 +68,27 @@ renders as a frame with `SCHEDULED`, `DEADLINE`, `DESCRIPTION` (and an "N hidden
 
 See [Settings → Metadata Frame](settings.md#metadata-frame) for the toggle.
 
+### Work Logging
+
+With the **Track work time** setting on (default), an active task's frame shows a play/pause chip. Press play to start a session and pause to stop it. The session is stored in a `[!work]` callout, and its running total appears on the chip.
+
+```markdown
+- [ ] DOING Fix the export bug
+      TIMER: [2026-09-14 Mon 10:02]
+  > [!work]- Total: 3h 15m
+  >
+  > - 45m · 2026-09-14 09:00–09:45
+  > - 1h 30m · 2026-09-13 14:10–15:40
+```
+
+- **Play** writes the `TIMER:` line; **pause** replaces it with a start–stop entry, newest first, and refreshes the total in the callout title.
+- While running, the chip shows the current session's elapsed time and the all-time total. It updates every 30 seconds.
+- The `[!work]` callout folds natively like any Obsidian callout, so you can read the full history in the note.
+- Entries are never truncated. The format is tolerant of hand-typed entries such as `- 45m`.
+- Turning the setting off writes no `TIMER:` or `[!work]` lines and removes the chip.
+
+See [Settings → Track work time](settings.md#track-work-time).
+
 ## Interactive Task Management
 
 TODOseq provides several ways to interact with tasks directly in the editor:

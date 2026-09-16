@@ -43,6 +43,11 @@ function value(
   return state.field(field) as MetadataFrameFieldValue;
 }
 
+/** Start offset of a 1-based line in `state`. */
+function pos(state: EditorState, line: number): number {
+  return state.doc.line(line).from;
+}
+
 describe('metadata frame state field', () => {
   it('starts with no expanded or revealed frames', () => {
     const { field, state } = setup();
@@ -50,51 +55,57 @@ describe('metadata frame state field', () => {
     expect(value(state, field).sourceRevealed.size).toBe(0);
   });
 
-  it('toggles a frame open and closed', () => {
+  it('toggles a frame open and closed, keyed by task position', () => {
     const { field, state } = setup();
 
     const opened = state.update({
-      effects: toggleMetadataFrameEffect.of('1'),
+      effects: toggleMetadataFrameEffect.of(1),
     }).state;
-    expect(value(opened, field).expanded.has('1')).toBe(true);
+    expect(value(opened, field).expanded.has(pos(state, 1))).toBe(true);
 
     const closed = opened.update({
-      effects: toggleMetadataFrameEffect.of('1'),
+      effects: toggleMetadataFrameEffect.of(1),
     }).state;
-    expect(value(closed, field).expanded.has('1')).toBe(false);
+    expect(value(closed, field).expanded.has(pos(opened, 1))).toBe(false);
   });
 
   it('tracks several expanded frames independently', () => {
     const { field, state } = setup();
     const next = state.update({
       effects: [
-        toggleMetadataFrameEffect.of('1'),
-        toggleMetadataFrameEffect.of('2'),
+        toggleMetadataFrameEffect.of(1),
+        toggleMetadataFrameEffect.of(2),
       ],
     }).state;
-    expect([...value(next, field).expanded].sort()).toEqual(['1', '2']);
+    expect([...value(next, field).expanded].sort((a, b) => a - b)).toEqual([
+      pos(state, 1),
+      pos(state, 2),
+    ]);
   });
 
   it('keeps the source reveal independent from the expansion state', () => {
     const { field, state } = setup();
     const next = state.update({
-      effects: toggleMetadataFrameSourceEffect.of('1'),
+      effects: toggleMetadataFrameSourceEffect.of(1),
     }).state;
-    expect(value(next, field).sourceRevealed.has('1')).toBe(true);
-    expect(value(next, field).expanded.has('1')).toBe(false);
+    expect(value(next, field).sourceRevealed.has(pos(state, 1))).toBe(true);
+    expect(value(next, field).expanded.has(pos(state, 1))).toBe(false);
   });
 
-  it('preserves the expanded set across unrelated document edits', () => {
+  it('follows the task when a line is inserted above it', () => {
     const { field, state } = setup();
     const opened = state.update({
-      effects: toggleMetadataFrameEffect.of('1'),
+      effects: toggleMetadataFrameEffect.of(1),
     }).state;
 
+    // The task moves from line 1 to line 2; its key must move with it.
     const edited = opened.update({
-      changes: { from: 0, insert: 'text ' },
+      changes: { from: 0, insert: 'prefix\n' },
     }).state;
 
-    expect(value(edited, field).expanded.has('1')).toBe(true);
+    const expanded = value(edited, field).expanded;
+    expect(expanded.has(pos(edited, 2))).toBe(true);
+    expect(expanded.has(pos(edited, 1))).toBe(false);
   });
 
   it('returns the same field value when nothing it depends on changed', () => {

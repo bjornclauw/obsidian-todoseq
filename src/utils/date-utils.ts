@@ -920,6 +920,16 @@ export class DateUtils {
   static formatCreatedDate(date: Date): string {
     return this.formatClosedDate(date);
   }
+
+  /**
+   * Format a date for the TIMER marker of an active work session in the same
+   * inactive bracket format: [YYYY-MM-DD DOW HH:mm].
+   * @param date The date to format
+   * @returns Formatted date string
+   */
+  static formatTimerDate(date: Date): string {
+    return this.formatClosedDate(date);
+  }
 }
 
 /**

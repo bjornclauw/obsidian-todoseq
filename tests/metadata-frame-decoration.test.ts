@@ -35,7 +35,8 @@ function makeFakeDoc(text: string): FrameDoc {
   };
 }
 
-function compute(text: string, sourceRevealed: string[] = []) {
+function compute(text: string, sourceRevealedLines: number[] = []) {
+  const doc = makeFakeDoc(text);
   const settings = { ...DefaultSettings, metadataFrame: true };
   const parser = TaskParser.create(
     createTestKeywordManager(settings),
@@ -44,9 +45,11 @@ function compute(text: string, sourceRevealed: string[] = []) {
     settings,
   );
   return computeMetadataFrameDecorations({
-    doc: makeFakeDoc(text),
-    expanded: new Set<string>(),
-    sourceRevealed: new Set(sourceRevealed),
+    doc,
+    expanded: new Set<number>(),
+    sourceRevealed: new Set(
+      sourceRevealedLines.map((line) => doc.line(line).from),
+    ),
     livePreview: true,
     settings,
     parser,
@@ -166,7 +169,7 @@ describe('computeMetadataFrameDecorations', () => {
       '\n',
     );
 
-    const { decorations, blockedLines } = compute(text, ['1']);
+    const { decorations, blockedLines } = compute(text, [1]);
     // No frame, nothing hidden, and a toggle widget to restore the frame.
     expect(collectWidgets(decorations)).toHaveLength(0);
     expect(blockedLines.size).toBe(0);
@@ -198,8 +201,8 @@ describe('computeMetadataFrameDecorations', () => {
 
     const { decorations } = computeMetadataFrameDecorations({
       doc: makeFakeDoc(text),
-      expanded: new Set<string>(),
-      sourceRevealed: new Set<string>(),
+      expanded: new Set<number>(),
+      sourceRevealed: new Set<number>(),
       livePreview: false,
       settings,
       parser,
@@ -222,8 +225,8 @@ describe('computeMetadataFrameDecorations', () => {
 
     const { decorations } = computeMetadataFrameDecorations({
       doc: makeFakeDoc(text),
-      expanded: new Set<string>(),
-      sourceRevealed: new Set<string>(),
+      expanded: new Set<number>(),
+      sourceRevealed: new Set<number>(),
       livePreview: true,
       settings,
       parser,
