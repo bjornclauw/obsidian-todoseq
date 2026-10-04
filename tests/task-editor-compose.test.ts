@@ -56,6 +56,7 @@ function createWriter() {
       trackClosedDate: false,
       trackStartedDate: false,
       trackCreatedDate: false,
+      blankLineAfterTask: false,
       useExtendedCheckboxStyles: false,
       stateTransitions: {
         defaultInactive: 'TODO',
@@ -186,6 +187,39 @@ describe('TaskWriter.createTaskAtLine', () => {
     );
     // Inserting above existing content pushes it down by the block size.
     expect(result?.lineDelta).toBe(1);
+  });
+
+  it('appends a blank line after the whole task block when enabled', async () => {
+    const { writer, mockApp, mockPlugin } = createWriter();
+    mockPlugin.settings.blankLineAfterTask = true;
+    const content = 'line 0\n\nline 2';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const fields = makeFields({ description: 'Some notes' });
+    const result = await writer.createTaskAtLine('test.md', 1, fields);
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe(
+      'line 0\n- [ ] TODO Task text\n  DESCRIPTION: Some notes\n\nline 2',
+    );
+    // Block is task + description + blank; replacing one line adds two.
+    expect(result?.lineDelta).toBe(2);
+  });
+
+  it('leaves no blank line after the task block when disabled', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = 'line 0\n\nline 2';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const result = await writer.createTaskAtLine('test.md', 1, makeFields());
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe('line 0\n- [ ] TODO Task text\nline 2');
+    expect(result?.lineDelta).toBe(0);
   });
 
   it('replaces the target line when replaceExistingLine is set', async () => {

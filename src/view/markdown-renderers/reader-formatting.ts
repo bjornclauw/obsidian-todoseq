@@ -14,6 +14,7 @@ import { MarkdownPostProcessorContext, TFile, setTooltip } from 'obsidian';
 import { StateMenuBuilder } from '../components/state-menu-builder';
 import { getStateTransitionManager } from '../../services/task-update-coordinator';
 import { getTableCellIndex } from '../../utils/task-line-utils';
+import { applyKeywordColor } from '../../utils/keyword-colors';
 
 /**
  * Cached regex for priority tokens with global flag.
@@ -90,6 +91,8 @@ export class ReaderViewFormatter {
         tabindex: '0',
       },
     });
+    const keywordManager = this.vaultScanner.getKeywordManager();
+    applyKeywordColor(span, keywordManager.getKeywordColor(keyword));
     return span;
   }
 

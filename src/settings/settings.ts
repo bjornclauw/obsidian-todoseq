@@ -5,16 +5,23 @@ import {
   Notice,
   DropdownComponent,
   SettingDefinitionItem,
+  SettingDefinitionPage,
+  SettingDefinitionList,
 } from 'obsidian';
 import TodoTracker from '../main';
 import { TaskParser } from '../parser/task-parser';
-import {
-  parseKeywordInput,
-  formatKeywordsForInput,
-  validateKeywordGroupsDetailed,
-} from '../utils/settings-utils';
-import { TodoTrackerSettings } from './settings-types';
+import { validateKeywordGroupsDetailed } from '../utils/settings-utils';
+import { SavedSearch, TodoTrackerSettings } from './settings-types';
 import { SUPPORTED_EXTENSIONS } from '../parser/code-comment-task-parser';
+import { SavedSearchDialog } from '../view/components/saved-search-dialog';
+import {
+  createSavedSearch,
+  addSavedSearch,
+  updateSavedSearch,
+  deleteSavedSearch,
+  getSavedSearches,
+  reorderSavedSearches,
+} from '../services/saved-search-manager';
 import { TaskListView } from '../view/task-list/task-list-view';
 import { KeywordGroup } from '../types/task';
 import { TransitionParser } from '../services/transition-parser';
@@ -34,24 +41,19 @@ type KeywordSettingKey = keyof Pick<
   | 'additionalArchivedKeywords'
 >;
 
-interface KeywordFieldBinding {
-  settingKey: KeywordSettingKey;
-  inputEl: HTMLInputElement;
-  settingEl: HTMLElement;
-}
-
 export class TodoTrackerSettingTab extends PluginSettingTab {
   plugin: TodoTracker;
-  // Separate debounce timers for each keyword group input
-  private keywordGroupDebounceTimers: Map<string, number> = new Map();
   private fileExtensionsDebounceTimer: number | null = null;
   private transitionValidationDebounceTimer: number | null = null;
+  private keywordApplyTimer: number | null = null;
   private readonly KEYWORD_DEBOUNCE_MS = 500;
   private readonly FILE_EXTENSIONS_DEBOUNCE_MS = 500;
   private readonly TRANSITION_VALIDATION_DEBOUNCE_MS = 500;
-  private readonly keywordFieldBindings = new Map<
-    KeywordSettingKey,
-    KeywordFieldBinding
+  // Live keyword colour pickers, keyed by keyword, so a group colour change can
+  // update the children that inherit it without re-rendering the whole tab.
+  private readonly keywordColorPickers = new Map<
+    string,
+    { picker: { setValue: (value: string) => void }; group: KeywordGroup }
   >();
   // Store dropdown components for default state settings to update when keywords change
   private defaultStateDropdowns: {
@@ -84,6 +86,8 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
     (value: unknown) => Promise<void> | void
   > = {
     formatTaskKeywords: () => this.plugin.updateTaskFormatting(),
+    keywordColors: () => this.refreshKeywordColors(),
+    keywordGroupColors: () => this.refreshKeywordColors(),
     metadataFrame: () => this.plugin.updateTaskFormatting(),
     trackWorkLog: () => this.plugin.updateTaskFormatting(),
     includeCalloutBlocks: () => this.rescanAndRefresh(),
@@ -237,13 +241,161 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
     return this.refreshAllTaskListViews();
   }
 
+  /**
+   * Repaint every surface after a keyword colour changed. The editor
+   * decorations read settings directly, while the reader and task lists resolve
+   * colours through the (snapshot) KeywordManager, which the refresh syncs.
+   */
+  private refreshKeywordColors(): Promise<void> {
+    this.plugin.updateTaskFormatting();
+    this.plugin.refreshReaderViewFormatter();
+    return this.refreshAllTaskListViews();
+  }
+
+  /**
+   * Read a control value. Supports indexed keys (`arrayField#3`) used by the
+   * keyword and transition list rows, plus the transition statement array.
+   */
+  getControlValue(key: string): unknown {
+    const indexed = this.parseIndexedKey(key);
+    if (indexed) {
+      if (indexed.base === 'transitionStatements') {
+        return this.plugin.settings.stateTransitions.transitionStatements[
+          indexed.index
+        ];
+      }
+      const arr = (this.plugin.settings as unknown as Record<string, unknown>)[
+        indexed.base
+      ];
+      return Array.isArray(arr) ? arr[indexed.index] : undefined;
+    }
+    return (this.plugin.settings as unknown as Record<string, unknown>)[key];
+  }
+
   async setControlValue(key: string, value: unknown): Promise<void> {
+    const indexed = this.parseIndexedKey(key);
+    if (indexed) {
+      if (indexed.base === 'transitionStatements') {
+        const statements =
+          this.plugin.settings.stateTransitions.transitionStatements;
+        if (indexed.index >= 0 && indexed.index < statements.length) {
+          statements[indexed.index] = typeof value === 'string' ? value : '';
+        }
+        await this.plugin.saveSettings();
+        this.scheduleTransitionValidation();
+        return;
+      }
+      const arr = (this.plugin.settings as unknown as Record<string, unknown>)[
+        indexed.base
+      ];
+      if (
+        Array.isArray(arr) &&
+        indexed.index >= 0 &&
+        indexed.index < arr.length
+      ) {
+        arr[indexed.index] = typeof value === 'string' ? value : '';
+      }
+      this.scheduleKeywordApply();
+      return;
+    }
+
     (this.plugin.settings as unknown as Record<string, unknown>)[key] = value;
     await this.sideEffectHandlers[key]?.(value);
     await this.plugin.saveSettings();
     if (this.controlsRequiringTabUpdate.has(key)) {
       this.update();
     }
+  }
+
+  /** Parse an `arrayField#3` style indexed control key. */
+  private parseIndexedKey(key: string): { base: string; index: number } | null {
+    const match = /^(.*)#(\d+)$/.exec(key);
+    if (!match) {
+      return null;
+    }
+    return { base: match[1], index: Number(match[2]) };
+  }
+
+  /** Debounce keyword edits so a scan runs once the user pauses. */
+  private scheduleKeywordApply(): void {
+    if (this.keywordApplyTimer !== null) {
+      window.clearTimeout(this.keywordApplyTimer);
+    }
+    this.keywordApplyTimer = window.setTimeout(() => {
+      this.keywordApplyTimer = null;
+      void this.applyKeywordGroups();
+    }, this.KEYWORD_DEBOUNCE_MS);
+  }
+
+  /** Validate, persist and apply the current keyword groups. */
+  private async applyKeywordGroups(): Promise<void> {
+    const parsedBySetting = this.getKeywordInputsFromSettings();
+    const regexValidation =
+      this.validateKeywordRegexForAllGroups(parsedBySetting);
+    const groupsForValidation = this.toGroupKeywordInput(
+      regexValidation.validBySetting,
+    );
+    const keywordValidation =
+      validateKeywordGroupsDetailed(groupsForValidation);
+
+    this.renderKeywordValidationState(
+      regexValidation.errorsByGroup,
+      keywordValidation.errors,
+      keywordValidation.warnings,
+    );
+
+    for (const [key, values] of Object.entries(
+      regexValidation.validBySetting,
+    )) {
+      this.plugin.settings[key as KeywordSettingKey] = values;
+    }
+    await this.plugin.saveSettings();
+
+    await this.updateDefaultStateDropdowns();
+    this.validateTransitionSettings();
+
+    try {
+      await this.plugin.recreateParser();
+      await this.plugin.scanVault();
+      await this.refreshAllTaskListViews();
+      this.plugin.refreshVisibleEditorDecorations();
+      this.plugin.refreshReaderViewFormatter();
+    } catch (parseError) {
+      console.error('Failed to recreate parser with keywords:', parseError);
+    }
+  }
+
+  private scheduleTransitionValidation(): void {
+    if (this.transitionValidationDebounceTimer) {
+      window.clearTimeout(this.transitionValidationDebounceTimer);
+    }
+    this.transitionValidationDebounceTimer = window.setTimeout(() => {
+      this.transitionValidationDebounceTimer = null;
+      this.validateTransitionSettings();
+      this.plugin.updateTaskListViewSettings();
+      this.plugin.updateTaskUpdateCoordinatorSettings();
+    }, this.TRANSITION_VALIDATION_DEBOUNCE_MS);
+  }
+
+  /** Snapshot the keyword arrays from settings (source of truth for a scan). */
+  private getKeywordInputsFromSettings(): Record<KeywordSettingKey, string[]> {
+    return {
+      additionalActiveKeywords: [
+        ...(this.plugin.settings.additionalActiveKeywords ?? []),
+      ],
+      additionalInactiveKeywords: [
+        ...(this.plugin.settings.additionalInactiveKeywords ?? []),
+      ],
+      additionalWaitingKeywords: [
+        ...(this.plugin.settings.additionalWaitingKeywords ?? []),
+      ],
+      additionalCompletedKeywords: [
+        ...(this.plugin.settings.additionalCompletedKeywords ?? []),
+      ],
+      additionalArchivedKeywords: [
+        ...(this.plugin.settings.additionalArchivedKeywords ?? []),
+      ],
+    };
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
@@ -265,7 +417,7 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
       'DONE',
     );
 
-    return [
+    const sections: SettingDefinitionItem[] = [
       {
         name: 'Format task keywords',
         desc: 'Highlight task keywords (todo, doing, etc.) in bold with accent color in the editor.',
@@ -280,6 +432,11 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         name: 'Track work time',
         desc: 'Show a play/pause control on task metadata frames and record work sessions in a `[!work]` callout.',
         control: { type: 'toggle', key: 'trackWorkLog' },
+      },
+      {
+        name: 'Blank line after task',
+        desc: 'When creating a task with the task editor, insert a blank line after the task and its metadata lines.',
+        control: { type: 'toggle', key: 'blankLineAfterTask' },
       },
       {
         type: 'group',
@@ -401,155 +558,26 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
           },
         ],
       },
+      this.buildKeywordsPage(),
       {
         type: 'group',
-        heading: 'Task keywords',
+        heading: 'Keyword colors',
         items: [
           {
-            name: 'Inactive keywords',
-            desc: 'Keywords for tasks not yet started (e.g. FIXME, HACK). Built-in: TODO, LATER.',
+            name: 'Keyword colors',
+            desc: 'Assign a colour to any task state keyword. Unset keywords use the theme accent colour.',
             render: (setting) => {
-              this.configureKeywordGroupSetting(
-                setting,
-                'additionalInactiveKeywords',
-                'Inactive keywords',
-                'Keywords for tasks not yet started (e.g. FIXME, HACK). Built-in: TODO, LATER.',
-                this.plugin.settings.additionalInactiveKeywords,
-              );
-              // Run initial validation on open so existing warnings/errors are visible
-              // for all keyword groups, not just archived keywords
-              window.setTimeout(() => {
-                const parsed = this.parseKeywordInputsFromUI();
-                const regex = this.validateKeywordRegexForAllGroups(parsed);
-                const groups = this.toGroupKeywordInput(regex.validBySetting);
-                const validation = validateKeywordGroupsDetailed(groups);
-                this.renderKeywordValidationState(
-                  regex.errorsByGroup,
-                  validation.errors,
-                  validation.warnings,
-                );
-              }, 0);
-            },
-          },
-          {
-            name: 'Active keywords',
-            desc: 'Keywords for tasks currently being worked on (e.g. STARTED). Built-in: DOING, NOW, IN-PROGRESS.',
-            render: (setting) =>
-              this.configureKeywordGroupSetting(
-                setting,
-                'additionalActiveKeywords',
-                'Active keywords',
-                'Keywords for tasks currently being worked on (e.g. STARTED). Built-in: DOING, NOW, IN-PROGRESS.',
-                this.plugin.settings.additionalActiveKeywords,
-              ),
-          },
-          {
-            name: 'Waiting keywords',
-            desc: 'Keywords for blocked or paused tasks (e.g. ON-HOLD). Built-in: WAIT, WAITING.',
-            render: (setting) =>
-              this.configureKeywordGroupSetting(
-                setting,
-                'additionalWaitingKeywords',
-                'Waiting keywords',
-                'Keywords for blocked or paused tasks (e.g. ON-HOLD). Built-in: WAIT, WAITING.',
-                this.plugin.settings.additionalWaitingKeywords,
-              ),
-          },
-          {
-            name: 'Completed keywords',
-            desc: 'Keywords for finished or abandoned tasks (e.g. NEVER). Built-in: DONE, CANCELLED, CANCELED.',
-            render: (setting) =>
-              this.configureKeywordGroupSetting(
-                setting,
-                'additionalCompletedKeywords',
-                'Completed keywords',
-                'Keywords for finished or abandoned tasks (e.g. NEVER). Built-in: DONE, CANCELLED, CANCELED.',
-                this.plugin.settings.additionalCompletedKeywords,
-              ),
-          },
-          {
-            name: 'Archived keywords',
-            desc: 'Keywords for archived tasks (e.g. OLD). These tasks are styled but NOT collected during vault scans. Built-in: ARCHIVED.',
-            render: (setting) =>
-              this.configureKeywordGroupSetting(
-                setting,
-                'additionalArchivedKeywords',
-                'Archived keywords',
-                'Keywords for archived tasks (e.g. OLD). These tasks are styled but NOT collected during vault scans. Built-in: ARCHIVED.',
-                this.plugin.settings.additionalArchivedKeywords,
-              ),
-          },
-          {
-            name: 'Migrated state keyword',
-            desc: 'Keyword or text to set on the source task after migrating to daily note. Leave empty to disable.',
-            control: {
-              type: 'text',
-              key: 'migrateToTodayState',
-              placeholder: '(disabled)',
+              this.configureKeywordColorsSetting(setting);
             },
           },
         ],
       },
       {
-        type: 'group',
-        heading: 'Task state transitions',
+        type: 'page',
+        name: 'State transitions',
+        desc: 'How task states cycle, and date tracking on state changes.',
         items: [
-          {
-            name: 'State transitions',
-            desc: 'Define how states transition. Each line: STATE -> next_state. Use (a | b) to define multiple initial states.',
-            render: (setting) => {
-              this.transitionSettings.transitions = setting;
-              setting
-                .setName('State transitions')
-                .setDesc(
-                  'Define how states transition. Each line: STATE -> next_state. Use (a | b) to define multiple initial states.',
-                )
-                .addTextArea((textArea) => {
-                  // Set the size of the textarea directly on the underlying element
-                  textArea.inputEl.cols = 48;
-                  textArea.inputEl.rows = 4;
-                  textArea
-                    .setValue(
-                      this.plugin.settings.stateTransitions.transitionStatements.join(
-                        '\n',
-                      ),
-                    )
-                    .setPlaceholder(
-                      // workaround agressive obsidianmd/ui/sentence-case lint rule -- states are capitalized
-                      'TODO -> DOING -> DONE' +
-                        '\n' +
-                        '(WAIT | WAITING) -> IN-PROGRESS' +
-                        '\n' +
-                        'LATER -> NOW -> DONE',
-                    )
-                    .onChange(async (value: string) => {
-                      const statements = value
-                        .split('\n')
-                        .map((s: string) => s.trim())
-                        .filter((s: string) => s.length > 0);
-                      this.plugin.settings.stateTransitions.transitionStatements =
-                        statements;
-                      await this.plugin.saveSettings();
-
-                      // Debounce validation to allow user to finish typing
-                      if (this.transitionValidationDebounceTimer) {
-                        window.clearTimeout(
-                          this.transitionValidationDebounceTimer,
-                        );
-                      }
-                      this.transitionValidationDebounceTimer =
-                        window.setTimeout(() => {
-                          this.transitionValidationDebounceTimer = null;
-                          this.validateTransitionSettings();
-                          // Update task list views with new state transition settings
-                          this.plugin.updateTaskListViewSettings();
-                          // Update task update coordinator with new settings
-                          this.plugin.updateTaskUpdateCoordinatorSettings();
-                        }, this.TRANSITION_VALIDATION_DEBOUNCE_MS);
-                    });
-                });
-            },
-          },
+          this.buildTransitionList(),
           {
             name: 'Default inactive state',
             desc: 'The default state for inactive tasks when no explicit transition is defined.',
@@ -762,6 +790,75 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         ],
       },
     ];
+
+    // The flat `sections` array is kept in declaration order and re-grouped
+    // into navigable pages below. Index order must match the array above.
+    const [
+      formatTaskKeywords,
+      metadataFrame,
+      trackWorkTime,
+      blankLineAfterTask,
+      detectionGroup,
+      smartDateGroup,
+      taskListGroup,
+      keywordsGroup,
+      colorsGroup,
+      transitionsGroup,
+      warningGroup,
+      experimentalGroup,
+    ] = sections;
+
+    const pages: SettingDefinitionItem[] = [
+      {
+        type: 'page',
+        name: 'General',
+        desc: 'Task rendering and creation behaviour.',
+        items: [
+          formatTaskKeywords,
+          metadataFrame,
+          trackWorkTime,
+          blankLineAfterTask,
+        ],
+      },
+      {
+        type: 'page',
+        name: 'Task detection',
+        desc: 'Where TODOseq looks for tasks.',
+        items: [detectionGroup],
+      },
+      {
+        type: 'page',
+        name: 'Task list',
+        desc: 'How the Task List view filters and displays tasks.',
+        items: [taskListGroup, warningGroup],
+      },
+      {
+        type: 'page',
+        name: 'States & keywords',
+        desc: 'Task states, colours, keywords and transitions.',
+        items: [keywordsGroup, colorsGroup, transitionsGroup],
+      },
+      {
+        type: 'page',
+        name: 'Dates',
+        desc: 'Natural-language date recognition.',
+        items: [smartDateGroup],
+      },
+      {
+        type: 'page',
+        name: 'Saved searches',
+        desc: 'Named task list queries.',
+        items: [this.buildSavedSearchesList()],
+      },
+      {
+        type: 'page',
+        name: 'Experimental',
+        desc: 'Features that may change or be removed.',
+        items: [experimentalGroup],
+      },
+    ];
+
+    return pages;
   }
 
   /**
@@ -809,137 +906,440 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
   }
 
   /**
-   * Configure a keyword group setting with validation
-   * Uses flat settings properties: additionalActiveKeywords, additionalInactiveKeywords,
-   * additionalWaitingKeywords, additionalCompletedKeywords, additionalArchivedKeywords
+   * Render the colour editor. Each state group gets a default colour, and
+   * every known keyword (built-in and custom) gets an optional override with a
+   * reset button.
    */
-  private configureKeywordGroupSetting(
-    setting: Setting,
-    settingKey: KeywordSettingKey,
-    name: string,
-    description: string,
-    currentValue: string[],
+  private configureKeywordColorsSetting(setting: Setting): void {
+    setting
+      .setName('Keyword colors')
+      .setDesc(
+        'Colour each task state group, with optional per-keyword overrides. Unset values fall back to the theme accent colour.',
+      );
+
+    const listEl = setting.settingEl.createDiv({
+      cls: 'todoseq-keyword-colors',
+    });
+    this.keywordColorPickers.clear();
+    const keywordManager = new KeywordManager(this.plugin.settings);
+    const groups: Array<{ label: string; group: KeywordGroup }> = [
+      { label: 'Inactive', group: 'inactiveKeywords' },
+      { label: 'Active', group: 'activeKeywords' },
+      { label: 'Waiting', group: 'waitingKeywords' },
+      { label: 'Completed', group: 'completedKeywords' },
+      { label: 'Archived', group: 'archivedKeywords' },
+    ];
+
+    for (const { label, group } of groups) {
+      const keywords = keywordManager.getKeywordsForGroup(group);
+      if (keywords.length === 0) {
+        continue;
+      }
+      listEl.createDiv({
+        cls: 'todoseq-keyword-colors-group-heading',
+        text: label,
+      });
+      this.buildGroupColorRow(listEl, label, group);
+      for (const keyword of keywords) {
+        this.buildKeywordColorRow(listEl, keyword, group);
+      }
+    }
+  }
+
+  /** The group's configured colour if it is a value the picker can show. */
+  private getGroupColorHex(group: KeywordGroup): string | null {
+    const value = this.plugin.settings.keywordGroupColors?.[group];
+    return value && /^#[0-9a-fA-F]+$/.test(value) ? value : null;
+  }
+
+  private buildGroupColorRow(
+    container: HTMLElement,
+    label: string,
+    group: KeywordGroup,
   ): void {
-    setting.setName(name).setDesc(description);
-
-    setting.addText((text) => {
-      text
-        .setValue(formatKeywordsForInput(currentValue))
-        .setPlaceholder('KEYWORD')
-        .onChange((value) => {
-          this.keywordFieldBindings.set(settingKey, {
-            settingKey,
-            inputEl: text.inputEl,
-            settingEl: setting.settingEl,
-          });
-
-          // Force uppercase in the UI field immediately
-          const forced = value.toUpperCase();
-          if (forced !== value) {
-            try {
-              text.setValue(forced);
-            } catch {
-              // no-op if API surface changes
-            }
-          }
-
-          // Clear any pending debounce timer for this specific group
-          const existingTimer = this.keywordGroupDebounceTimers.get(settingKey);
-          if (existingTimer) {
-            window.clearTimeout(existingTimer);
-          }
-
-          // Debounce the expensive operations
-          const newTimer = window.setTimeout(() => {
-            void (async () => {
-              // Clear the timer from the map when it executes
-              this.keywordGroupDebounceTimers.delete(settingKey);
-
-              // Parse and validate all keyword fields so all groups get updated warnings/errors
-              const parsedBySetting = this.parseKeywordInputsFromUI();
-              const regexValidation =
-                this.validateKeywordRegexForAllGroups(parsedBySetting);
-              const groupsForValidation = this.toGroupKeywordInput(
-                regexValidation.validBySetting,
-              );
-              const keywordValidation =
-                validateKeywordGroupsDetailed(groupsForValidation);
-
-              this.renderKeywordValidationState(
-                regexValidation.errorsByGroup,
-                keywordValidation.errors,
-                keywordValidation.warnings,
-              );
-
-              // Persist parsed values that pass regex safety. KeywordManager handles
-              // semantic validation for duplicates/group placement conflicts.
-              for (const [key, values] of Object.entries(
-                regexValidation.validBySetting,
-              )) {
-                this.plugin.settings[key as KeywordSettingKey] = values;
-              }
-              await this.plugin.saveSettings();
-
-              // Update default state dropdowns when keywords change
-              await this.updateDefaultStateDropdowns();
-
-              // Re-validate transition settings when keywords change
-              this.validateTransitionSettings();
-
-              // Recreate parser and rescan
-              try {
-                await this.plugin.recreateParser();
-                await this.plugin.scanVault();
-                await this.refreshAllTaskListViews();
-                this.plugin.refreshVisibleEditorDecorations();
-                this.plugin.refreshReaderViewFormatter();
-              } catch (parseError) {
-                console.error(
-                  'Failed to recreate parser with keywords:',
-                  parseError,
-                );
-              }
-            })();
-          }, this.KEYWORD_DEBOUNCE_MS);
-
-          // Store the timer in the map
-          this.keywordGroupDebounceTimers.set(settingKey, newTimer);
-        });
-
-      this.keywordFieldBindings.set(settingKey, {
-        settingKey,
-        inputEl: text.inputEl,
-        settingEl: setting.settingEl,
+    const row = new Setting(container);
+    row.setName(`${label} (all keywords)`);
+    row.addColorPicker((picker) => {
+      const current = this.getGroupColorHex(group);
+      if (current) {
+        picker.setValue(current);
+      }
+      picker.onChange((value) => {
+        void this.setKeywordGroupColor(group, value);
+      });
+    });
+    row.addExtraButton((button) => {
+      button.setIcon('rotate-ccw');
+      button.setTooltip('Reset to no colour (theme accent)');
+      button.onClick(() => {
+        void this.setKeywordGroupColor(group, '');
       });
     });
   }
 
-  private parseKeywordInputsFromUI(): Record<KeywordSettingKey, string[]> {
-    const fallback: Record<KeywordSettingKey, string[]> = {
-      additionalActiveKeywords: [
-        ...(this.plugin.settings.additionalActiveKeywords ?? []),
-      ],
-      additionalInactiveKeywords: [
-        ...(this.plugin.settings.additionalInactiveKeywords ?? []),
-      ],
-      additionalWaitingKeywords: [
-        ...(this.plugin.settings.additionalWaitingKeywords ?? []),
-      ],
-      additionalCompletedKeywords: [
-        ...(this.plugin.settings.additionalCompletedKeywords ?? []),
-      ],
-      additionalArchivedKeywords: [
-        ...(this.plugin.settings.additionalArchivedKeywords ?? []),
+  private buildKeywordColorRow(
+    container: HTMLElement,
+    keyword: string,
+    group: KeywordGroup,
+  ): void {
+    const row = new Setting(container);
+    row.setName(keyword);
+    row.addColorPicker((picker) => {
+      // A keyword shows its own override when set, otherwise it inherits the
+      // group colour so the picker reflects the effective colour.
+      const override = this.plugin.settings.keywordColors?.[keyword];
+      const shown =
+        override && /^#[0-9a-fA-F]+$/.test(override)
+          ? override
+          : this.getGroupColorHex(group);
+      if (shown) {
+        picker.setValue(shown);
+      }
+      this.keywordColorPickers.set(keyword, { picker, group });
+      picker.onChange((value) => {
+        void this.setKeywordColor(keyword, value);
+      });
+    });
+    row.addExtraButton((button) => {
+      button.setIcon('rotate-ccw');
+      button.setTooltip('Reset to the group colour');
+      button.onClick(() => {
+        void this.setKeywordColor(keyword, '').then(() => {
+          const inherited = this.getGroupColorHex(group) ?? '';
+          this.keywordColorPickers.get(keyword)?.picker.setValue(inherited);
+        });
+      });
+    });
+  }
+
+  private async setKeywordColor(keyword: string, value: string): Promise<void> {
+    const colors: Record<string, string> = {
+      ...(this.plugin.settings.keywordColors ?? {}),
+    };
+    if (value.trim().length === 0) {
+      delete colors[keyword];
+    } else {
+      colors[keyword] = value.trim();
+    }
+    await this.setControlValue('keywordColors', colors);
+  }
+
+  private async setKeywordGroupColor(
+    group: KeywordGroup,
+    value: string,
+  ): Promise<void> {
+    const colors: Partial<Record<KeywordGroup, string>> = {
+      ...(this.plugin.settings.keywordGroupColors ?? {}),
+    };
+    if (value.trim().length === 0) {
+      delete colors[group];
+    } else {
+      colors[group] = value.trim();
+    }
+    await this.setControlValue('keywordGroupColors', colors);
+    // Children without an explicit override now inherit the new group colour.
+    for (const [keyword, entry] of this.keywordColorPickers) {
+      if (entry.group !== group) {
+        continue;
+      }
+      if (this.plugin.settings.keywordColors?.[keyword]) {
+        continue;
+      }
+      entry.picker.setValue(value.trim());
+    }
+  }
+
+  /**
+   * Saved searches as a mutable list. Rows open the existing saved-search
+   * dialog for editing; add/delete/reorder use the SavedSearchManager helpers.
+   */
+  private buildSavedSearchesList(): SettingDefinitionList {
+    const searches = getSavedSearches(this.plugin.settings);
+    return {
+      type: 'list',
+      heading: 'Saved searches',
+      emptyState:
+        'No saved searches yet. Add one to reuse a query from the Task List.',
+      items: searches.map((search) => ({
+        name: search.name || '(unnamed)',
+        desc: search.query,
+        action: () => this.openSavedSearchDialog(search),
+      })),
+      addItem: {
+        name: 'Add saved search',
+        action: () => this.openSavedSearchDialog(null),
+      },
+      onDelete: (index) => this.removeSavedSearchAt(index),
+      onReorder: (oldIndex, newIndex) =>
+        this.moveSavedSearch(oldIndex, newIndex),
+    };
+  }
+
+  private openSavedSearchDialog(search: SavedSearch | null): void {
+    const dialog = new SavedSearchDialog({
+      existingSearch: search ?? undefined,
+      onSave: (data) => {
+        void (async () => {
+          if (search) {
+            updateSavedSearch(this.plugin.settings, search.id, {
+              name: data.name,
+              query: data.query,
+              viewMode: data.viewMode,
+              sortMethod: data.sortMethod,
+              sortDirection: data.sortDirection,
+              groupBy: data.groupBy,
+              groupDirection: data.groupDirection,
+              futureTaskSorting: data.futureTaskSorting,
+              matchCase: data.matchCase,
+            });
+          } else {
+            addSavedSearch(
+              this.plugin.settings,
+              createSavedSearch(data.name, data.query, {
+                viewMode: data.viewMode,
+                sortMethod: data.sortMethod,
+                sortDirection: data.sortDirection,
+                groupBy: data.groupBy,
+                groupDirection: data.groupDirection,
+                futureTaskSorting: data.futureTaskSorting,
+                matchCase: data.matchCase,
+              }),
+            );
+          }
+          await this.plugin.saveSettings();
+          this.update();
+        })();
+      },
+      onCancel: () => {
+        // no-op; the dialog closes itself
+      },
+    });
+    dialog.open();
+  }
+
+  private removeSavedSearchAt(index: number): void {
+    const search = getSavedSearches(this.plugin.settings)[index];
+    if (!search) {
+      return;
+    }
+    deleteSavedSearch(this.plugin.settings, search.id);
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  private moveSavedSearch(oldIndex: number, newIndex: number): void {
+    reorderSavedSearches(this.plugin.settings, oldIndex, newIndex);
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  /** A page listing the five keyword groups as editable lists. */
+  private buildKeywordsPage(): SettingDefinitionPage {
+    return {
+      type: 'page',
+      name: 'Keywords',
+      desc: 'Custom keywords per state group. Prefix a built-in keyword with - to remove it.',
+      items: [
+        this.buildKeywordList(
+          'additionalInactiveKeywords',
+          'Inactive',
+          'Keywords for tasks not yet started (e.g. FIXME, HACK). Built-in: TODO, LATER.',
+        ),
+        this.buildKeywordList(
+          'additionalActiveKeywords',
+          'Active',
+          'Keywords for tasks currently being worked on (e.g. STARTED). Built-in: DOING, NOW, IN-PROGRESS.',
+        ),
+        this.buildKeywordList(
+          'additionalWaitingKeywords',
+          'Waiting',
+          'Keywords for blocked or paused tasks (e.g. ON-HOLD). Built-in: WAIT, WAITING.',
+        ),
+        this.buildKeywordList(
+          'additionalCompletedKeywords',
+          'Completed',
+          'Keywords for finished or abandoned tasks (e.g. NEVER). Built-in: DONE, CANCELLED, CANCELED.',
+        ),
+        this.buildKeywordList(
+          'additionalArchivedKeywords',
+          'Archived',
+          'Keywords for archived tasks (e.g. OLD). Styled but NOT collected. Built-in: ARCHIVED.',
+        ),
+        {
+          name: 'Migrated state keyword',
+          desc: 'Keyword or text to set on the source task after migrating to daily note. Leave empty to disable.',
+          control: {
+            type: 'text',
+            key: 'migrateToTodayState',
+            placeholder: '(disabled)',
+          },
+        },
       ],
     };
+  }
 
-    for (const [settingKey, binding] of this.keywordFieldBindings.entries()) {
-      fallback[settingKey] = parseKeywordInput(
-        binding.inputEl.value.toUpperCase(),
-      );
+  /** A single keyword group as a mutable list of tokens. */
+  private buildKeywordList(
+    settingKey: KeywordSettingKey,
+    heading: string,
+    description: string,
+  ): SettingDefinitionList {
+    const values = [
+      ...((this.plugin.settings[settingKey] as string[] | undefined) ?? []),
+    ];
+    return {
+      type: 'list',
+      heading,
+      cls: `todoseq-keyword-list ${this.keywordListClass(settingKey)}`,
+      emptyState: `${description} No custom keywords added.`,
+      items: values.map((value, index) => ({
+        name: value || `Keyword ${index + 1}`,
+        control: {
+          type: 'text',
+          key: `${settingKey}#${index}`,
+          placeholder: 'KEYWORD or -BUILTIN',
+        },
+      })),
+      addItem: {
+        name: 'Add keyword',
+        action: () => this.addKeywordToken(settingKey),
+      },
+      onDelete: (index) => this.deleteKeywordToken(settingKey, index),
+      onReorder: (oldIndex, newIndex) =>
+        this.reorderKeywordToken(settingKey, oldIndex, newIndex),
+    };
+  }
+
+  private keywordListClass(settingKey: KeywordSettingKey): string {
+    return `todoseq-keyword-list-${this.keywordSettingToGroup[settingKey]}`;
+  }
+
+  private addKeywordToken(settingKey: KeywordSettingKey): void {
+    const current = [...(this.plugin.settings[settingKey] ?? [])];
+    current.push('');
+    this.plugin.settings[settingKey] = current;
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  private deleteKeywordToken(
+    settingKey: KeywordSettingKey,
+    index: number,
+  ): void {
+    const current = [...(this.plugin.settings[settingKey] ?? [])];
+    if (index < 0 || index >= current.length) {
+      return;
     }
+    current.splice(index, 1);
+    this.plugin.settings[settingKey] = current;
+    void this.plugin.saveSettings();
+    void this.applyKeywordGroups();
+    this.update();
+  }
 
-    return fallback;
+  private reorderKeywordToken(
+    settingKey: KeywordSettingKey,
+    oldIndex: number,
+    newIndex: number,
+  ): void {
+    const current = [...(this.plugin.settings[settingKey] ?? [])];
+    if (
+      oldIndex < 0 ||
+      oldIndex >= current.length ||
+      newIndex < 0 ||
+      newIndex >= current.length
+    ) {
+      return;
+    }
+    const [moved] = current.splice(oldIndex, 1);
+    if (moved !== undefined) {
+      current.splice(newIndex, 0, moved);
+    }
+    this.plugin.settings[settingKey] = current;
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  /** The state-transition statements as a mutable list of rows. */
+  private buildTransitionList(): SettingDefinitionList {
+    const statements = [
+      ...this.plugin.settings.stateTransitions.transitionStatements,
+    ];
+    return {
+      type: 'list',
+      heading: 'Transitions',
+      cls: 'todoseq-transition-list',
+      emptyState:
+        'No transitions defined. Add one like "TODO -> DOING -> DONE" (use (a | b) for multiple initial states).',
+      items: statements.map((statement, index) => ({
+        name: statement || `Transition ${index + 1}`,
+        control: {
+          type: 'text',
+          key: `transitionStatements#${index}`,
+          placeholder: 'TODO -> DOING -> DONE',
+        },
+      })),
+      addItem: {
+        name: 'Add transition',
+        action: () => this.addTransitionStatement(),
+      },
+      onDelete: (index) => this.deleteTransitionStatement(index),
+      onReorder: (oldIndex, newIndex) =>
+        this.reorderTransitionStatement(oldIndex, newIndex),
+    };
+  }
+
+  private addTransitionStatement(): void {
+    const statements = [
+      ...this.plugin.settings.stateTransitions.transitionStatements,
+    ];
+    statements.push('');
+    this.plugin.settings.stateTransitions.transitionStatements = statements;
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  private deleteTransitionStatement(index: number): void {
+    const statements = [
+      ...this.plugin.settings.stateTransitions.transitionStatements,
+    ];
+    if (index < 0 || index >= statements.length) {
+      return;
+    }
+    statements.splice(index, 1);
+    this.plugin.settings.stateTransitions.transitionStatements = statements;
+    void (async () => {
+      await this.plugin.saveSettings();
+      this.validateTransitionSettings();
+      this.plugin.updateTaskListViewSettings();
+      this.plugin.updateTaskUpdateCoordinatorSettings();
+    })();
+    this.update();
+  }
+
+  private reorderTransitionStatement(oldIndex: number, newIndex: number): void {
+    const statements = [
+      ...this.plugin.settings.stateTransitions.transitionStatements,
+    ];
+    if (
+      oldIndex < 0 ||
+      oldIndex >= statements.length ||
+      newIndex < 0 ||
+      newIndex >= statements.length
+    ) {
+      return;
+    }
+    const [moved] = statements.splice(oldIndex, 1);
+    if (moved !== undefined) {
+      statements.splice(newIndex, 0, moved);
+    }
+    this.plugin.settings.stateTransitions.transitionStatements = statements;
+    void this.plugin.saveSettings();
+    this.update();
+  }
+
+  private parseKeywordInputsFromUI(): Record<KeywordSettingKey, string[]> {
+    return this.getKeywordInputsFromSettings();
   }
 
   private validateKeywordRegexForAllGroups(
@@ -1028,43 +1428,48 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
       warningsByGroup[issue.group].push(issue.message);
     }
 
-    for (const binding of this.keywordFieldBindings.values()) {
-      binding.inputEl.classList.remove('todoseq-invalid-input');
+    const groups: KeywordGroup[] = [
+      'activeKeywords',
+      'inactiveKeywords',
+      'waitingKeywords',
+      'completedKeywords',
+      'archivedKeywords',
+    ];
 
-      const existingErrors = binding.settingEl.querySelectorAll(
-        '.todoseq-setting-item-error',
+    for (const group of groups) {
+      const container = this.containerEl?.querySelector<HTMLElement>(
+        `.todoseq-keyword-list-${group}`,
       );
-      for (const el of Array.from(existingErrors)) {
-        el.remove();
-      }
-
-      const existingWarnings = binding.settingEl.querySelectorAll(
-        '.todoseq-setting-item-warning',
-      );
-      for (const el of Array.from(existingWarnings)) {
-        el.remove();
-      }
-
-      const group = this.keywordSettingToGroup[binding.settingKey];
-      const groupErrors = Array.from(new Set(errorsByGroup[group]));
-      const groupWarnings = Array.from(new Set(warningsByGroup[group]));
-      const settingInfo = binding.settingEl.querySelector('.setting-item-info');
-      if (!settingInfo) {
+      if (!container) {
         continue;
       }
 
+      container
+        .querySelectorAll(
+          '.todoseq-setting-item-error, .todoseq-setting-item-warning',
+        )
+        .forEach((el) => el.remove());
+      container
+        .querySelectorAll('input')
+        .forEach((el) => el.classList.remove('todoseq-invalid-input'));
+
+      const groupErrors = Array.from(new Set(errorsByGroup[group]));
+      const groupWarnings = Array.from(new Set(warningsByGroup[group]));
+
       if (groupErrors.length > 0) {
-        const errorDiv = settingInfo.createDiv({
+        const errorDiv = container.createDiv({
           cls: 'todoseq-setting-item-error',
         });
         for (const message of groupErrors) {
           errorDiv.createDiv({ text: message });
         }
-        binding.inputEl.classList.add('todoseq-invalid-input');
+        container
+          .querySelectorAll('input')
+          .forEach((el) => el.classList.add('todoseq-invalid-input'));
       }
 
       if (groupWarnings.length > 0) {
-        const warningDiv = settingInfo.createDiv({
+        const warningDiv = container.createDiv({
           cls: 'todoseq-setting-item-warning',
         });
         for (const message of groupWarnings) {
@@ -1234,11 +1639,31 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
 
     // Display transition errors - use same styling as keyword errors
     if (result.errors.length > 0) {
-      this.attachErrorsToSetting(
-        this.transitionSettings.transitions,
+      this.attachErrorsToContainer(
+        '.todoseq-transition-list',
         result.errors.map((e) => e.message),
       );
     }
+  }
+
+  /** Attach error messages to the first element matching `selector`. */
+  private attachErrorsToContainer(selector: string, messages: string[]): void {
+    if (messages.length === 0) {
+      return;
+    }
+    const container = this.containerEl?.querySelector<HTMLElement>(selector);
+    if (!container) {
+      return;
+    }
+    const errorDiv = container.createDiv({
+      cls: 'todoseq-setting-item-error',
+    });
+    for (const message of messages) {
+      errorDiv.createDiv({ text: message });
+    }
+    container
+      .querySelectorAll('input')
+      .forEach((el) => el.classList.add('todoseq-invalid-input'));
   }
 
   /**
@@ -1276,6 +1701,21 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
       if (textArea) {
         textArea.classList.remove('todoseq-invalid-input');
       }
+    }
+
+    // Clear errors attached to the transitions list container.
+    const container = this.containerEl?.querySelector<HTMLElement>(
+      '.todoseq-transition-list',
+    );
+    if (container) {
+      container
+        .querySelectorAll(
+          '.todoseq-setting-item-error, .todoseq-setting-item-warning',
+        )
+        .forEach((el) => el.remove());
+      container
+        .querySelectorAll('input')
+        .forEach((el) => el.classList.remove('todoseq-invalid-input'));
     }
   }
 

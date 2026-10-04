@@ -22,6 +22,7 @@ import { KeywordManager } from '../../utils/keyword-manager';
 import type { TaskStateTransitionManager } from '../../services/task-state-transition-manager';
 import { StateMenuBuilder } from '../components/state-menu-builder';
 import { BaseDialog } from '../components/base-dialog';
+import { applyKeywordColor } from '../../utils/keyword-colors';
 
 interface LinkPattern {
   type: 'wiki' | 'md' | 'url' | 'tag';
@@ -194,6 +195,11 @@ export class TaskItemRenderer {
     todoSpan.setAttr('role', 'button');
     todoSpan.setAttr('tabindex', '0');
     todoSpan.setAttr('aria-checked', String(task.completed));
+    todoSpan.setAttr('data-task-keyword', task.state);
+    applyKeywordColor(
+      todoSpan,
+      this.keywordManager.getKeywordColor(task.state),
+    );
 
     this.attachKeywordHandlers(todoSpan, task);
 
@@ -646,6 +652,11 @@ export class TaskItemRenderer {
     if (keywordBtn) {
       keywordBtn.textContent = task.state;
       keywordBtn.setAttribute('aria-checked', String(task.completed));
+      keywordBtn.setAttribute('data-task-keyword', task.state);
+      applyKeywordColor(
+        keywordBtn,
+        this.keywordManager.getKeywordColor(task.state),
+      );
     }
 
     // 3. Update todoseq-task-text: rebuild the text portion (after keyword and priority)
@@ -678,6 +689,11 @@ export class TaskItemRenderer {
         newKeywordSpan.setAttr('role', 'button');
         newKeywordSpan.setAttr('tabindex', '0');
         newKeywordSpan.setAttr('aria-checked', keywordAriaChecked);
+        newKeywordSpan.setAttr('data-task-keyword', task.state);
+        applyKeywordColor(
+          newKeywordSpan,
+          this.keywordManager.getKeywordColor(task.state),
+        );
         this.attachKeywordHandlers(newKeywordSpan, task);
         todoText.appendText(' ');
 

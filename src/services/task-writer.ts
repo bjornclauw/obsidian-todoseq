@@ -1969,6 +1969,13 @@ export class TaskWriter {
     if (this.shouldWriteClosed(fields.state, recordCompletion)) {
       lines.push(`${indent}CLOSED: ${DateUtils.formatClosedDate(new Date())}`);
     }
+    // Optional spacing: leave a blank line after the whole task block so new
+    // tasks are visually separated from surrounding content. The injected ''
+    // also becomes the trailing separator when the text is joined and inserted
+    // by {@link createTaskAtLine}, keeping date lines above the blank.
+    if (this.settings?.blankLineAfterTask) {
+      lines.push('');
+    }
     return lines;
   }
 

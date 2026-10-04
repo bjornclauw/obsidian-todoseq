@@ -593,19 +593,23 @@ describe('TodoTrackerSettingTab', () => {
   });
 
   describe('renderKeywordValidationState', () => {
-    it('should render errors and warnings into keyword field DOM', () => {
+    const containerForActive = (): {
+      container: HTMLElement;
+      inputEl: HTMLInputElement;
+    } => {
+      const root = activeDocument.createElement('div');
+      const container = activeDocument.createElement('div');
+      container.className =
+        'todoseq-keyword-list todoseq-keyword-list-activeKeywords';
       const inputEl = activeDocument.createElement('input');
-      const settingEl = activeDocument.createElement('div');
-      settingEl.className = 'setting-item';
-      const info = activeDocument.createElement('div');
-      info.className = 'setting-item-info';
-      settingEl.appendChild(info);
+      container.appendChild(inputEl);
+      root.appendChild(container);
+      (settingTab as any).containerEl = root;
+      return { container, inputEl: inputEl as HTMLInputElement };
+    };
 
-      (settingTab as any).keywordFieldBindings.set('additionalActiveKeywords', {
-        settingKey: 'additionalActiveKeywords',
-        inputEl,
-        settingEl,
-      });
+    it('should render errors and warnings into the group container', () => {
+      const { container, inputEl } = containerForActive();
 
       (settingTab as any).renderKeywordValidationState(
         {
@@ -629,11 +633,11 @@ describe('TodoTrackerSettingTab', () => {
         ],
       );
 
-      const errorDiv = settingEl.querySelector('.todoseq-setting-item-error');
+      const errorDiv = container.querySelector('.todoseq-setting-item-error');
       expect(errorDiv).toBeTruthy();
       expect(errorDiv?.textContent).toContain('Duplicate keyword: STARTED');
 
-      const warningDiv = settingEl.querySelector(
+      const warningDiv = container.querySelector(
         '.todoseq-setting-item-warning',
       );
       expect(warningDiv).toBeTruthy();
@@ -644,24 +648,12 @@ describe('TodoTrackerSettingTab', () => {
     });
 
     it('should clear previous errors before re-rendering', () => {
-      const inputEl = activeDocument.createElement('input');
-      const settingEl = activeDocument.createElement('div');
-      settingEl.className = 'setting-item';
-      const info = activeDocument.createElement('div');
-      info.className = 'setting-item-info';
-      // Add a pre-existing error element
+      const { container, inputEl } = containerForActive();
       const oldError = activeDocument.createElement('div');
       oldError.className = 'todoseq-setting-item-error';
       oldError.textContent = 'Old error';
-      settingEl.appendChild(info);
-      settingEl.appendChild(oldError);
+      container.appendChild(oldError);
       inputEl.classList.add('todoseq-invalid-input');
-
-      (settingTab as any).keywordFieldBindings.set('additionalActiveKeywords', {
-        settingKey: 'additionalActiveKeywords',
-        inputEl,
-        settingEl,
-      });
 
       // Render with no errors this time
       (settingTab as any).renderKeywordValidationState(
@@ -678,41 +670,29 @@ describe('TodoTrackerSettingTab', () => {
 
       // Old error should be removed
       expect(
-        settingEl.querySelector('.todoseq-setting-item-error'),
+        container.querySelector('.todoseq-setting-item-error'),
       ).toBeFalsy();
       // Invalid class should be removed
       expect(inputEl.classList.contains('todoseq-invalid-input')).toBe(false);
     });
   });
 
-  describe('parseKeywordInputsFromUI with bindings', () => {
-    it('should read values from keyword field bindings when present', () => {
-      const activeInput = activeDocument.createElement('input');
-      activeInput.value = 'STARTED, IN-PROGRESS';
-      const inactiveInput = activeDocument.createElement('input');
-      inactiveInput.value = 'FIXME, HACK';
+  describe('getKeywordInputsFromSettings', () => {
+    it('should snapshot the keyword arrays from settings', () => {
+      const settings = pluginMock.settings as unknown as {
+        additionalActiveKeywords: string[];
+        additionalInactiveKeywords: string[];
+      };
+      settings.additionalActiveKeywords = ['STARTED', 'IN-PROGRESS'];
+      settings.additionalInactiveKeywords = ['FIXME', 'HACK'];
 
-      (settingTab as any).keywordFieldBindings.set('additionalActiveKeywords', {
-        settingKey: 'additionalActiveKeywords',
-        inputEl: activeInput,
-        settingEl: activeDocument.createElement('div'),
-      });
-      (settingTab as any).keywordFieldBindings.set(
-        'additionalInactiveKeywords',
-        {
-          settingKey: 'additionalInactiveKeywords',
-          inputEl: inactiveInput,
-          settingEl: activeDocument.createElement('div'),
-        },
-      );
+      const result = (settingTab as any).getKeywordInputsFromSettings();
 
-      const result = (settingTab as any).parseKeywordInputsFromUI();
-
-      // Values from bindings should override fallbacks
-      expect(result.additionalActiveKeywords).toContain('STARTED');
-      expect(result.additionalActiveKeywords).toContain('IN-PROGRESS');
-      expect(result.additionalInactiveKeywords).toContain('FIXME');
-      // Groups without bindings should use fallback settings
+      expect(result.additionalActiveKeywords).toEqual([
+        'STARTED',
+        'IN-PROGRESS',
+      ]);
+      expect(result.additionalInactiveKeywords).toEqual(['FIXME', 'HACK']);
       expect(Array.isArray(result.additionalWaitingKeywords)).toBe(true);
     });
   });
@@ -747,27 +727,95 @@ describe('TodoTrackerSettingTab', () => {
         ? (def as { control: Record<string, unknown> }).control
         : undefined;
 
-    it('returns formatTaskKeywords first and exactly 7 groups with expected headings', () => {
+    it('returns the expected navigable pages in order', () => {
       const defs = settingTab.getSettingDefinitions();
 
-      expect(defs[0]).toMatchObject({
-        name: 'Format task keywords',
-        control: { type: 'toggle', key: 'formatTaskKeywords' },
-      });
-
-      const groups = defs.filter((d): d is GroupDef => {
-        return 'type' in d && d.type === 'group';
-      });
-      expect(groups).toHaveLength(7);
-      expect(groups.map((g) => g.heading)).toEqual([
+      const pages = defs.filter(
+        (d): d is { type: 'page'; name: string } =>
+          'type' in d && d.type === 'page',
+      );
+      expect(pages.map((p) => p.name)).toEqual([
+        'General',
         'Task detection',
-        'Smart date recognition',
-        'Task list search and filter',
-        'Task keywords',
-        'Task state transitions',
-        'Warning period',
-        '⚠︎ Experimental features',
+        'Task list',
+        'States & keywords',
+        'Dates',
+        'Saved searches',
+        'Experimental',
       ]);
+    });
+
+    it('exposes keyword groups and saved searches as mutable lists', () => {
+      const defs = settingTab.getSettingDefinitions();
+
+      const listTypes = (items: SettingDefinitionItem[]): string[] =>
+        items.flatMap((item) => {
+          if (!('type' in item)) return [];
+          if (item.type === 'list') return ['list'];
+          if (item.type === 'page' || item.type === 'group') {
+            return listTypes(
+              (item as { items?: SettingDefinitionItem[] }).items ?? [],
+            );
+          }
+          return [];
+        });
+
+      expect(listTypes(defs).length).toBeGreaterThanOrEqual(7);
+
+      const savedSearches = findSetting(defs, 'Saved searches');
+      expect(savedSearches && 'type' in savedSearches).toBe(true);
+    });
+
+    it('reads and writes indexed keyword list values', async () => {
+      const settings = pluginMock.settings as unknown as {
+        additionalInactiveKeywords: string[];
+      };
+      settings.additionalInactiveKeywords = ['FIXME', 'HACK'];
+
+      expect(
+        (settingTab as any).getControlValue('additionalInactiveKeywords#1'),
+      ).toBe('HACK');
+
+      await (settingTab as any).setControlValue(
+        'additionalInactiveKeywords#0',
+        'LATER',
+      );
+      expect(settings.additionalInactiveKeywords[0]).toBe('LATER');
+    });
+
+    it('reads and writes indexed transition statements', async () => {
+      const settings = pluginMock.settings as unknown as {
+        stateTransitions: { transitionStatements: string[] };
+      };
+      settings.stateTransitions.transitionStatements = ['TODO -> DOING'];
+
+      expect(
+        (settingTab as any).getControlValue('transitionStatements#0'),
+      ).toBe('TODO -> DOING');
+
+      await (settingTab as any).setControlValue(
+        'transitionStatements#0',
+        'TODO -> DONE',
+      );
+      expect(settings.stateTransitions.transitionStatements[0]).toBe(
+        'TODO -> DONE',
+      );
+    });
+
+    it('reorders and deletes saved searches', () => {
+      const settings = pluginMock.settings as unknown as {
+        savedSearches: Array<{ id: string; name: string; query: string }>;
+      };
+      settings.savedSearches = [
+        { id: 'a', name: 'A', query: 'state:active' },
+        { id: 'b', name: 'B', query: 'deadline:overdue' },
+      ];
+
+      (settingTab as any).moveSavedSearch(0, 1);
+      expect(settings.savedSearches.map((s) => s.id)).toEqual(['b', 'a']);
+
+      (settingTab as any).removeSavedSearchAt(0);
+      expect(settings.savedSearches.map((s) => s.id)).toEqual(['a']);
     });
 
     it('uses the expected control shapes for spot-checked settings', () => {

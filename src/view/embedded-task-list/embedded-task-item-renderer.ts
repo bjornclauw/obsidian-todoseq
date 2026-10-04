@@ -32,6 +32,7 @@ import { StateMenuBuilder } from '../components/state-menu-builder';
 import { TaskContextMenu } from '../components/task-context-menu';
 import { BaseDialog } from '../components/base-dialog';
 import { getStateTransitionManager } from '../../services/task-update-coordinator';
+import { applyKeywordColor } from '../../utils/keyword-colors';
 
 export class EmbeddedTaskItemRenderer {
   constructor(
@@ -402,6 +403,11 @@ export class EmbeddedTaskItemRenderer {
     if (stateSpan && stateSpan.textContent !== task.state) {
       stateSpan.textContent = task.state;
       stateSpan.setAttribute('aria-checked', String(task.completed));
+      stateSpan.setAttribute('data-task-keyword', task.state);
+      applyKeywordColor(
+        stateSpan,
+        this.plugin.keywordManager.getKeywordColor(task.state),
+      );
       this.pulseStateChange(stateSpan);
     }
   }
@@ -430,9 +436,14 @@ export class EmbeddedTaskItemRenderer {
         role: 'button',
         tabindex: '0',
         'aria-checked': String(task.completed),
+        'data-task-keyword': task.state,
       },
     });
     stateSpan.textContent = task.state;
+    applyKeywordColor(
+      stateSpan,
+      this.plugin.keywordManager.getKeywordColor(task.state),
+    );
 
     const liWithFlag = li as HTMLLIElement & {
       _stateSpanTouchActive?: boolean;

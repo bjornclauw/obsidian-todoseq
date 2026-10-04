@@ -35,6 +35,7 @@ describe('EmbeddedTaskItemRenderer', () => {
         getCheckboxState: jest.fn().mockReturnValue(' '),
         isActive: jest.fn().mockReturnValue(false),
         isCompleted: jest.fn().mockReturnValue(false),
+        getKeywordColor: jest.fn().mockReturnValue(null),
       },
       taskStateManager: {
         findTaskByPathAndLine: jest.fn(),

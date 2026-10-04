@@ -13,6 +13,20 @@ Access TODOseq settings through Obsidian's settings interface:
 3. Find "TODOseq" in the list
 4. Click on "TODOseq" to view and edit settings
 
+## Settings pages
+
+The settings are grouped into navigable pages:
+
+- **General** — task formatting and creation behaviour (format task keywords, metadata frame, work time, blank line after task).
+- **Task detection** — where TODOseq looks for tasks (quotes/callouts, comments, code blocks).
+- **Task list** — how the Task List view filters and displays tasks, plus warning periods.
+- **States & keywords** — keyword colours, the keyword groups (as editable lists), and state transitions (also a list).
+- **Dates** — natural-language date recognition.
+- **Saved searches** — named Task List queries, as an editable list.
+- **Experimental** — features that may change or be removed.
+
+Keyword groups and state transitions are edited as lists: use the `+` button to add an entry, drag the handle to reorder, and the delete button to remove one. For keywords, prefix a built-in keyword with `-` (for example `-LATER`) to remove it from its group.
+
 ## General Settings
 
 ## Editor Integration Settings

@@ -1,5 +1,6 @@
 import type { SortMethod } from '../utils/task-sort';
 import type { GroupByField } from '../utils/task-group';
+import type { KeywordGroup } from '../types/task';
 
 /**
  * How the task editor writes the prefix of a newly created task:
@@ -51,6 +52,9 @@ export interface TodoTrackerSettings {
   languageCommentSupport: boolean; // language-specific comment support settings
   weekStartsOn: 'Monday' | 'Sunday'; // controls which day the week starts on for date filtering
   formatTaskKeywords: boolean; // format task keywords in editor
+  keywordColors: Record<string, string>; // optional per-keyword text colours (keyword -> CSS colour)
+  keywordGroupColors: Partial<Record<KeywordGroup, string>>; // default colour per state group, used when a keyword has no explicit colour
+  blankLineAfterTask: boolean; // insert a blank line after a task block created by the task editor
   metadataFrame: boolean; // render task metadata as a virtual icon frame in Live Preview
   trackWorkLog: boolean; // enable play/pause work sessions with a [!work] log
   additionalFileExtensions: string[]; // additional file extensions to scan for tasks (e.g., ['.org', '.txt']) - hidden from UI, managed by detectOrgModeFiles
@@ -88,6 +92,21 @@ export interface TodoTrackerSettings {
   // Description display settings
   taskDescriptionDisplay: 'hide' | 'show'; // controls how task descriptions are displayed
 }
+
+/**
+ * Out-of-the-box colour per state group. Users can override any group (or an
+ * individual keyword) in settings; a group colour applies to every keyword in
+ * the group that has no explicit keyword-level colour.
+ */
+export const DEFAULT_KEYWORD_GROUP_COLORS: Partial<
+  Record<KeywordGroup, string>
+> = {
+  inactiveKeywords: '#4c8dff',
+  activeKeywords: '#ff9f43',
+  waitingKeywords: '#f7c948',
+  completedKeywords: '#2ecc71',
+  archivedKeywords: '#9aa0a6',
+};
 
 export const DefaultStateTransitionSettings: StateTransitionSettings = {
   defaultInactive: 'TODO',
@@ -143,6 +162,9 @@ export const DefaultSettings: TodoTrackerSettings = {
   languageCommentSupport: false,
   weekStartsOn: 'Monday', // Default to Monday as requested
   formatTaskKeywords: true, // Default to enabled
+  keywordColors: {}, // No per-keyword overrides by default
+  keywordGroupColors: { ...DEFAULT_KEYWORD_GROUP_COLORS }, // Distinct default colour per state group
+  blankLineAfterTask: false, // Do not add spacing after tasks by default
   metadataFrame: true, // Virtual icon frame for task metadata in Live Preview
   trackWorkLog: true, // Work sessions + [!work] log enabled by default
   additionalFileExtensions: [], // No additional extensions by default - managed by detectOrgModeFiles

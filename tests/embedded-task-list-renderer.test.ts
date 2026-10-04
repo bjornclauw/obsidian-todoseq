@@ -33,6 +33,7 @@ describe('EmbeddedTaskListRenderer', () => {
         getCheckboxState: jest.fn().mockReturnValue(' '),
         isActive: jest.fn().mockReturnValue(false),
         isCompleted: jest.fn().mockReturnValue(false),
+        getKeywordColor: jest.fn().mockReturnValue(null),
         getKeywordsForGroup: jest.fn((group: string) => {
           switch (group) {
             case 'activeKeywords':

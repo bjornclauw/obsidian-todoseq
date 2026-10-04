@@ -6,6 +6,7 @@ import {
   BUILTIN_ARCHIVED_KEYWORDS,
 } from './constants';
 import { KeywordGroup } from '../types/task';
+import { resolveGroupColor, resolveKeywordColor } from './keyword-colors';
 
 export type KeywordSettings = {
   additionalInactiveKeywords?: string[];
@@ -14,6 +15,8 @@ export type KeywordSettings = {
   additionalCompletedKeywords?: string[];
   additionalArchivedKeywords?: string[];
   useExtendedCheckboxStyles?: boolean;
+  keywordColors?: Record<string, string>;
+  keywordGroupColors?: Partial<Record<KeywordGroup, string>>;
   defaultScheduledWarningPeriod?: number;
   defaultDeadlineWarningPeriod?: number;
   skipScheduledWarningPeriodIfDeadline?: boolean;
@@ -634,6 +637,32 @@ export class KeywordManager {
     }
 
     return null;
+  }
+
+  /**
+   * Resolve the colour for a keyword: an explicit per-keyword colour wins,
+   * otherwise the keyword's group default is used. Returns `null` when neither
+   * is configured (the caller then falls back to the theme accent).
+   */
+  getKeywordColor(keyword: string): string | null {
+    const direct = resolveKeywordColor(this.settings.keywordColors, keyword);
+    if (direct) {
+      return direct;
+    }
+    return resolveGroupColor(
+      this.settings.keywordGroupColors,
+      this.getGroup(keyword),
+    );
+  }
+
+  /**
+   * Static wrapper for {@link getKeywordColor}.
+   */
+  static getKeywordColor(
+    keyword: string,
+    settings: KeywordSettings,
+  ): string | null {
+    return new KeywordManager(settings).getKeywordColor(keyword);
   }
 
   getCompletedSet(): Set<string> {

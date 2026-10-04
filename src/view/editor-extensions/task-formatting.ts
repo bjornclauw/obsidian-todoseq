@@ -29,6 +29,7 @@ import {
   SettingsChangeDetector,
 } from '../../utils/settings-utils';
 import { KeywordManager } from '../../utils/keyword-manager';
+import { keywordColorStyleAttribute } from '../../utils/keyword-colors';
 import {
   parseTableCells,
   isTableRow,
@@ -487,17 +488,24 @@ export class TaskKeywordDecorator {
             cssClasses += ' todoseq-heading-task-keyword';
           }
 
+          const keywordAttributes: Record<string, string> = {
+            'data-task-keyword': keyword,
+            'aria-label': `Task keyword: ${keyword}`,
+            role: 'mark',
+            tabindex: '0', // Make keyboard accessible
+          };
+          const keywordColor = keywordColorStyleAttribute(
+            KeywordManager.getKeywordColor(keyword, this.settings),
+          );
+          if (keywordColor) {
+            keywordAttributes.style = keywordColor;
+          }
           builder.add(
             startPos,
             endPos,
             Decoration.mark({
               class: cssClasses,
-              attributes: {
-                'data-task-keyword': keyword,
-                'aria-label': `Task keyword: ${keyword}`,
-                role: 'mark',
-                tabindex: '0', // Make keyboard accessible
-              },
+              attributes: keywordAttributes,
             }),
           );
 
@@ -578,12 +586,21 @@ export class TaskKeywordDecorator {
                 if (KeywordManager.isArchivedKeyword(kw[0], this.settings)) {
                   cssClasses += ' todoseq-archived-keyword';
                 }
+                const tableKeywordAttributes: Record<string, string> = {
+                  'data-task-keyword': kw[0],
+                };
+                const tableKeywordColor = keywordColorStyleAttribute(
+                  KeywordManager.getKeywordColor(kw[0], this.settings),
+                );
+                if (tableKeywordColor) {
+                  tableKeywordAttributes.style = tableKeywordColor;
+                }
                 builder.add(
                   kwStart,
                   kwEnd,
                   Decoration.mark({
                     class: cssClasses,
-                    attributes: { 'data-task-keyword': kw[0] },
+                    attributes: tableKeywordAttributes,
                   }),
                 );
                 if (

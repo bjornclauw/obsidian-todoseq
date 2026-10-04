@@ -317,7 +317,8 @@
 
 /* Keyword toggle (TODO/DOING/DONE) */
 .todoseq-panel .todo-task-keyword {
-  color: var(--interactive-accent);
+  /* Per-keyword colour (set inline) falls back to the theme accent */
+  color: var(--todoseq-keyword-color, var(--interactive-accent));
   cursor: pointer;
   font-weight: var(--font-bold);
   font-size: 0.85rem;
@@ -757,7 +758,8 @@
 /* Task keyword formatting in editor and reading view */
 .todoseq-keyword-formatted {
   font-weight: var(--font-bold);
-  color: var(--interactive-accent);
+  /* Per-keyword colour (set inline) falls back to the theme accent */
+  color: var(--todoseq-keyword-color, var(--interactive-accent));
   font-size: 0.9rem; /* reduce size slightly */
   border-radius: 2px; /* Subtle rounding */
   cursor: pointer; /* Show hand/finger cursor like a link */
@@ -929,7 +931,7 @@
 /* Archived task styling - muted/dimmed appearance without strikethrough */
 /* Works for both built-in (ARCHIVED) and custom archived keywords */
 :is(.markdown-preview-view, .cm-editor) .todoseq-archived-keyword {
-  color: var(--interactive-accent);
+  color: var(--todoseq-keyword-color, var(--interactive-accent));
   text-decoration: line-through;
   opacity: 0.7;
 }
@@ -1191,7 +1193,8 @@
 /* Task state */
 .todoseq-embedded-task-state {
   font-weight: var(--font-semibold);
-  color: var(--text-normal);
+  /* Per-keyword colour (set inline) falls back to normal text */
+  color: var(--todoseq-keyword-color, var(--text-normal));
   font-family: var(--font-monospace);
   font-size: 0.9rem;
   white-space: nowrap; /* Prevent keyword wrapping */
@@ -3833,4 +3836,27 @@ body.is-mobile .todoseq-chip {
 body.is-mobile .todoseq-chip-icon svg {
   width: 15px;
   height: 15px;
+}
+
+/* Keyword colors settings: per-keyword colour rows */
+.todoseq-keyword-colors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-1);
+  width: 100%;
+  margin-top: var(--size-4-1);
+}
+
+.todoseq-keyword-colors-group-heading {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: var(--size-4-1);
+}
+
+.todoseq-keyword-colors .setting-item {
+  border-top: none;
+  padding: var(--size-2-2) 0;
 }
