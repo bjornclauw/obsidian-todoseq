@@ -9,6 +9,7 @@ export interface Task {
   footnoteMarker?: string; // footnote marker if present (e.g., "[^1]: ")
   text: string; // content after the state keyword with priority token removed
   description?: string; // short description/comment from DESCRIPTION: line
+  photo?: string; // image embed from a PHOTO: line (e.g. "![[image.webp]]")
   textDisplay?: string; // lazy-computed markdown-stripped text for display
   state: string; // state keyword, TODO, DOING, DONE etc.
   completed: boolean; // is the task considered complete

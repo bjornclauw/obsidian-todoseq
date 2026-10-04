@@ -41,6 +41,12 @@ export interface FrameDoc {
   line(number: number): { from: number; to: number; text: string };
 }
 
+/** Resolve a PHOTO link to a renderable resource URL (or null). */
+export type PhotoResolver = (
+  link: string,
+  sourcePath: string,
+) => { src: string; path: string } | null;
+
 export interface FrameComputationInput {
   doc: FrameDoc;
   expanded: ReadonlySet<number>;
@@ -49,6 +55,8 @@ export interface FrameComputationInput {
   settings: TodoTrackerSettings;
   parser: TaskParser | null;
   getPath: () => string | null;
+  /** Optional resolver for task photo thumbnails. */
+  resolvePhoto?: PhotoResolver;
 }
 
 /**
@@ -130,7 +138,8 @@ export function computeMetadataFrameDecorations(
       !task.deadlineDate &&
       !task.description &&
       !task.startedDate &&
-      !task.createdDate
+      !task.createdDate &&
+      !task.photo
     ) {
       continue;
     }
@@ -165,7 +174,14 @@ export function computeMetadataFrameDecorations(
         tooltips.started = raw;
       } else if (raw.startsWith('CLOSED:')) {
         tooltips.closed = raw;
+      } else if (raw.startsWith('PHOTO:')) {
+        tooltips.photo = raw;
       }
+    }
+
+    let photoSrc: string | undefined;
+    if (task.photo && input.resolvePhoto) {
+      photoSrc = input.resolvePhoto(task.photo, input.getPath() ?? '')?.src;
     }
     if (scan.repeatTitleIndex !== null) {
       tooltips.repeatLog = (lines[scan.repeatTitleIndex] ?? '').trim();
@@ -182,6 +198,8 @@ export function computeMetadataFrameDecorations(
       tooltips,
       expanded: input.expanded.has(lineFrom),
       workLogEnabled: !!settings.trackWorkLog,
+      photosEnabled: !!settings.taskPhotos,
+      photoSrc,
     });
 
     builder.add(
@@ -230,6 +248,7 @@ export function createMetadataFrameField(
   settings: TodoTrackerSettings,
   getParser: () => TaskParser | null,
   getPath: () => string | null,
+  resolvePhoto?: PhotoResolver,
 ): StateField<MetadataFrameFieldValue> {
   const field: StateField<MetadataFrameFieldValue> = StateField.define({
     create(state) {
@@ -241,6 +260,7 @@ export function createMetadataFrameField(
         settings,
         parser: getParser(),
         getPath,
+        resolvePhoto,
       });
     },
     update(value, tr) {
@@ -279,6 +299,7 @@ export function createMetadataFrameField(
           settings,
           parser: getParser(),
           getPath,
+          resolvePhoto,
         });
       }
       return value;

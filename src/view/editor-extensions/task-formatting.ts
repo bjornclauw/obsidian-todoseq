@@ -39,6 +39,7 @@ import {
 import {
   createMetadataFrameField,
   MetadataFrameFieldValue,
+  PhotoResolver,
 } from './metadata-frame-field';
 
 /**
@@ -1112,10 +1113,16 @@ export const taskKeywordPlugin = (
   settings: TodoTrackerSettings,
   getParser: () => TaskParser | null,
   getPath: () => string | null = () => null,
+  resolvePhoto?: PhotoResolver,
 ) => {
   // Block decorations (the metadata frames) must be provided by a state-level
   // decoration source, not a ViewPlugin, so the frame lives in its own field.
-  const frameField = createMetadataFrameField(settings, getParser, getPath);
+  const frameField = createMetadataFrameField(
+    settings,
+    getParser,
+    getPath,
+    resolvePhoto,
+  );
 
   const plugin = ViewPlugin.fromClass(
     class {

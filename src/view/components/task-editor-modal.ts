@@ -69,6 +69,8 @@ export interface TaskEditorInitialValues {
   deadlineRepeat: DateRepeatInfo | null;
   deadlineWarningPeriod: WarningPeriodInfo | null;
   description: string | null;
+  /** Stored PHOTO embed (`![[image.webp]]`) or null. */
+  photo: string | null;
 }
 
 export interface TaskEditorModalOptions {
@@ -92,6 +94,13 @@ export interface TaskEditorModalOptions {
    * DESCRIPTION line and do not support recurrence, so those fields are hidden.
    */
   isTableTask?: boolean;
+  /** Renderable URL for the current photo (for the preview), if any. */
+  photoSrc?: string | null;
+  /**
+   * Open the photo picker and persist the chosen image, returning the new
+   * `![[...]]` link and its renderable URL, or null when cancelled.
+   */
+  onPickPhoto?: () => Promise<{ link: string; src: string | null } | null>;
   /** Called with the composed fields when the user saves. */
   onSubmit: (fields: TaskComposeFields) => void | Promise<void>;
   /** Called when the user cancels or dismisses the modal. */
@@ -122,6 +131,10 @@ export class TaskEditorModal extends Modal {
   private deadlineWarningPeriod: WarningPeriodInfo | null;
   private priority: 'high' | 'med' | 'low' | null;
   private listMarker: TaskListMarkerStyle;
+  private photo: string | null;
+  private photoSrc: string | null;
+  private photoPreviewEl: HTMLElement | null = null;
+  private photoRemoveBtn: HTMLButtonElement | null = null;
   private markerButtons: Array<{
     value: TaskListMarkerStyle;
     btn: HTMLButtonElement;
@@ -150,6 +163,8 @@ export class TaskEditorModal extends Modal {
     this.deadlineWarningPeriod = options.initial.deadlineWarningPeriod;
     this.priority = options.initial.priority;
     this.listMarker = options.listMarker ?? 'checkbox';
+    this.photo = options.initial.photo;
+    this.photoSrc = options.photoSrc ?? null;
   }
 
   onOpen(): void {
@@ -302,6 +317,32 @@ export class TaskEditorModal extends Modal {
       }
     }
 
+    // Photo (stored as a PHOTO line; hidden for table-cell tasks which cannot
+    // hold one). Reuses the shared image picker.
+    if (!this.options.isTableTask) {
+      const photoGroup = form.createDiv({ cls: 'todoseq-task-editor-field' });
+      photoGroup.createEl('label', { text: 'Photo' });
+      const photoRow = photoGroup.createDiv({
+        cls: 'todoseq-task-editor-photo-row',
+      });
+      this.photoPreviewEl = photoRow.createDiv({
+        cls: 'todoseq-task-editor-photo-preview',
+      });
+      const chooseBtn = photoRow.createEl('button', {
+        text: 'Choose photo',
+        attr: { type: 'button' },
+      });
+      chooseBtn.addEventListener('click', () => void this.pickPhoto());
+      this.photoRemoveBtn = photoRow.createEl('button', {
+        text: 'Remove',
+        attr: { type: 'button' },
+      });
+      this.photoRemoveBtn.addEventListener('click', () =>
+        this.setPhoto(null, null),
+      );
+      this.renderPhotoPreview();
+    }
+
     // Buttons (sticky at the bottom of the scroll container)
     const buttons = form.createDiv({
       cls: 'todoseq-task-editor-buttons',
@@ -423,6 +464,7 @@ export class TaskEditorModal extends Modal {
       deadlineRepeat: this.deadlineRepeat,
       deadlineWarningPeriod: this.deadlineWarningPeriod,
       description: descInput?.value.trim() || null,
+      photo: this.photo,
       listMarker: this.listMarker,
     };
 
@@ -454,6 +496,41 @@ export class TaskEditorModal extends Modal {
       btn.toggleClass('is-selected', selected);
       btn.setAttr('aria-checked', String(selected));
     }
+  }
+
+  private async pickPhoto(): Promise<void> {
+    const result = await this.options.onPickPhoto?.();
+    if (!result) {
+      return;
+    }
+    this.setPhoto(result.link, result.src);
+  }
+
+  private setPhoto(link: string | null, src: string | null): void {
+    this.photo = link;
+    this.photoSrc = src;
+    this.renderPhotoPreview();
+  }
+
+  private renderPhotoPreview(): void {
+    const preview = this.photoPreviewEl;
+    if (!preview) {
+      return;
+    }
+    preview.empty();
+    if (this.photoSrc) {
+      const img = preview.createEl('img', {
+        cls: 'todoseq-task-editor-photo-thumb',
+      });
+      img.src = this.photoSrc;
+      img.alt = '';
+    } else {
+      preview.createSpan({
+        cls: 'todoseq-task-editor-photo-empty',
+        text: 'No photo',
+      });
+    }
+    this.photoRemoveBtn?.toggleClass('todoseq-hidden', !this.photo);
   }
 
   /**

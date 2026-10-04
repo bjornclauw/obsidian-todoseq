@@ -194,6 +194,36 @@ export function findDescriptionLine(
 }
 
 /**
+ * Find a PHOTO: line after a task line. Uses the same search pattern as
+ * {@link findDescriptionLine}.
+ */
+export function findPhotoLine(
+  lines: string[],
+  startIndex: number,
+  taskIndent: string,
+): number {
+  return findKeywordLine(
+    (index) => lines[index],
+    lines.length,
+    startIndex,
+    'PHOTO:',
+    taskIndent,
+  );
+}
+
+/**
+ * Accessor-based variant of {@link findPhotoLine}.
+ */
+export function findPhotoLineIn(
+  getLine: (index: number) => string | undefined,
+  lineCount: number,
+  startIndex: number,
+  taskIndent: string,
+): number {
+  return findKeywordLine(getLine, lineCount, startIndex, 'PHOTO:', taskIndent);
+}
+
+/**
  * Accessor-based variant of {@link findDescriptionLine} so callers (e.g. the
  * active editor) can scan a block without materialising the whole buffer.
  */
@@ -259,14 +289,15 @@ function isDateKeywordLine(line: string): boolean {
     trimmed.startsWith('CLOSED:') ||
     trimmed.startsWith('STARTED:') ||
     trimmed.startsWith('CREATED:') ||
-    trimmed.startsWith('DESCRIPTION:')
+    trimmed.startsWith('DESCRIPTION:') ||
+    trimmed.startsWith('PHOTO:')
   ) {
     return true;
   }
   // Slow path: quoted keywords (only test regex for lines starting with >)
   return (
     trimmed.startsWith('>') &&
-    /^(>\s*)+(SCHEDULED|DEADLINE|CLOSED|STARTED|CREATED|DESCRIPTION):/.test(
+    /^(>\s*)+(SCHEDULED|DEADLINE|CLOSED|STARTED|CREATED|DESCRIPTION|PHOTO):/.test(
       trimmed,
     )
   );

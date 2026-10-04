@@ -56,6 +56,7 @@ export interface TodoTrackerSettings {
   keywordGroupColors: Partial<Record<KeywordGroup, string>>; // default colour per state group, used when a keyword has no explicit colour
   blankLineAfterTask: boolean; // insert a blank line after a task block created by the task editor
   metadataFrame: boolean; // render task metadata as a virtual icon frame in Live Preview
+  taskPhotos: boolean; // show a photo thumbnail / add-photo control on the metadata frame
   trackWorkLog: boolean; // enable play/pause work sessions with a [!work] log
   additionalFileExtensions: string[]; // additional file extensions to scan for tasks (e.g., ['.org', '.txt']) - hidden from UI, managed by detectOrgModeFiles
   detectOrgModeFiles: boolean; // experimental: when enabled, adds .org to additionalFileExtensions and registers org-mode parser
@@ -166,6 +167,7 @@ export const DefaultSettings: TodoTrackerSettings = {
   keywordGroupColors: { ...DEFAULT_KEYWORD_GROUP_COLORS }, // Distinct default colour per state group
   blankLineAfterTask: false, // Do not add spacing after tasks by default
   metadataFrame: true, // Virtual icon frame for task metadata in Live Preview
+  taskPhotos: true, // Show the photo chip on the metadata frame
   trackWorkLog: true, // Work sessions + [!work] log enabled by default
   additionalFileExtensions: [], // No additional extensions by default - managed by detectOrgModeFiles
   detectOrgModeFiles: false, // Experimental feature - disabled by default

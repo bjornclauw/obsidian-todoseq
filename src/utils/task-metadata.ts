@@ -10,7 +10,7 @@ import { isWorkLogLine } from './work-log';
  * of that block and are handled by {@link isTaskMetadataLine}.
  */
 export const TASK_METADATA_LINE_RE =
-  /^\s*(?:>\s*)*(?:SCHEDULED|DEADLINE|CLOSED|STARTED|CREATED|TIMER|DESCRIPTION):/i;
+  /^\s*(?:>\s*)*(?:SCHEDULED|DEADLINE|CLOSED|STARTED|CREATED|TIMER|DESCRIPTION|PHOTO):/i;
 
 /**
  * True for a line that belongs to a task's contiguous metadata block:

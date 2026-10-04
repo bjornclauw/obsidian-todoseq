@@ -429,6 +429,11 @@ export class TodoTrackerSettingTab extends PluginSettingTab {
         control: { type: 'toggle', key: 'metadataFrame' },
       },
       {
+        name: 'Task photos',
+        desc: 'Show a photo thumbnail (or an add-photo control) on task metadata frames. Photos are stored as a `PHOTO:` line; Compress Image (WebP) is used automatically when enabled.',
+        control: { type: 'toggle', key: 'taskPhotos' },
+      },
+      {
         name: 'Track work time',
         desc: 'Show a play/pause control on task metadata frames and record work sessions in a `[!work]` callout.',
         control: { type: 'toggle', key: 'trackWorkLog' },

@@ -841,6 +841,7 @@ export class TaskParser implements ITaskParser {
     scheduledWarningPeriod: WarningPeriodInfo | null;
     deadlineWarningPeriod: WarningPeriodInfo | null;
     description: string | null;
+    photo: string | null;
     repeatCount: number | null;
     timerStart: Date | null;
     workLogTotalMinutes: number | null;
@@ -855,6 +856,7 @@ export class TaskParser implements ITaskParser {
     let scheduledWarningPeriod: WarningPeriodInfo | null = null;
     let deadlineWarningPeriod: WarningPeriodInfo | null = null;
     let description: string | null = null;
+    let photo: string | null = null;
     let repeatCount: number | null = null;
     let timerStart: Date | null = null;
     let workLogTotalMinutes: number | null = null;
@@ -970,6 +972,15 @@ export class TaskParser implements ITaskParser {
           continue; // Don't break — keep looking for dates
         }
 
+        // Check for a PHOTO: line (an image embed for the task).
+        const photoLink = this.getPhotoLink(nextLine);
+        if (photoLink !== null) {
+          if (photoLink.length > 0) {
+            photo = photoLink;
+          }
+          continue; // Don't break — keep looking for dates
+        }
+
         // Stop looking for date lines if we encounter a non-empty line that's not a date line
         // or if we've already found scheduled, deadline, closed, and started dates
         if (
@@ -996,10 +1007,27 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      photo,
       repeatCount,
       timerStart,
       workLogTotalMinutes,
     };
+  }
+
+  /**
+   * Extract the image link from a PHOTO: line, or null if not a photo line.
+   */
+  private getPhotoLink(line: string): string | null {
+    let contentLine = line;
+    if (line.startsWith('>')) {
+      const quoteMatch = line.match(/^(>\s*)+/);
+      if (quoteMatch) {
+        contentLine = line.substring(quoteMatch[0].length);
+      }
+    }
+    const trimmed = contentLine.trimStart();
+    if (!trimmed.startsWith('PHOTO:')) return null;
+    return trimmed.substring('PHOTO:'.length).trim();
   }
 
   /**
@@ -1927,6 +1955,7 @@ export class TaskParser implements ITaskParser {
       deadlineDateRepeat,
       scheduledWarningPeriod,
       deadlineWarningPeriod,
+      photo,
       repeatCount,
       timerStart,
       workLogTotalMinutes,
@@ -1941,6 +1970,7 @@ export class TaskParser implements ITaskParser {
     task.createdDate = createdDate;
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
+    task.photo = photo ?? undefined;
     task.repeatCount = repeatCount;
     task.timerStart = timerStart;
     task.workLogTotalMinutes = workLogTotalMinutes;
@@ -2070,6 +2100,7 @@ export class TaskParser implements ITaskParser {
       deadlineDateRepeat,
       scheduledWarningPeriod,
       deadlineWarningPeriod,
+      photo,
       repeatCount,
       timerStart,
       workLogTotalMinutes,
@@ -2084,6 +2115,7 @@ export class TaskParser implements ITaskParser {
     task.createdDate = createdDate;
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
+    task.photo = photo ?? undefined;
     task.repeatCount = repeatCount;
     task.timerStart = timerStart;
     task.workLogTotalMinutes = workLogTotalMinutes;
@@ -2204,6 +2236,7 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      photo,
       repeatCount,
       timerStart,
       workLogTotalMinutes,
@@ -2219,6 +2252,7 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
+    task.photo = photo ?? undefined;
     task.repeatCount = repeatCount;
     task.timerStart = timerStart;
     task.workLogTotalMinutes = workLogTotalMinutes;
@@ -2324,6 +2358,7 @@ export class TaskParser implements ITaskParser {
       listMarker: finalListMarker,
       text: cleanedText,
       description: undefined,
+      photo: undefined,
       state: finalState,
       completed: finalCompleted,
       priority,
@@ -2363,6 +2398,7 @@ export class TaskParser implements ITaskParser {
       scheduledWarningPeriod,
       deadlineWarningPeriod,
       description,
+      photo,
       repeatCount,
       timerStart,
       workLogTotalMinutes,
@@ -2378,6 +2414,7 @@ export class TaskParser implements ITaskParser {
     task.scheduledWarningPeriod = scheduledWarningPeriod;
     task.deadlineWarningPeriod = deadlineWarningPeriod;
     task.description = description ?? undefined;
+    task.photo = photo ?? undefined;
     task.repeatCount = repeatCount;
     task.timerStart = timerStart;
     task.workLogTotalMinutes = workLogTotalMinutes;

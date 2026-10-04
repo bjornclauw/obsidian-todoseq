@@ -266,6 +266,30 @@ describe('TaskWriter.createTaskAtLine', () => {
     expect(result?.lineDelta).toBe(3);
   });
 
+  it('writes a PHOTO line directly below DESCRIPTION', async () => {
+    const { writer, mockApp } = createWriter();
+    const content = '';
+    mockApp.vault.process = jest.fn((_file, updateFn) =>
+      Promise.resolve(updateFn(content)),
+    );
+
+    const fields = makeFields({
+      description: 'Some notes',
+      photo: '![[leak.webp]]',
+    });
+    const result = await writer.createTaskAtLine('test.md', 0, fields);
+
+    const updateFn = mockApp.vault.process.mock.calls[0][1];
+    expect(updateFn(content)).toBe(
+      [
+        '- [ ] TODO Task text',
+        '  DESCRIPTION: Some notes',
+        '  PHOTO: ![[leak.webp]]',
+      ].join('\n'),
+    );
+    expect(result?.task.photo).toBe('![[leak.webp]]');
+  });
+
   it('writes a CLOSED line when recordCompletion is set', async () => {
     const { writer, mockApp, mockPlugin } = createWriter();
     mockPlugin.settings.trackClosedDate = true;

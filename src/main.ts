@@ -1,6 +1,7 @@
-import { Plugin, MarkdownView, Platform, Notice } from 'obsidian';
+import { Plugin, MarkdownView, Platform, Notice, TFile } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import { Task } from './types/task';
+import { extractPhotoTarget } from './utils/task-photo';
 import { TaskListView } from './view/task-list/task-list-view';
 import {
   TodoTrackerSettings,
@@ -87,6 +88,110 @@ export default class TodoTracker extends Plugin {
    */
   public getTasks(): Task[] {
     return this.taskStateManager.getTasks();
+  }
+
+  /**
+   * Resolve a stored PHOTO value (e.g. `![[image.webp]]`) to a renderable
+   * resource URL for the task's source file.
+   */
+  public resolvePhotoLink(
+    link: string,
+    sourcePath: string,
+  ): { src: string; path: string } | null {
+    const target = extractPhotoTarget(link);
+    if (!target) {
+      return null;
+    }
+    const file = this.app.metadataCache.getFirstLinkpathDest(
+      target,
+      sourcePath,
+    );
+    if (!file) {
+      return null;
+    }
+    return { src: this.app.vault.getResourcePath(file), path: file.path };
+  }
+
+  /** Minimal shape of the compress-image-webp public API (optional plugin). */
+  private getCompressImageApi(): {
+    saveImage(
+      file: File,
+      source?: TFile,
+    ): Promise<{ file: TFile; link: string }>;
+  } | null {
+    const plugins = (
+      this.app as unknown as {
+        plugins?: { plugins?: Record<string, unknown> };
+      }
+    ).plugins?.plugins;
+    const compress = plugins?.['compress-image-webp'] as
+      { api?: { saveImage?: unknown } } | undefined;
+    const api = compress?.api;
+    if (api && typeof api.saveImage === 'function') {
+      return api as {
+        saveImage(
+          file: File,
+          source?: TFile,
+        ): Promise<{ file: TFile; link: string }>;
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Persist a picked photo and return the `![[...]]` embed to store in the
+   * task's PHOTO line. Delegates to Compress Image (WebP) when available so the
+   * image is compressed/converted; otherwise saves the original bytes.
+   */
+  public async saveTaskPhoto(
+    selection: { kind: 'vault'; file: TFile } | { kind: 'file'; file: File },
+    sourcePath: string,
+  ): Promise<string | null> {
+    if (selection.kind === 'vault') {
+      return this.buildEmbedLink(selection.file, sourcePath);
+    }
+
+    const sourceFile = sourcePath
+      ? (this.app.vault.getFileByPath(sourcePath) ?? undefined)
+      : undefined;
+    const compressApi = this.getCompressImageApi();
+    if (compressApi) {
+      try {
+        const result = await compressApi.saveImage(selection.file, sourceFile);
+        return result.link;
+      } catch (error) {
+        console.debug(
+          'compress-image-webp save failed; saving original instead',
+          error,
+        );
+      }
+    } else {
+      new Notice(
+        'Compress image (webp) is not enabled — saving the photo uncompressed.',
+      );
+    }
+
+    const buffer = await selection.file.arrayBuffer();
+    const dot = selection.file.name.lastIndexOf('.');
+    const ext = (
+      dot > 0 ? selection.file.name.slice(dot + 1) : 'png'
+    ).toLowerCase();
+    const base = dot > 0 ? selection.file.name.slice(0, dot) : 'photo';
+    const folder = sourceFile?.parent ?? this.app.vault.getRoot();
+    const prefix = folder.isRoot() ? '' : `${folder.path}/`;
+    let candidate = `${prefix}${base}.${ext}`;
+    let counter = 1;
+    while (this.app.vault.getAbstractFileByPath(candidate)) {
+      candidate = `${prefix}${base} ${counter}.${ext}`;
+      counter++;
+    }
+    const created = await this.app.vault.createBinary(candidate, buffer);
+    return this.buildEmbedLink(created, sourcePath);
+  }
+
+  private buildEmbedLink(file: TFile, sourcePath: string): string {
+    const link = this.app.fileManager.generateMarkdownLink(file, sourcePath);
+    return link.startsWith('!') ? link : `!${link}`;
   }
 
   // Obsidian lifecycle method called when the plugin is loaded.

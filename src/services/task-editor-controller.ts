@@ -6,6 +6,7 @@ import {
   TaskEditorInitialValues,
   TaskEditorModal,
 } from '../view/components/task-editor-modal';
+import { PhotoPickerModal } from '../view/components/photo-picker-modal';
 import { isTaskMetadataLine } from '../utils/task-metadata';
 import { stripMarkdownPrefixes } from '../utils/patterns';
 
@@ -71,6 +72,7 @@ export class TaskEditorController {
           deadlineRepeat: target.task.deadlineDateRepeat,
           deadlineWarningPeriod: target.task.deadlineWarningPeriod,
           description: target.task.description ?? null,
+          photo: target.task.photo ?? null,
         }
       : {
           text: target.prefillText ?? '',
@@ -83,6 +85,7 @@ export class TaskEditorController {
           deadlineRepeat: null,
           deadlineWarningPeriod: null,
           description: null,
+          photo: null,
         };
 
     this.modal = new TaskEditorModal(this.plugin.app, {
@@ -96,12 +99,50 @@ export class TaskEditorController {
         void this.plugin.saveSettings();
       },
       isTableTask: target.task?.isTableTask,
+      photoSrc: target.task?.photo
+        ? (this.plugin.resolvePhotoLink(target.task.photo, target.path)?.src ??
+          null)
+        : null,
+      onPickPhoto: () => this.pickPhoto(target.path),
       onSubmit: (fields) => this.save(target, fields),
       onCancel: () => {
         this.modal = null;
       },
     });
     this.modal.open();
+  }
+
+  /**
+   * Open the shared image picker for the task editor's Photo field, persist the
+   * chosen image (through Compress Image (WebP) when available) and return the
+   * stored link plus its renderable URL.
+   */
+  private pickPhoto(
+    sourcePath: string,
+  ): Promise<{ link: string; src: string | null } | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const picker = new PhotoPickerModal(this.plugin.app, {
+        onSelect: (selection) => {
+          void (async () => {
+            settled = true;
+            const link = await this.plugin.saveTaskPhoto(selection, sourcePath);
+            if (!link) {
+              resolve(null);
+              return;
+            }
+            const resolved = this.plugin.resolvePhotoLink(link, sourcePath);
+            resolve({ link, src: resolved?.src ?? null });
+          })();
+        },
+        onClose: () => {
+          if (!settled) {
+            resolve(null);
+          }
+        },
+      });
+      picker.open();
+    });
   }
 
   /**

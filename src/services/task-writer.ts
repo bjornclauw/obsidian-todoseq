@@ -26,6 +26,8 @@ import {
   findDateLine,
   findDescriptionLine,
   findDescriptionLineIn,
+  findPhotoLine,
+  findPhotoLineIn,
   getTaskIndent,
   getDateLineIndent,
 } from '../utils/task-line-utils';
@@ -57,6 +59,8 @@ export interface TaskComposeFields {
   deadlineRepeat: DateRepeatInfo | null;
   deadlineWarningPeriod: WarningPeriodInfo | null;
   description: string | null;
+  /** Image embed for a `PHOTO:` line (`![[image.webp]]`), or null for none. */
+  photo?: string | null;
   /**
    * List prefix for a newly created task. Ignored when editing an existing
    * task (its own marker is preserved). Defaults to `checkbox`.
@@ -1864,6 +1868,11 @@ export class TaskWriter {
     // DESCRIPTION line would corrupt the table.
     if (!afterState.isTableTask) {
       lineDelta += await this.setTaskDescription(afterState, description);
+      // PHOTO sits directly below DESCRIPTION.
+      lineDelta += await this.setTaskPhoto(
+        afterState,
+        fields.photo?.trim() || null,
+      );
     }
 
     // SCHEDULED
@@ -1899,6 +1908,7 @@ export class TaskWriter {
       text: fields.text,
       priority: fields.priority,
       description: description ?? undefined,
+      photo: fields.photo?.trim() || undefined,
       scheduledDate: fields.scheduledDate,
       scheduledDateRepeat: fields.scheduledRepeat,
       scheduledWarningPeriod: fields.scheduledWarningPeriod,
@@ -1933,6 +1943,11 @@ export class TaskWriter {
     const description = fields.description?.trim();
     if (description) {
       lines.push(`${indent}DESCRIPTION: ${description}`);
+    }
+    // PHOTO sits directly below DESCRIPTION, above the date lines.
+    const photo = fields.photo?.trim();
+    if (photo) {
+      lines.push(`${indent}PHOTO: ${photo}`);
     }
     // CREATED is written once, first among the date lines, when the task is
     // created (never updated afterwards).
@@ -2006,6 +2021,7 @@ export class TaskWriter {
       ),
       text: fields.text,
       description: fields.description?.trim() || undefined,
+      photo: fields.photo?.trim() || undefined,
       state: fields.state,
       completed: this.keywordManager.isCompleted(fields.state),
       priority: fields.priority,
@@ -2136,6 +2152,122 @@ export class TaskWriter {
 
     const indent = getDateLineIndent(task);
     lines.splice(taskLineIndex + 1, 0, `${indent}DESCRIPTION: ${description}`);
+    return { lines, lineDelta: 1 };
+  }
+
+  /**
+   * Insert, update, or remove the PHOTO line for a task. `photo` is the image
+   * embed (e.g. `![[image.webp]]`); `null` removes the line.
+   * Returns the line delta (+1 insert, -1 remove, 0 update/no-op).
+   */
+  public async setTaskPhoto(task: Task, photo: string | null): Promise<number> {
+    const file = this.app.vault.getAbstractFileByPath(task.path);
+    if (!(file instanceof TFile)) {
+      return 0;
+    }
+
+    const editor = this.getSourceModeEditorForPath(task.path);
+    if (editor) {
+      return this.setPhotoInEditor(editor, task, photo);
+    }
+
+    let lineDelta = 0;
+    await this.app.vault.process(file, (data) => {
+      const lines = data.split('\n');
+      lineDelta = this.updateOrInsertPhotoLine(
+        lines,
+        task.line,
+        photo,
+        task,
+      ).lineDelta;
+      return lines.join('\n');
+    });
+    return lineDelta;
+  }
+
+  private setPhotoInEditor(
+    editor: Editor,
+    task: Task,
+    photo: string | null,
+  ): number {
+    const taskIndent = getTaskIndent(task);
+    const existingIdx = findPhotoLineIn(
+      (i) => editor.getLine(i),
+      editor.lineCount(),
+      task.line + 1,
+      taskIndent,
+    );
+    const indent =
+      existingIdx >= 0
+        ? this.getExistingDateLineIndent(editor.getLine(existingIdx))
+        : getDateLineIndent(task);
+
+    if (photo === null) {
+      if (existingIdx >= 0) {
+        editor.replaceRange(
+          '',
+          { line: existingIdx, ch: 0 },
+          { line: existingIdx + 1, ch: 0 },
+        );
+        return -1;
+      }
+      return 0;
+    }
+
+    const photoLine = `${indent}PHOTO: ${photo}`;
+    if (existingIdx >= 0) {
+      editor.replaceRange(
+        photoLine,
+        { line: existingIdx, ch: 0 },
+        { line: existingIdx, ch: editor.getLine(existingIdx).length },
+      );
+      return 0;
+    }
+
+    // Place the PHOTO line after DESCRIPTION when present, otherwise directly
+    // under the task line.
+    const descIdx = findDescriptionLineIn(
+      (i) => editor.getLine(i),
+      editor.lineCount(),
+      task.line + 1,
+      taskIndent,
+    );
+    const insertIdx = descIdx >= 0 ? descIdx + 1 : task.line + 1;
+    editor.replaceRange(
+      `${this.leadingNewlineForInsert(editor, insertIdx)}${photoLine}\n`,
+      { line: insertIdx, ch: 0 },
+      { line: insertIdx, ch: 0 },
+    );
+    return 1;
+  }
+
+  private updateOrInsertPhotoLine(
+    lines: string[],
+    taskLineIndex: number,
+    photo: string | null,
+    task: Task,
+  ): { lines: string[]; lineDelta: number } {
+    const taskIndent = getTaskIndent(task);
+    const existingIdx = findPhotoLine(lines, taskLineIndex + 1, taskIndent);
+
+    if (photo === null) {
+      if (existingIdx >= 0) {
+        lines.splice(existingIdx, 1);
+        return { lines, lineDelta: -1 };
+      }
+      return { lines, lineDelta: 0 };
+    }
+
+    if (existingIdx >= 0) {
+      const indent = this.getExistingDateLineIndent(lines[existingIdx]);
+      lines[existingIdx] = `${indent}PHOTO: ${photo}`;
+      return { lines, lineDelta: 0 };
+    }
+
+    const indent = getDateLineIndent(task);
+    const descIdx = findDescriptionLine(lines, taskLineIndex + 1, taskIndent);
+    const insertIdx = descIdx >= 0 ? descIdx + 1 : taskLineIndex + 1;
+    lines.splice(insertIdx, 0, `${indent}PHOTO: ${photo}`);
     return { lines, lineDelta: 1 };
   }
 
@@ -2859,6 +2991,10 @@ export class TaskWriter {
     const descIdx = findDescriptionLine(lines, afterTask, taskIndent);
     const afterDesc = descIdx >= 0 ? descIdx + 1 : afterTask;
 
+    // PHOTO sits directly below DESCRIPTION; date lines follow it.
+    const photoIdx = findPhotoLine(lines, afterTask, taskIndent);
+    const afterPhoto = photoIdx >= 0 ? photoIdx + 1 : afterDesc;
+
     // CREATED is always the very first date line, so any other date line must
     // be inserted after it when present.
     const createdIdx = findDateLine(
@@ -2868,11 +3004,11 @@ export class TaskWriter {
       taskIndent,
       kwManager,
     );
-    const afterCreated = createdIdx >= 0 ? createdIdx + 1 : afterDesc;
+    const afterCreated = createdIdx >= 0 ? createdIdx + 1 : afterPhoto;
 
     if (dateType === 'CREATED') {
       // Insert before any other date line.
-      return afterDesc;
+      return afterPhoto;
     }
     if (dateType === 'STARTED') {
       // STARTED goes first among the non-CREATED date lines: before

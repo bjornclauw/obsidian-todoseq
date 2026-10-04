@@ -3,6 +3,8 @@ import { EditorView } from '@codemirror/view';
 import TodoTracker from '../../main';
 import { Task } from '../../types/task';
 import { DatePicker, DatePickerMode } from '../components/date-picker-menu';
+import { PhotoPickerModal } from '../components/photo-picker-modal';
+import { PhotoLightbox } from '../components/photo-lightbox';
 
 /**
  * Minimal pointer information the chip routing needs. A real MouseEvent and
@@ -82,6 +84,12 @@ export class MetadataFrameController {
         void this.plugin.taskEditor?.pauseWorkSession(task).catch((error) => {
           console.debug('Failed to pause work session', error);
         });
+        return true;
+      case 'photo':
+        this.openPhotoLightbox(task, view);
+        return true;
+      case 'photo-add':
+        this.openPhotoPicker(task, view);
         return true;
       default:
         // 'created' / 'repeats' chips are informational only.
@@ -225,5 +233,35 @@ export class MetadataFrameController {
   private openTaskEditor(view: MarkdownView, line0: number): void {
     view.editor.setCursor({ line: line0, ch: 0 });
     this.plugin.taskEditorController?.openFromActiveEditor();
+  }
+
+  private openPhotoLightbox(task: Task, view: MarkdownView): void {
+    if (!task.photo) {
+      return;
+    }
+    const resolved = this.plugin.resolvePhotoLink(
+      task.photo,
+      view.file?.path ?? '',
+    );
+    if (!resolved) {
+      new Notice('Photo not found in the vault');
+      return;
+    }
+    new PhotoLightbox(this.plugin.app, resolved.src, task.text).open();
+  }
+
+  private openPhotoPicker(task: Task, view: MarkdownView): void {
+    const sourcePath = view.file?.path ?? '';
+    const modal = new PhotoPickerModal(this.plugin.app, {
+      onSelect: async (selection) => {
+        const link = await this.plugin.saveTaskPhoto(selection, sourcePath);
+        if (!link) {
+          new Notice('Failed to save the photo');
+          return;
+        }
+        await this.plugin.taskEditor?.setTaskPhoto(task, link);
+      },
+    });
+    modal.open();
   }
 }

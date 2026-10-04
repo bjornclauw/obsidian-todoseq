@@ -324,3 +324,83 @@ describe('FrameWidget chip effects', () => {
     expect(effects[0].value).toBe(7);
   });
 });
+
+describe('FrameWidget photo chip', () => {
+  const renderPhoto = (payload: {
+    photo?: string;
+    photoSrc?: string;
+    photosEnabled?: boolean;
+  }) => {
+    const widget = new FrameWidget({
+      variant: 'active',
+      task: createBaseTask({
+        scheduledDate: new Date(2026, 8, 14),
+        photo: payload.photo,
+      }),
+      taskLine: 1,
+      metadataLineCount: 1,
+      tooltips: {},
+      expanded: false,
+      photosEnabled: payload.photosEnabled,
+      photoSrc: payload.photoSrc,
+    });
+    return widget.toDOM(makeView() as never);
+  };
+
+  it('renders a thumbnail chip when a photo is present', () => {
+    const frame = renderPhoto({
+      photo: '![[img.webp]]',
+      photoSrc: 'app://local/img.webp',
+    });
+    const chip = frame.querySelector<HTMLElement>(
+      '[data-todoseq-action="photo"]',
+    );
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute('data-todoseq-photo')).toBe('![[img.webp]]');
+    const img = chip?.querySelector('img');
+    expect(img?.getAttribute('src')).toBe('app://local/img.webp');
+  });
+
+  it('renders an add-photo chip when enabled and no photo exists', () => {
+    const frame = renderPhoto({ photosEnabled: true });
+    expect(
+      frame.querySelector('[data-todoseq-action="photo-add"]'),
+    ).not.toBeNull();
+    expect(frame.querySelector('[data-todoseq-action="photo"]')).toBeNull();
+  });
+
+  it('renders no photo chip when disabled', () => {
+    const frame = renderPhoto({ photosEnabled: false });
+    expect(frame.querySelector('[data-todoseq-action="photo-add"]')).toBeNull();
+    expect(frame.querySelector('[data-todoseq-action="photo"]')).toBeNull();
+  });
+
+  it('moves the description under the photo and keeps it interactive', () => {
+    const widget = new FrameWidget({
+      variant: 'active',
+      task: createBaseTask({
+        scheduledDate: new Date(2026, 8, 14),
+        description: 'Some notes',
+        photo: '![[img.webp]]',
+      }),
+      taskLine: 1,
+      metadataLineCount: 2,
+      tooltips: {},
+      expanded: false,
+      photoSrc: 'app://local/img.webp',
+    });
+    const frame = widget.toDOM(makeView() as never);
+
+    // No description chip in the chip row...
+    expect(
+      frame.querySelector(
+        '.todoseq-frame-chips [data-todoseq-action="description"]',
+      ),
+    ).toBeNull();
+    // ...but an interactive description chip under the photo.
+    const desc = frame.querySelector<HTMLElement>('.todoseq-frame-photo-desc');
+    expect(desc).not.toBeNull();
+    expect(desc?.getAttribute('data-todoseq-action')).toBe('description');
+    expect(desc?.querySelector('.todoseq-chip-icon')).not.toBeNull();
+  });
+});

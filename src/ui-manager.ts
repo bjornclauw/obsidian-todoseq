@@ -38,6 +38,7 @@ export class UIManager {
         this.plugin.settings,
         () => this.plugin.vaultScanner?.getParser() ?? null,
         () => this.plugin.app.workspace.getActiveFile()?.path ?? null,
+        (link, sourcePath) => this.plugin.resolvePhotoLink(link, sourcePath),
       ),
       dateAutocompleteExtension(this.plugin.settings),
     ]);
@@ -824,7 +825,7 @@ export class UIManager {
               const target = evt.target as HTMLElement | null;
               if (!target) return;
               const chip = target.closest<HTMLElement>(
-                '.todoseq-chip[data-todoseq-action]',
+                '.todoseq-metadata-frame [data-todoseq-action]',
               );
               if (!chip) return;
 
@@ -845,7 +846,7 @@ export class UIManager {
               const target = evt.target as HTMLElement | null;
               if (!target) return;
               const chip = target.closest<HTMLElement>(
-                '.todoseq-chip[data-todoseq-action]',
+                '.todoseq-metadata-frame [data-todoseq-action]',
               );
               if (!chip) return;
 

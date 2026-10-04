@@ -28,6 +28,7 @@ function makeInitial(
     deadlineRepeat: null,
     deadlineWarningPeriod: null,
     description: null,
+    photo: null,
     ...overrides,
   };
 }

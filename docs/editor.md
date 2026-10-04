@@ -89,6 +89,21 @@ With the **Track work time** setting on (default), an active task's frame shows 
 
 See [Settings → Track work time](settings.md#track-work-time).
 
+### Task Photos
+
+With the **Task photos** setting on (default), a task's frame shows a photo chip beside the work chip. A task's photo is stored as a `PHOTO:` line holding an image embed:
+
+```markdown
+- [ ] DOING Inspect the leak
+                                                                                                  PHOTO: ![[attachments/leak.webp]]
+                                                                                                  SCHEDULED: <2026-09-20 Sun>
+```
+
+- **Add a photo:** click the camera chip on the frame, then choose an image, take a photo (mobile), or pick a recent vault image. The image is written to the vault and the `PHOTO:` line is added through `TaskWriter`.
+- **Compression:** when [Compress Image (WebP)](https://github.com/bjornclauw/compress-image-webp) is enabled, the picked image is compressed and converted to WebP through that plugin's public API. Otherwise the original bytes are saved and a notice is shown.
+- **View it:** the frame renders a scaled-down thumbnail; click it (or its zoom button) to open a full-size lightbox with zoom in/out and reset.
+- Turning the setting off hides the chip; the `PHOTO:` line is left untouched.
+
 ## Interactive Task Management
 
 TODOseq provides several ways to interact with tasks directly in the editor:

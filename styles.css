@@ -3739,6 +3739,24 @@
   margin-left: var(--todoseq-frame-indent, 28px) !important;
 }
 
+/* Chip row inside a frame (lets a photo card sit below the chips). */
+.todoseq-frame-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Frames that carry a photo card stack the chips above the image. The photo
+   width drives the card width, so every control wraps within it. */
+.todoseq-metadata-frame.todoseq-frame-with-photo {
+  flex-direction: column;
+  align-items: flex-start;
+  width: var(--todoseq-photo-card-width, 300px);
+  max-width: calc(100% - var(--todoseq-frame-indent, 28px));
+}
+
 .todoseq-frame-completed,
 .todoseq-frame-recurring-completed {
   opacity: 0.75;
@@ -3859,4 +3877,232 @@ body.is-mobile .todoseq-chip-icon svg {
 .todoseq-keyword-colors .setting-item {
   border-top: none;
   padding: var(--size-2-2) 0;
+}
+
+/* Task photo card on the metadata frame: cropped image, full card width */
+.todoseq-frame-photo-card {
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  line-height: 0;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-frame-photo-card-img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+/* Description below the photo: the same chip as the no-photo layout, but full
+   width and wrapping to the card width. */
+.todoseq-frame-photo-desc {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 4px;
+  align-items: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.todoseq-frame-photo-desc .todoseq-chip-label {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.4;
+}
+
+/* Photo lightbox */
+.todoseq-photo-lightbox {
+  width: min(90vw, 1100px);
+  max-width: 90vw;
+}
+
+.todoseq-photo-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-2);
+}
+
+.todoseq-photo-lightbox-controls {
+  display: inline-flex;
+  gap: var(--size-2-1);
+}
+
+.todoseq-photo-lightbox-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  max-height: 78vh;
+  background: var(--background-secondary);
+  border-radius: var(--radius-m);
+  /* Let pointer drags pan instead of scrolling/selecting. */
+  touch-action: none;
+  user-select: none;
+}
+
+/* Pan cursors: only when the image is zoomed in enough to pan. */
+.todoseq-photo-lightbox-body.todoseq-photo-pan-enabled {
+  cursor: grab;
+}
+
+.todoseq-photo-lightbox-body.todoseq-photo-panning {
+  cursor: grabbing;
+}
+
+.todoseq-photo-lightbox-img {
+  max-width: 100%;
+  max-height: 78vh;
+  transform-origin: center center;
+  transition: transform 0.12s ease-out;
+}
+
+/* No transition while dragging, so panning tracks the pointer 1:1. */
+.todoseq-photo-lightbox-body.todoseq-photo-panning .todoseq-photo-lightbox-img {
+  transition: none;
+}
+
+/* Photo picker */
+.todoseq-photo-picker-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-3);
+  padding-bottom: var(--size-2-3);
+  background: var(--background-primary);
+}
+
+.todoseq-photo-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+}
+
+.todoseq-photo-picker-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--size-2-2);
+}
+
+.todoseq-photo-picker-search {
+  width: 100%;
+}
+
+.todoseq-photo-picker-status {
+  margin-bottom: var(--size-2-2);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* Wider modal so the thumbnail grid has room to breathe. */
+.modal.todoseq-photo-picker-modal {
+  width: min(92vw, 920px);
+  max-width: 92vw;
+}
+
+.todoseq-photo-picker {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+
+.todoseq-photo-picker-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.todoseq-photo-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--size-2-3);
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+.todoseq-photo-picker-cell {
+  /* Fill the whole grid track: Obsidian's button styling otherwise keeps the
+     cell at its content size, leaving the thumbnail tiny. */
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--background-secondary);
+  line-height: 0;
+}
+
+.todoseq-photo-picker-cell:hover {
+  border-color: var(--interactive-accent);
+}
+
+.todoseq-photo-picker-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+}
+
+.todoseq-photo-picker-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+body.is-mobile .todoseq-photo-picker {
+  max-height: 75vh;
+}
+
+body.is-mobile .todoseq-photo-picker-grid {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+/* Task editor: photo field */
+.todoseq-task-editor-photo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  flex-wrap: wrap;
+}
+
+.todoseq-task-editor-photo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.todoseq-task-editor-photo-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.todoseq-task-editor-photo-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
 }

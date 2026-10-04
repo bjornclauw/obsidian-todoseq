@@ -112,11 +112,16 @@ export interface FramePayload {
     started?: string;
     closed?: string;
     repeatLog?: string;
+    photo?: string;
   };
   /** Ephemeral expansion flag so a completed block can show its raw fields. */
   expanded: boolean;
   /** Whether work logging is enabled (shows the play/pause chip). */
   workLogEnabled?: boolean;
+  /** Whether task photos are enabled (shows the add-photo chip). */
+  photosEnabled?: boolean;
+  /** Resolved resource URL for the task's photo (when one exists). */
+  photoSrc?: string;
 }
 
 /** Stable identity of a frame payload for CodeMirror's eq() check. */
@@ -139,6 +144,8 @@ export function frameSignature(payload: FramePayload): string {
     iso(t.timerStart),
     t.workLogTotalMinutes ?? '',
     t.description ?? '',
+    t.photo ?? '',
+    payload.photoSrc ?? '',
     t.repeatCount ?? '',
   ].join('\u0000');
 }
@@ -232,8 +239,15 @@ export class FrameWidget extends WidgetType {
         break;
     }
 
-    this.appendExpandHint(frame, payload, view);
-    frame.appendChild(sourceToggleChip(view, payload.taskLine, false));
+    if (payload.task.photo && payload.photoSrc) {
+      frame.addClass('todoseq-frame-with-photo');
+    }
+
+    const chipRow =
+      frame.querySelector<HTMLElement>(':scope > .todoseq-frame-chips') ??
+      frame;
+    this.appendExpandHint(chipRow, payload, view);
+    chipRow.appendChild(sourceToggleChip(view, payload.taskLine, false));
     this.applyIndent(view, frame, payload.taskLine);
     return frame;
   }
@@ -310,8 +324,10 @@ export class FrameWidget extends WidgetType {
     includeHidden: boolean,
   ): void {
     const t = payload.task;
+    // Chips live in their own row so a photo card can sit below them.
+    const chips = createDiv({ cls: 'todoseq-frame-chips' });
     if (t.scheduledDate) {
-      frame.appendChild(
+      chips.appendChild(
         chip(
           'todoseq-chip-scheduled',
           'calendar',
@@ -323,7 +339,7 @@ export class FrameWidget extends WidgetType {
       );
     }
     if (t.deadlineDate) {
-      frame.appendChild(
+      chips.appendChild(
         chip(
           'todoseq-chip-deadline',
           'alarm-clock',
@@ -335,7 +351,7 @@ export class FrameWidget extends WidgetType {
       );
     }
     if (t.closedDate) {
-      frame.appendChild(
+      chips.appendChild(
         chip(
           'todoseq-chip-closed',
           'check-circle',
@@ -347,7 +363,7 @@ export class FrameWidget extends WidgetType {
       );
     }
     if (includeHidden && t.createdDate) {
-      frame.appendChild(
+      chips.appendChild(
         chip(
           'todoseq-chip-created',
           'calendar-plus',
@@ -359,7 +375,7 @@ export class FrameWidget extends WidgetType {
       );
     }
     if (includeHidden && t.startedDate) {
-      frame.appendChild(
+      chips.appendChild(
         chip(
           'todoseq-chip-started',
           'clock',
@@ -370,8 +386,11 @@ export class FrameWidget extends WidgetType {
         ),
       );
     }
-    if (t.description) {
-      frame.appendChild(
+    const hasPhoto = !!(t.photo && payload.photoSrc);
+    // With a photo, the description moves below the image (see below) instead
+    // of taking a chip slot in the row.
+    if (t.description && !hasPhoto) {
+      chips.appendChild(
         chip(
           'todoseq-chip-desc',
           'text',
@@ -383,7 +402,59 @@ export class FrameWidget extends WidgetType {
       );
     }
     if (payload.variant === 'active' && payload.workLogEnabled === true) {
-      this.appendWorkChip(frame, payload);
+      this.appendWorkChip(chips, payload);
+    }
+    if (payload.photosEnabled && !hasPhoto) {
+      chips.appendChild(
+        chip(
+          'todoseq-chip-photo-add',
+          'camera',
+          '',
+          payload.tooltips.photo ?? 'Add photo',
+          'photo-add',
+          payload.taskLine,
+        ),
+      );
+    }
+    frame.appendChild(chips);
+
+    if (!hasPhoto) {
+      return;
+    }
+
+    // Photo card image sits below the chip row; the description follows it.
+    const card = createDiv({
+      cls: 'todoseq-frame-photo-card',
+      attr: {
+        'data-todoseq-action': 'photo',
+        'data-todoseq-line': String(payload.taskLine),
+        'data-todoseq-photo': t.photo ?? '',
+        'aria-label': payload.tooltips.photo ?? 'Photo',
+        role: 'button',
+        tabindex: '0',
+      },
+    });
+    const img = card.createEl('img', {
+      cls: 'todoseq-frame-photo-card-img',
+    });
+    img.src = payload.photoSrc ?? '';
+    img.alt = '';
+    img.setAttribute('draggable', 'false');
+    frame.appendChild(card);
+
+    if (t.description) {
+      // Same chip as the no-photo layout (icon + label, click opens the task
+      // editor), just rendered below the photo and allowed to wrap.
+      frame.appendChild(
+        chip(
+          'todoseq-chip-desc todoseq-frame-photo-desc',
+          'text',
+          t.description,
+          payload.tooltips.description ?? t.description,
+          'description',
+          payload.taskLine,
+        ),
+      );
     }
   }
 
